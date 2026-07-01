@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html class="theme-dark">
+<head>
+    <title>Markdown Preview Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <link rel="stylesheet" href="/web/renderer.css">
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        body { display: flex; flex-direction: row; background: #1e1e1e; }
+        #md-editor {
+            width: 50%; height: 100%; min-width: 300px;
+            background: #1e1e1e; color: #d4d4d4;
+            border: none; border-right: 4px solid #2d2d2d;
+            padding: 8px; box-sizing: border-box; resize: none; outline: none;
+            font-family: "Cascadia Code",Consolas,monospace; font-size: 13px; tab-size: 4;
+        }
+        #md-editor:focus { outline: none; }
+        #preview-panel {
+            width: 50%; height: 100%; min-width: 300px; overflow-y: auto;
+            padding: 20px 24px; box-sizing: border-box;
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+            font-size: 14px; line-height: 1.6; color: #d4d4d4; background: #1e1e1e;
+        }
+    </style>
+</head>
+<body>
+    <textarea id="md-editor"></textarea>
+    <div id="preview-panel"><p style="color:#888;text-align:center;margin-top:80px;">⏳ 加载渲染引擎...</p></div>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it-footnote@4.0.0/dist/markdown-it-footnote.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it-task-lists@2.1.1/dist/markdown-it-task-lists.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.10.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+    <script src="/web/renderer.js"></script>
+    <script>
+    (function() {
+        var ed = document.getElementById("md-editor");
+        var pv = document.getElementById("preview-panel");
+        if (!ed || !pv) return;
+        var tc = "# Markdown 渲染测试套件 🎯\n\n## 1. 文本格式\n\n**粗体** *斜体* ~~删除线~~ `行内代码`\n\n## 2. 数学公式\n\n行内公式：$E = mc^2$\n\n独立公式：\n$$\n\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\n$$\n\n## 3. 代码高亮\n\n```csharp\npublic class Hello\n{\n    public static void Main()\n    {\n        Console.WriteLine(\"Hello World!\");\n    }\n}\n```\n\n```javascript\nfunction greet(name) {\n    return `Hello, ${name}!`;\n}\nconsole.log(greet(\"World\"));\n```\n\n```python\ndef fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        yield a\n        a, b = b, a + b\nlist(fibonacci(10))\n```\n\n## 4. Mermaid 图表\n\n```mermaid\ngraph TD\n    A[开始] --> B{判断}\n    B -->|是| C[处理]\n    B -->|否| D[结束]\n    C --> D\n```\n\n```mermaid\nsequenceDiagram\n    Alice->>John: 你好 John\n    John-->>Alice: 嗨 Alice!\n    Alice->>John: 你听到吗？\n    John-->>Alice: 当然！\n```\n\n## 5. 表格\n\n| 功能 | 状态 | 备注 |\n|------|------|------|\n| markdown-it | ✅ | 核心解析器 |\n| KaTeX | ✅ | 数学公式 |\n| Mermaid | ✅ | 图表 |\n| 代码高亮 | ✅ | 190+ 语言 |\n\n## 6. 引用\n\n> 这是一段引用\n> 这是同一引用的第二行\n>\n> > 这是嵌套引用\n\n## 7. 列表\n\n无序列表：\n- 项目一\n- 项目二\n  - 子项目 A\n  - 子项目 B\n- 项目三\n\n有序列表：\n1. 第一步\n2. 第二步\n3. 第三步\n\n## 8. 任务列表\n\n- [x] 完成基本 Markdown 渲染\n- [x] 代码高亮支持\n- [ ] 编辑与预览滚动同步\n- [ ] 导出 PDF\n\n## 9. 脚注\n\n这里有一段文字需要脚注[^1]，这里还有一段[^longnote]。\n\n[^1]: 这是第一个脚注。\n\n[^longnote]: 这是更长的脚注，包含更多说明内容。\n\n---\n\n✅ 所有测试类别加载完成！请检查各项渲染效果。\n";
+        ed.value = tc;
+        function up() {
+            try {
+                document.title = "\u23f3 \u6e32\u67d3\u4e2d...";
+                pv.innerHTML = window.md.render(ed.value);
+                pv.querySelectorAll(".mermaid").forEach(function(el) {
+                    try { window.mermaid.run({nodes:[el]}); } catch(e) {}
+                });
+                document.title = "\u2705 Rendered";
+            } catch(e) {
+                console.error(e);
+                pv.innerHTML = "<pre>" + window.escapeHtml(ed.value) + "</pre>";
+            }
+        }
+        up();
+        ed.addEventListener("input", up);
+    })();
+    </script>
+</body>
+</html>

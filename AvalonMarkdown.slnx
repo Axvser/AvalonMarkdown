@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Docs/">
+    <File Path="README.md" />
+    <File Path="SKILL.md" />
+  </Folder>
+  <Project Path="AvalonMarkdown.Android/AvalonMarkdown.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="AvalonMarkdown.Browser/AvalonMarkdown.Browser.csproj" />
+  <Project Path="AvalonMarkdown.Desktop/AvalonMarkdown.Desktop.csproj" />
+  <Project Path="AvalonMarkdown.iOS/AvalonMarkdown.iOS.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="AvalonMarkdown/AvalonMarkdown.csproj" />
+</Solution>
