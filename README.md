@@ -1,61 +1,73 @@
-# AvalonMarkdown
+# AvalonMarkdown.Controls
 
-跨平台 Markdown 实时预览器，基于 **AvaloniaUI 12** + **NativeWebView**。
-核心控件 `MarkdownView` 写一次，支持 Desktop / Browser / Android / iOS 全平台。
+跨平台 Markdown 预览控件，基于 AvaloniaUI + NativeWebView。
+写一次控件，支持 Desktop / Browser (WASM) / Android / iOS。
+
+## 安装
+
+```bash
+dotnet add package AvalonMarkdown.Controls
+```
 
 ## 快速开始
 
-```bash
-# Desktop
-dotnet run --project AvalonMarkdown.Desktop -c Debug
+### 1. 在 XAML 中声明
 
-# Browser（访问 http://localhost:5235）
-dotnet run --project AvalonMarkdown.Browser -c Debug
+```xml
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown.Controls">
+    <md:MarkdownView x:Name="Preview" />
+</Window>
 ```
 
-## 平台支持
+### 2. 在代码中渲染
 
-| 平台 | 状态 | WebView 方式 |
-|------|------|-------------|
-| 🖥️ Desktop | ✅ 可用 | WebView2 (Windows) / WebKit (macOS/Linux) |
-| 🌐 Browser (WASM) | ✅ 可用 | Iframe (`about:blank` + `document.write`) |
-| 📱 Android | ✅ 已发布测试 | WebView 原生控件 |
-| 📱 iOS | ⏳ 待测试 | — |
-
-## 架构概要
-
+```csharp
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+        Preview.OnReady += async (_, _) =>
+        {
+            await Preview.RenderMarkdownAsync("# Hello World\n\n**Bold** *Italic*");
+        };
+    }
+}
 ```
-┌─ AvalonMarkdown (共享主项目) ──────────────────────────┐
-│                                                        │
-│  MarkdownView (统一控件)                                │
-│    ├─ 工具栏（Reload / Hide / Status）                  │
-│    ├─ NativeWebView（封装）                              │
-│    └─ 错误面板（C# + JS 双层）                           │
-│                                                        │
-│  EmbeddedHtmlSourceProvider                             │
-│    ├─ 通过 AssetLoader 读取嵌入式资源                    │
-│    ├─ 内联 renderer.css / renderer.js                   │
-│    └─ 注入当前系统主题 class                            │
-│                                                        │
-│  Assets/web/                                            │
-│    ├─ index.html   — 预览页面模板                       │
-│    ├─ renderer.css — VS 风格双主题样式                  │
-│    └─ renderer.js  — 渲染引擎 IIFE                     │
-│                                                        │
-├─ AvalonMarkdown.Desktop ── MainWindow → MainView → MarkdownView
-├─ AvalonMarkdown.Browser ── MainView → MarkdownView
-├─ AvalonMarkdown.Android ── MainView → MarkdownView
-└─ AvalonMarkdown.iOS ────── MainView → MarkdownView
-```
+
+## API 参考
+
+### 属性
+
+| 成员 | 类型 | 说明 |
+|------|------|------|
+| `ShowToolbar` | `bool` | 显示/隐藏工具栏 |
+
+### 方法
+
+| 方法 | 返回 | 说明 |
+|------|------|------|
+| `RenderMarkdownAsync(string?)` | `Task` | 渲染 Markdown 内容 |
+| `RestartPreviewAsync()` | `Task` | 重启预览器 |
+| `ApplyConfigAsync(string)` | `Task` | 执行 JS 配置调用 |
+| `InvokeScriptAsync(string)` | `Task<string?>` | 执行自定义 JS |
+
+### 事件
+
+| 事件 | 参数 | 触发时机 |
+|------|------|----------|
+| `OnReady` | `EventHandler` | 控件完全就绪，可安全调用 `RenderMarkdownAsync` |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误 |
 
 ## 渲染能力
 
-- **Markdown 解析** — markdown-it 14 + footnote / task-lists
+- **Markdown** — markdown-it 14 + footnote / task-lists
 - **数学公式** — KaTeX（行内 `$...$` / 块级 `$$...$$`）
-- **代码高亮** — highlight.js 11，VS 风格配色（190+ 语言）
-- **图表** — Mermaid 11（流程图 / 时序图 / 饼图 / Git 图）
-- **代码块** — 语言标签 · 复制按钮 · 高度 +/- 调节
-- **任务列表** — 自定义 SVG 复选框
+- **代码高亮** — highlight.js 11，VS 风格配色
+- **图表** — Mermaid 11（流程图、时序图、饼图、Git 图）
+- **代码块** — 语言标签 · 复制按钮 · 高度调节
+- **任务列表** — 自定义复选框
 - **脚注 / 表格 / 引用 / 删除线**
 
 ## 技术栈
@@ -69,7 +81,7 @@ dotnet run --project AvalonMarkdown.Browser -c Debug
 | KaTeX | 0.16.11 | 数学公式 |
 | Mermaid | 11.4.1 | 图表 |
 
-JS/CSS 依赖通过 CDN 加载。
+所有 JS/CSS 依赖已内联，无需网络连接。
 
 ## 许可证
 
