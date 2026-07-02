@@ -57,8 +57,9 @@ public partial class MainView : UserControl
     private async Task ApplyConfigAsync()
     {
         var config = GetVm().PreviewConfig;
-        var theme = config.IsDarkTheme ? "dark" : "light";
-        await MarkdownPreview.InvokeScriptAsync($"setTheme('{theme}')");
+        // 同步 ViewModel 主题标记以匹配系统实际主题（MarkdownView 已自动处理 setTheme）
+        var actualTheme = Avalonia.Application.Current?.ActualThemeVariant;
+        config.IsDarkTheme = actualTheme != Avalonia.Styling.ThemeVariant.Light;
         await MarkdownPreview.ApplyConfigAsync(config.ToJsCallExpression());
     }
 }

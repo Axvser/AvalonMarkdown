@@ -68,6 +68,8 @@ public partial class MarkdownView : UserControl
         WireEvents();
         _ = InitializeWebViewAsync();
 
+        // 构造函数阶段直接用 GetCurrentTheme() 设置初始主题配色
+        ApplyThemeColors(GetCurrentTheme());
         StatusText.Text = "Loading…";
     }
 
@@ -79,7 +81,9 @@ public partial class MarkdownView : UserControl
     {
         _webView = new NativeWebView
         {
-            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e)),
+            Background = GetCurrentTheme() == "light"
+                ? new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xff, 0xff, 0xff))
+                : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e)),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
         };
@@ -437,11 +441,36 @@ public partial class MarkdownView : UserControl
     private async Task ApplySystemThemeAsync()
     {
         var theme = GetCurrentTheme();
-        if (theme == _currentTheme) return;
+        if (theme == _currentTheme && _ready) return;
         _currentTheme = theme;
+
+        // 更新工具栏配色、WebView 背景
+        ApplyThemeColors(theme);
 
         if (_ready)
             await InvokeScriptSafeAsync($"setTheme('{theme}')");
+    }
+
+    private void ApplyThemeColors(string theme)
+    {
+        if (theme == "light")
+        {
+            ToolbarPanel.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xf0, 0xf0, 0xf0));
+            ToolbarPanel.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xd4, 0xd4, 0xd4));
+            StatusText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x66, 0x66, 0x66));
+            WebViewHost.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xff, 0xff, 0xff));
+            if (_webView != null)
+                _webView.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xff, 0xff, 0xff));
+        }
+        else
+        {
+            ToolbarPanel.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x25, 0x25, 0x26));
+            ToolbarPanel.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x3c, 0x3c, 0x3c));
+            StatusText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x88, 0x88, 0x88));
+            WebViewHost.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e));
+            if (_webView != null)
+                _webView.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e));
+        }
     }
 
     private static string GetCurrentTheme()

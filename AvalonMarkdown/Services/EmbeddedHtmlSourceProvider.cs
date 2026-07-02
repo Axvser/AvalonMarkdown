@@ -1,13 +1,15 @@
 using System;
 using System.IO;
+using Avalonia;
 using Avalonia.Platform;
+using Avalonia.Styling;
 
 namespace AvalonMarkdown.Services;
 
 /// <summary>
 /// 统一 HTML 来源提供器 — 所有平台共用。
-/// 通过 Avalonia AssetLoader 读取嵌入式资源（适用于 Desktop / Browser / Mobile 全平台），
-/// 将 renderer.css / renderer.js 内联后通过 data:text/html;base64 加载。
+/// 通过 Avalonia AssetLoader 读取嵌入式资源，
+/// 将 renderer.css / renderer.js 内联后输出，并注入当前系统主题。
 /// </summary>
 public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
 {
@@ -18,7 +20,21 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
         _html = new Lazy<string>(BuildHtml);
     }
 
-    public string GetHtmlContent() => _html.Value;
+    public string GetHtmlContent()
+    {
+        var html = _html.Value;
+        // 注入当前系统主题，确保 WebView 加载前 loading 文字和背景色已匹配
+        var themeClass = GetCurrentTheme() == "light" ? "theme-light" : "theme-dark";
+        html = html.Replace("class=\"theme-dark\"", $"class=\"{themeClass}\"");
+        return html;
+    }
+
+    private static string GetCurrentTheme()
+    {
+        var app = Application.Current;
+        if (app == null) return "dark";
+        return app.ActualThemeVariant == ThemeVariant.Light ? "light" : "dark";
+    }
 
     private static string BuildHtml()
     {

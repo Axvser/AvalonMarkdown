@@ -5,8 +5,6 @@
         <!-- ═══════════════════ 顶部工具栏 ═══════════════════ -->
         <Border x:Name="ToolbarPanel"
                 DockPanel.Dock="Top"
-                Background="#252526"
-                BorderBrush="#3c3c3c"
                 BorderThickness="0,0,0,1"
                 Padding="8,4">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
@@ -91,6 +89,6 @@
         </Border>
 
         <!-- ═══════════════════ WebView 承载区域 ═══════════════════ -->
-        <Grid x:Name="WebViewHost" Background="#1e1e1e"/>
+        <Grid x:Name="WebViewHost"/>
     </DockPanel>
 </UserControl>

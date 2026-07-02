@@ -1,310 +1,483 @@
-# Markdown 预览控件实现指南
+# AvalonMarkdown — 统一 Markdown 预览控件完全指南
 
 ## 概述
 
-AvalonMarkdown 基于 AvaloniaUI 的 `NativeWebView` 封装了一个统一的 `MarkdownView` 控件，支持 Desktop（WebView2）、Browser（WASM iframe）、Android、iOS 全平台。核心设计原则：**写一次控件，各平台直接引用**，消除条件编译和平台分叉。
+本文档详细说明如何基于 AvaloniaUI 的 NativeWebView 构建一个跨平台的 MarkdownView 控件。
+核心目标：**写一次控件，各平台直接引用**，消除条件编译。
 
 ---
 
-## 1. 项目结构
+## 1. 项目搭建
 
-```
+### 1.1 解决方案结构
+
+`
 AvalonMarkdown.slnx
 ├── AvalonMarkdown/                          # 共享主项目 (net10.0)
-│   ├── App.axaml / App.axaml.cs             # 入口，运行时 ApplicationLifetime 分发
+│   ├── AvalonMarkdown.csproj
+│   ├── App.axaml / App.axaml.cs
 │   ├── ViewLocator.cs
 │   ├── Views/
-│   │   ├── MarkdownView.axaml + .cs         # ← 统一控件，写一次
-│   │   ├── MainView.axaml + .cs             # 统一主视图（编辑器 + MarkdownView）
-│   │   └── MainWindow.axaml + .cs           # Desktop 窗口容器
+│   │   ├── MarkdownView.axaml + .cs         # 核心控件
+│   │   ├── MainView.axaml + .cs             # 统一主视图
+│   │   └── MainWindow.axaml + .cs           # Desktop 窗口
 │   ├── ViewModels/
 │   │   ├── MainViewModel.cs
 │   │   └── PreviewConfigViewModel.cs
 │   ├── Services/
-│   │   ├── IWebViewSourceProvider.cs        # 接口：提供完整 HTML
-│   │   └── EmbeddedHtmlSourceProvider.cs    # 实现：通过 AssetLoader 读取+内联
+│   │   ├── IWebViewSourceProvider.cs
+│   │   └── EmbeddedHtmlSourceProvider.cs
 │   └── Assets/web/
-│       ├── index.html                       # 预览页面模板
-│       ├── renderer.css                     # 共享样式（双主题）
-│       └── renderer.js                      # 共享渲染引擎（IIFE）
+│       ├── index.html
+│       ├── renderer.css
+│       └── renderer.js
 │
 ├── AvalonMarkdown.Desktop/                  # Desktop 启动项目
+│   ├── AvalonMarkdown.Desktop.csproj
 │   └── Program.cs
 │
 ├── AvalonMarkdown.Browser/                  # Browser 启动项目 (WASM)
+│   ├── AvalonMarkdown.Browser.csproj
 │   ├── Program.cs
 │   └── wwwroot/
-│       ├── index.html                       # WASM 宿主页
-│       ├── main.js                          # WASM 启动脚本
+│       ├── index.html
+│       ├── main.js
 │       └── app.css
 │
-├── AvalonMarkdown.Android/                  # Android 启动项目
-├── AvalonMarkdown.iOS/                      # iOS 启动项目
-└── Directory.Packages.props                 # 中心包版本管理
-```
+├── AvalonMarkdown.Android/
+├── AvalonMarkdown.iOS/
+└── Directory.Packages.props
+`
 
-**关键原则**：所有平台引用同一个 `MarkdownView` 控件，无 `#if` 条件编译。
+### 1.2 共享项目 csproj
+
+添加 Avalonia.Controls.WebView 包引用，web 资源标记为 AvaloniaResource 和 Content。
+
+`xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Controls.WebView" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\web\index.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\web\renderer.css" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\web\renderer.js" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
+`
+
+AvaloniaResource 使文件可通过 AssetLoader 在运行时读取（全平台通用）。
+Content + CopyToOutputDirectory 使文件在 Desktop 发布时复制到输出目录。
+
+### 1.3 Desktop 项目 csproj
+
+`xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Controls.WebView" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
+  </ItemGroup>
+</Project>
+`
+
+### 1.4 Browser 项目 csproj
+
+`xml
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <WasmBuildNative>true</WasmBuildNative>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
+  </ItemGroup>
+</Project>
+`
+
+不需要 #if BROWSER 或 DefineConstants——所有平台共享同一份代码。
 
 ---
 
-## 2. 架构设计
+## 2. HTML 渲染引擎
 
-### 2.1 依赖注入
+### 2.1 index.html
 
-```
-IWebViewSourceProvider (接口)
-    └── EmbeddedHtmlSourceProvider (唯一实现)
-            ├── 通过 AssetLoader 读取 avares:// 嵌入式资源
-            ├── 内联 renderer.css → <style>
-            ├── 内联 renderer.js → <script>
-            └── 返回完整 HTML 字符串
-```
+`html
+<!DOCTYPE html>
+<html class="theme-dark">
+<head>
+  <meta charset="UTF-8">
+  <title>Markdown Preview</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@.../katex.min.css">
+  <link rel="stylesheet" href="renderer.css">
+  <style>
+    html.theme-dark #preview .loading-placeholder { color: #888; }
+    html.theme-light #preview .loading-placeholder { color: #999; }
+  </style>
+</head>
+<body>
+  <div id="preview"><p class="loading-placeholder">Loading Previewer...</p></div>
+  <div id="error-overlay"><!-- --></div>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@..."></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
+`
 
-### 2.2 视图层次
+关键点：
+- class="theme-dark" 是默认值，EmbeddedHtmlSourceProvider 构建时替换为当前系统主题
+- 加载占位文字使用 CSS 类而非行内样式，以便主题切换时自动更新颜色
+- CDN 脚本在 Desktop file:/// 和 Browser document.write() 中均能正常加载
 
-```
-App.OnFrameworkInitializationCompleted()
-    ├── IClassicDesktopStyleApplicationLifetime → MainWindow
-    │       └── MainView (编辑器 + MarkdownView)
-    └── ISingleViewApplicationLifetime → MainView
-            └── MarkdownView (工具栏 + NativeWebView + 错误面板)
-```
+### 2.2 renderer.js 核心 API
 
-### 2.3 加载策略（唯一平台分支）
+| 导出全局函数 | 用途 | C# 调用方式 |
+|-------------|------|------------|
+| window.renderMarkdown(text) | 渲染 Markdown | InvokeScript("renderMarkdown('...')") |
+| window.setTheme(theme) | 切换 dark/light | InvokeScript("setTheme('dark')") |
+| window.setPreviewConfig(config) | 更新配置 | InvokeScript("setPreviewConfig({...})") |
+| window.showPreviewError(detail) | 显示错误浮层 | InvokeScript("showPreviewError('...')") |
 
-`MarkdownView` 中唯一的平台判断：
+### 2.3 renderer.css 主题系统
 
-| 平台              | 加载方式                               | 原理                                                                                                                                |
-| ----------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Desktop** | `file:///` 临时文件                  | EmbeddedHtmlSourceProvider 生成 HTML → 写入`%TEMP%\AvalonMarkdown\preview_{timestamp}.html` → WebView2 导航到 `file:///` 路径 |
-| **Browser** | `about:blank` + `document.write()` | 先导航到`about:blank`（触发 NavigationCompleted）→ 通过 InvokeScript("document.write(...)") 注入完整 HTML                        |
-
-判断代码（仅 3 行）：
-
-```csharp
-private static bool IsDesktop =>
-    Avalonia.Application.Current?.ApplicationLifetime
-        is IClassicDesktopStyleApplicationLifetime;
-```
+使用 CSS 变量 + html.theme-dark / html.theme-light 选择器实现双主题。
+深色主题采用 VS Code 风格配色，包含完整的 highlight.js 语法高亮颜色。
 
 ---
 
-## 3. 统一 HTML 来源
+## 3. MarkdownView 控件
 
-### 3.1 EmbeddedHtmlSourceProvider
+### 3.1 XAML 布局
 
-```csharp
-private static string BuildHtml()
+`xml
+<UserControl ...>
+  <DockPanel>
+    <Border x:Name="ToolbarPanel" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+        <TextBlock Text="Markdown" />
+        <Button x:Name="RestartButton" Content="Reload" />
+        <Button x:Name="ToggleToolbarButton" Content="Hide" />
+        <TextBlock x:Name="StatusText" />
+      </Grid>
+    </Border>
+    <Border x:Name="ErrorPanel" DockPanel.Dock="Bottom" IsVisible="False">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Text="⚠" />
+        <StackPanel>
+          <TextBlock x:Name="ErrorTitle" />
+          <TextBlock x:Name="ErrorMessage" />
+        </StackPanel>
+        <Button x:Name="DismissErrorButton" Content="x" />
+      </Grid>
+    </Border>
+    <Grid x:Name="WebViewHost" />
+  </DockPanel>
+</UserControl>
+`
+
+工具栏的 Background 和 BorderBrush 不在 XAML 中硬编码，由代码根据当前主题设置。
+
+### 3.2 公开 API
+
+| 成员 | 类型 | 说明 |
+|------|------|------|
+| ShowToolbar | bool property | 有头/无头模式切换 |
+| OnReady | event | WebView 完全就绪（含 CDN 脚本加载完成） |
+| ErrorOccurred | event | 内部可恢复错误 |
+| RenderMarkdownAsync(string?) | Task | 渲染 Markdown 内容 |
+| RestartPreviewAsync() | Task | 重启预览器 |
+| ApplyConfigAsync(string) | Task | 应用预览配置 |
+| InvokeScriptAsync(string) | Task<string?> | 执行自定义 JS |
+
+### 3.3 核心构造流程
+
+`
+构造函数
+  ├── InitializeComponent()          ← XAML 解析
+  ├── CreateWebView()                ← 创建 NativeWebView，背景色跟随主题
+  ├── WireEvents()                   ← 绑定事件 + 订阅主题变更
+  ├── InitializeWebViewAsync()       ← 双路径加载
+  │     ├── IsDesktop? → 写临时文件 → file:/// 导航
+  │     └── !IsDesktop → about:blank 导航（5s 安全网）
+  ├── ApplyThemeColors()             ← 设置工具栏/WebView 背景/状态文字颜色
+  └── StatusText = "Loading..."
+`
+
+### 3.4 双路径加载策略
+
+Desktop: WriteTempHtmlFile → file:/// → NavigationCompleted → 2s 等待 CDN → SetReady
+Browser: about:blank → NavigationCompleted → document.write → ForceLayout → 2s 等待 → SetReady
+
+安全网：5 秒后若未就绪，强制注入或 SetReady。
+
+### 3.5 临时文件管理
+
+`csharp
+var path = Path.Combine(dir, $"preview_{DateTime.Now:HHmmssfff}.html");
+`
+
+时间戳确保每次重启生成唯一文件名，避免 WebView2 缓存。
+自动清理 30 秒前的旧临时文件。
+
+### 3.6 document.write 注入（Browser）
+
+`csharp
+var escaped = htmlContent
+    .Replace("\\", "\\\\").Replace("'", "\\'")
+    .Replace("\r\n", "\\n").Replace("\n", "\\n").Replace("\r", "\\n");
+var script = $"document.open();document.write('{escaped}');document.close();";
+var result = _webView.InvokeScript(script);
+if (result is Task t) await t.WaitAsync(TimeSpan.FromSeconds(5));
+`
+
+InvokeScript 在 Desktop 返回 Task<string?>（异步），在 Browser 返回 null（同步）。
+result is Task t 判断兼容两者。
+
+---
+
+## 4. HTML 来源提供器
+
+### 4.1 接口
+
+`csharp
+public interface IWebViewSourceProvider
 {
-    var html = ReadAsset("avares://AvalonMarkdown/Assets/web/index.html");
-    var css  = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.css");
-    var js   = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.js");
-
-    html = html.Replace("<link rel=\"stylesheet\" href=\"renderer.css\">", $"<style>{css}</style>");
-    html = html.Replace("<script src=\"renderer.js\"></script>", $"<script>{js}</script>");
-    return html;
+    string GetHtmlContent();
 }
-```
+`
 
-CDN 脚本（markdown-it、KaTeX、Mermaid 等）保持外部引用，在 Desktop `file:///` 和 Browser `document.write()` 中均能正常加载。
+### 4.2 EmbeddedHtmlSourceProvider
 
-### 3.2 Desktop 路径
-
-```
-InitializeWebViewAsync()
-  └── IsDesktop == true
-      ├── WriteTempHtmlFile(html) → preview_143022001.html
-      ├── _webView.Source = file:///C:/Users/.../preview_143022001.html
-      ├── NavigationCompleted 触发
-      ├── 等待 2s（CDN 脚本就绪）
-      └── SetReady()
-```
-
-临时文件带时间戳防缓存，自动清理 30 秒前的旧文件。
-
-### 3.3 Browser 路径
-
-```
-InitializeWebViewAsync()
-  └── IsDesktop == false
-      ├── _webView.Source = about:blank
-      ├── NavigationCompleted 触发（about:blank 加载完成）
-      ├── OnNavigationCompleted()
-      │     └── InjectViaDocumentWriteAsync()
-      │           ├── 转义 HTML（处理 \\ ' \n）
-      │           ├── InvokeScript("document.open();document.write('...');document.close();")
-      │           ├── ForceLayout()  ← 修正 iframe 尺寸
-      │           ├── 等待 2s
-      │           └── SetReady()
-      └── 安全网：5 秒后强制注入
-```
-
-### 3.4 安全网机制
-
-两个场景都有 5 秒后备定时器：
-
-```csharp
-_ = Task.Run(async () =>
+`csharp
+public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
 {
-    await Task.Delay(5000);
-    if (!_ready)
-        await Dispatcher.UIThread.InvokeAsync(/* 注入或 SetReady */);
-});
-```
+    private readonly Lazy<string> _html;
 
-重启时使用 `_loadSequence` 序列号防止过期的安全网干扰新的重启。
+    public EmbeddedHtmlSourceProvider() { _html = new Lazy<string>(BuildHtml); }
 
----
+    public string GetHtmlContent()
+    {
+        var html = _html.Value;
+        // 注入当前系统主题 class
+        var theme = GetCurrentTheme() == "light" ? "theme-light" : "theme-dark";
+        return html.Replace("class=\"theme-dark\"", $"class=\"{theme}\"");
+    }
 
-## 4. MarkdownView 控件
+    private static string BuildHtml()
+    {
+        // AssetLoader 全平台通用
+        var html = ReadAsset("avares://AvalonMarkdown/Assets/web/index.html");
+        var css  = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.css");
+        var js   = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.js");
+        // 内联 CSS/JS
+        html = html.Replace("<link rel=\"stylesheet\" href=\"renderer.css\">", $"<style>{css}</style>");
+        html = html.Replace("<script src=\"renderer.js\"></script>", $"<script>{js}</script>");
+        return html;
+    }
 
-### 4.1 XAML 布局
+    private static string GetCurrentTheme()
+    {
+        var variant = Application.Current?.ActualThemeVariant;
+        return variant == ThemeVariant.Light ? "light" : "dark";
+    }
+}
+`
 
-```
-DockPanel
-  ├── ToolbarPanel
-  │     ├── "Markdown 预览" 标题
-  │     ├── "⟳ 重启预览" 按钮
-  │     ├── "⊟ 隐藏工具栏" / "⊞ 显示工具栏" 按钮
-  │     └── StatusText（初始化… / 就绪 / 已渲染）
-  ├── ErrorPanel（初始隐藏）
-  │     ├── ⚠ 图标 + 错误标题 + 详情
-  │     └── "✕ 关闭" 按钮
-  └── WebViewHost → NativeWebView
-```
-
-### 4.2 公开 API
-
-| 成员                             | 类型          | 说明                                |
-| -------------------------------- | ------------- | ----------------------------------- |
-| `NavigationCompleted`          | event         | WebView 就绪（含 CDN 脚本加载完成） |
-| `ErrorOccurred`                | event         | 内部可恢复错误                      |
-| `ShowToolbar`                  | bool property | 有头/无头模式切换                   |
-| `RenderMarkdownAsync(string?)` | Task          | 渲染 Markdown 内容                  |
-| `RestartPreviewAsync()`        | Task          | 重启预览器                          |
-| `ApplyConfigAsync(string)`     | Task          | 应用预览配置                        |
-| `InvokeScriptAsync(string)`    | Task<string?> | 执行自定义 JS                       |
-
-### 4.3 有头/无头模式
-
-```csharp
-markdownView.ShowToolbar = false;  // 代码控制
-// UI 切换：工具栏右上角 "⊟ 隐藏工具栏" 按钮
-```
+核心作用：
+1. AssetLoader 读取嵌入式资源（全平台统一，不依赖文件系统）
+2. 内联 renderer.css/renderer.js 消除外部文件依赖
+3. 注入当前系统主题 class，使加载前的占位文字颜色与主题匹配
 
 ---
 
-## 5. 渲染引擎 (renderer.js)
+## 5. 统一主视图
 
-### 5.1 架构
+### 5.1 MainView.axaml
 
-单一 IIFE，通过 `window` 导出接口：
+`xml
+<Grid ColumnDefinitions="1*, 4, 3*">
+  <DockPanel Grid.Column="0">
+    <TextBlock Text="Markdown Editor" />
+    <TextBox x:Name="MarkdownEditor" />
+  </DockPanel>
+  <Rectangle Grid.Column="1" Fill="#3c3c3c" Width="4" />
+  <Grid x:Name="PreviewHost" Grid.Column="2" />
+</Grid>
+`
 
-```javascript
-(function() {
-    // Console → C# bridge (chrome.webview.postMessage)
-    // window.onerror + unhandledrejection 全局捕获
-    // markdown-it + 插件
-    // KaTeX 内联/块级公式
-    // Mermaid 图表
-    // highlight.js VS-style 高亮
-    // 代码块: 语言标签 + 复制 + 高度调节
-    // 主题管理
+PreviewHost 是占位 Grid，MarkdownView 在代码中创建后放入。
 
-    window.renderMarkdown = function(text) { ... };
-    window.setTheme = function(theme) { ... };
-    window.setPreviewConfig = function(config) { ... };
-    window.showPreviewError = function(detail) { ... };
-    window.dismissErrorOverlay = function() { ... };
-})();
-```
+### 5.2 MainView.axaml.cs
 
-### 5.2 导出接口
+`csharp
+public partial class MainView : UserControl
+{
+    private MarkdownView MarkdownPreview { get; set; } = null!;
 
-| 全局 API                            | 用途                         | 调用方          |
-| ----------------------------------- | ---------------------------- | --------------- |
-| `window.renderMarkdown(text)`     | 渲染 Markdown 到`#preview` | C# InvokeScript |
-| `window.setTheme(theme)`          | 切换 dark/light              | C#              |
-| `window.setPreviewConfig(config)` | 更新配置                     | C#              |
-| `window.showPreviewError(detail)` | 显示 JS 错误浮层             | C# / JS 内部    |
-| `window.dismissErrorOverlay()`    | 关闭错误浮层                 | JS 内部         |
+    public MainView()
+    {
+        InitializeComponent();
+        DataContext = new MainViewModel();
+        InitPreview(new EmbeddedHtmlSourceProvider());
+    }
 
----
+    private void InitPreview(IWebViewSourceProvider sp)
+    {
+        MarkdownPreview = new MarkdownView(sp);
+        MarkdownPreview.OnReady += OnNavComplete;
+        MarkdownEditor.TextChanged += OnMarkdownChanged;
+        PreviewHost.Children.Add(MarkdownPreview);
+    }
 
-## 6. C# ↔ JS 通信
+    private async void OnNavComplete(object? s, EventArgs e)
+    {
+        await Task.Delay(500);
+        await ApplyConfigAsync();
+        await MarkdownPreview.RenderMarkdownAsync(MarkdownEditor.Text);
+    }
 
-### 6.1 C# → JS: InvokeScript
+    private async Task ApplyConfigAsync()
+    {
+        var config = GetVm().PreviewConfig;
+        config.IsDarkTheme = Application.Current?.ActualThemeVariant != ThemeVariant.Light;
+        await MarkdownPreview.ApplyConfigAsync(config.ToJsCallExpression());
+    }
+}
+`
 
-```csharp
-var result = _webView.InvokeScript("renderMarkdown('...')");
-if (result is Task t)
-    await t.WaitAsync(TimeSpan.FromSeconds(5));
-```
-
-所有调用经 `InvokeScriptSafeAsync` 包装，含异常捕获和 5 秒超时。
-
-### 6.2 JS → C#: chrome.webview.postMessage
-
-```javascript
-try { window.chrome.webview.postMessage('[ERR] ...'); } catch(e) {}
-```
-
-C# 端通过反射订阅 `WebViewMessages` 事件（兼容不支持该事件的平台）。
-
----
-
-## 7. 错误处理
-
-### 7.1 双层面板
-
-| 层面                  | 位置                         | 来源                               |
-| --------------------- | ---------------------------- | ---------------------------------- |
-| **C# 错误面板** | MarkdownView 底部 ErrorPanel | InvokeScript 异常、文件缺失、超时  |
-| **JS 错误浮层** | HTML 页面底部#error-overlay  | window.onerror、unhandledrejection |
-
-### 7.2 错误捕获链
-
-```
-JS 运行时异常 → window.onerror → HTML 错误浮层 → postMessage → C# 底部面板
-C# InvokeScript 异常 → InvokeScriptSafeAsync try-catch → C# 底部面板
-```
+ApplyConfigAsync 不调用 setTheme——主题由 MarkdownView 的 ApplySystemThemeAsync 自动管理。
 
 ---
 
-## 8. 重构前后对比
+## 6. 入口点分发
 
-| 对比项          | 重构前 (OLD)                                  | 重构后 (NEW)                              |
-| --------------- | --------------------------------------------- | ----------------------------------------- |
-| 条件编译        | `#if BROWSER`                               | 无，运行时 ApplicationLifetime 分发       |
-| 视图            | MainWindow + MainView(占位) + BrowserMainView | 统一 MainView + MainWindow(仅窗口)        |
-| HTML 加载       | Desktop: file:/// Browser: standalone-md.html | 统一 EmbeddedHtmlSourceProvider 内联+注入 |
-| Browser WebView | JS setTimeout 设置 iframe.src                 | C# about:blank + document.write()         |
-| 服务接口        | IMarkdownPreviewService                       | IWebViewSourceProvider                    |
-| Browser 本地库  | wwwroot/lib/ CDN 副本                         | CDN 在线引用                              |
-| 布局修正        | 无，需手动调窗口                              | ForceLayout() 注入后立即执行              |
-| 安全网          | 无                                            | 5 秒后备定时器 + _loadSequence 防串扰     |
-| 错误处理        | 零散 try-catch                                | 双层面板 + 全局 onerror + 超时检测        |
+### 6.1 App.axaml.cs
 
-### 已删除文件
+`csharp
+public override void OnFrameworkInitializationCompleted()
+{
+    if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        desktop.MainWindow = new MainWindow();
+    else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
+        singleView.MainView = new MainView();
+    base.OnFrameworkInitializationCompleted();
+}
+`
 
-| 文件                                      | 替代                       |
-| ----------------------------------------- | -------------------------- |
-| `Views/BrowserMainView.axaml` + `.cs` | 统一 MainView              |
-| `Services/IMarkdownPreviewService.cs`   | 内聚到 MarkdownView        |
-| `Services/WebViewPreviewService.cs`     | 同上                       |
-| `Services/FileWebViewSourceProvider.cs` | EmbeddedHtmlSourceProvider |
-| `Services/UrlWebViewSourceProvider.cs`  | 同上                       |
-| `wwwroot/standalone-md.html`            | 同上                       |
-| `wwwroot/web/` + `wwwroot/lib/`       | CDN 在线引用               |
+运行时 ApplicationLifetime 类型判断，无 #if 条件编译。
+
+### 6.2 Desktop Program.cs
+
+`csharp
+public static void Main(string[] args) => BuildAvaloniaApp()
+    .StartWithClassicDesktopLifetime(args);
+public static AppBuilder BuildAvaloniaApp()
+    => AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont().LogToTrace();
+`
+
+### 6.3 Browser Program.cs
+
+`csharp
+private static Task Main(string[] args) => BuildAvaloniaApp()
+    .WithInterFont().StartBrowserAppAsync("out");
+public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>();
+`
+
+---
+
+## 7. 主题系统
+
+### 7.1 全链路
+
+`
+EmbeddedHtmlSourceProvider (HTML 构建时)
+  └── 读取 ActualThemeVariant → 注入 theme-dark/light class
+
+MarkdownView 构造函数
+  └── ApplyThemeColors(GetCurrentTheme())
+        ├── ToolbarPanel.Background
+        ├── WebViewHost.Background
+        ├── _webView.Background
+        └── StatusText.Foreground
+
+SetReady() / 主题切换时
+  └── ApplySystemThemeAsync()
+        ├── ApplyThemeColors(theme)  ← C# 端控件
+        └── InvokeScript("setTheme('...')")  ← JS 端 WebView
+
+ActualThemeVariantChanged 事件
+  └── ApplySystemThemeAsync()  ← 系统主题变化时自动跟随
+`
+
+### 7.2 关键代码
+
+`csharp
+private void SubscribeThemeChanges()
+{
+    if (_themeMonitored) return;
+    _themeMonitored = true;
+    Application.Current!.ActualThemeVariantChanged += OnActualThemeChanged;
+}
+
+private async Task ApplySystemThemeAsync()
+{
+    var theme = GetCurrentTheme();
+    if (theme == _currentTheme && _ready) return;
+    _currentTheme = theme;
+    ApplyThemeColors(theme);
+    if (_ready)
+        await InvokeScriptSafeAsync($"setTheme('{theme}')");
+}
+`
+
+JS 端 setTheme 内部调用 reRenderMarkdown() 重建所有 Mermaid 图表，使新主题生效。
+
+---
+
+## 8. 错误处理
+
+### 8.1 双层面板
+
+C# 底部面板：InvokeScriptSafeAsync 捕获异常 → ShowError → ErrorPanel
+JS 页面浮层：window.onerror / unhandledrejection → showErrorOverlay → postMessage → C#
+
+### 8.2 安全网
+
+初始化 5 秒后若未就绪，强制注入或 SetReady，防止永久卡死。
+重启时使用 _loadSequence 序列号防止过期安全网干扰。
 
 ---
 
 ## 9. 常见问题
 
-| 问题                                         | 原因                                 | 解决                                |
-| -------------------------------------------- | ------------------------------------ | ----------------------------------- |
-| Browser data: URI 不触发 NavigationCompleted | iframe 中 data: URI 不触发 load 事件 | 用 about:blank + document.write()   |
-| Desktop data: URI CDN 不加载                 | data: URI 中 script src 可能被阻止   | Desktop 用 file:/// 临时文件        |
-| Desktop document.write() 黑屏                | WebView2 对注入式 CDN 处理不同       | Desktop 不走 document.write()       |
-| iframe 居于左上角                            | 布局未及时更新 DOM 尺寸              | 注入后立即 ForceLayout()            |
-| 重启不变                                     | 同名文件缓存/安全网过期              | 时间戳文件名 + _loadSequence 安全网 |
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| Desktop data: URI CDN 不加载 | data: URI 中 script 被阻止 | Desktop 用 file:/// 临时文件 |
+| Browser data: URI 不触发事件 | iframe 中 data: URI 无 load 事件 | about:blank + document.write |
+| iframe 居于左上角 | 布局未更新 DOM 尺寸 | 注入后 ForceLayout() |
+| 重启不变 | 同名文件缓存/安全网过期 | 时间戳文件名 + _loadSequence |
+| Mermaid 主题不更新 | SVG 已渲染不受 initialize 影响 | reRenderMarkdown() 重建 |

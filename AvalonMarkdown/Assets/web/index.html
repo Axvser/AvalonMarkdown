@@ -46,10 +46,21 @@
         #error-overlay .error-dismiss:hover {
             background: #5c2a2a;
         }
+        /* 加载占位文字 — 跟随主题 */
+        #preview .loading-placeholder {
+            text-align: center;
+            margin-top: 80px;
+        }
+        html.theme-dark #preview .loading-placeholder {
+            color: #888;
+        }
+        html.theme-light #preview .loading-placeholder {
+            color: #999;
+        }
     </style>
 </head>
 <body>
-    <div id="preview"><p style="color:#888;text-align:center;margin-top:80px;">Loading Previewer…</p></div>
+    <div id="preview"><p class="loading-placeholder">Loading Previewer…</p></div>
 
     <!-- 运行时错误浮层 -->
     <div id="error-overlay">

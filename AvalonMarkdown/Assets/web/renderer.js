@@ -145,7 +145,8 @@
     }
 
     // ===== 主题管理 =====
-    var currentTheme = 'dark';
+    // 从 html 标签的 class 读取当前主题，而非硬编码
+    var currentTheme = document.documentElement.className.indexOf('theme-light') >= 0 ? 'light' : 'dark';
     var mermaidInitialized = false;
 
     function getMermaidThemeVars(theme) {
@@ -193,6 +194,19 @@
                     tagLabelColor: '#ffffff',
                     tagLabelBg: '#005fb8',
                     tagLabelBorder: '#005fb8',
+                    // sequence diagram
+                    actorBorder: '#005fb8',
+                    actorBkg: '#e8f0fe',
+                    actorTextColor: '#333333',
+                    actorLineColor: '#666666',
+                    signalColor: '#005fb8',
+                    signalTextColor: '#000000',
+                    labelBoxBkgColor: '#f0f0f0',
+                    labelBoxBorderColor: '#d4d4d4',
+                    labelTextColor: '#333333',
+                    loopTextColor: '#666666',
+                    activationBorderColor: '#005fb8',
+                    activationBkgColor: '#e8f0fe',
                 }
             };
         }
@@ -240,6 +254,19 @@
                 tagLabelColor: '#ffffff',
                 tagLabelBg: '#3794ff',
                 tagLabelBorder: '#3794ff',
+                // sequence diagram
+                actorBorder: '#569cd6',
+                actorBkg: '#1e3a5f',
+                actorTextColor: '#d4d4d4',
+                actorLineColor: '#888888',
+                signalColor: '#569cd6',
+                signalTextColor: '#ffffff',
+                labelBoxBkgColor: '#2d2d2d',
+                labelBoxBorderColor: '#3c3c3c',
+                labelTextColor: '#d4d4d4',
+                loopTextColor: '#888888',
+                activationBorderColor: '#569cd6',
+                activationBkgColor: '#1e3a5f',
             }
         };
     }
@@ -253,11 +280,26 @@
         if (typeof mermaid !== 'undefined') {
             mermaid.initialize(getMermaidThemeVars(theme));
             mermaidInitialized = true;
-            // 重新渲染已有的 mermaid 图表
-            document.querySelectorAll('.mermaid-container .mermaid').forEach(function(el) {
+            // Mermaid 渲染后会替换 <pre class="mermaid"> 为 SVG，
+            // 对已渲染节点再调 mermaid.run 无效。此处通过重渲染整个 Markdown
+            // 重建 .mermaid 元素并使用新主题
+            reRenderMarkdown();
+            console.log('[Theme] Mermaid 主题已更新');
+        }
+    }
+
+    function reRenderMarkdown() {
+        var preview = document.getElementById('preview');
+        if (!preview) return;
+        var source = preview.getAttribute('data-source');
+        if (!source) return;
+        try {
+            preview.innerHTML = md.render(source);
+            preview.querySelectorAll('.mermaid').forEach(function(el) {
                 try { mermaid.run({ nodes: [el] }); } catch(e) {}
             });
-            console.log('[Theme] Mermaid 主题已更新');
+        } catch(e) {
+            console.error('❌ ' + e.message);
         }
     }
 
