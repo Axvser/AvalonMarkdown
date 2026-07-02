@@ -1,4 +1,4 @@
-# AvalonMarkdown.Controls
+# AvalonMarkdown
 
 跨平台 Markdown 预览控件，基于 AvaloniaUI + NativeWebView。
 写一次控件，支持 Desktop / Browser (WASM) / Android / iOS。
@@ -6,7 +6,7 @@
 ## 安装
 
 ```bash
-dotnet add package AvalonMarkdown.Controls
+dotnet add package AvalonMarkdown
 ```
 
 ## 快速开始
@@ -15,7 +15,7 @@ dotnet add package AvalonMarkdown.Controls
 
 ```xml
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown.Controls">
+        xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown">
     <md:MarkdownView x:Name="Preview" />
 </Window>
 ```
