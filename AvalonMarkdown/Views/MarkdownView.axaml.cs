@@ -114,6 +114,9 @@ public partial class MarkdownView : UserControl
         ToggleToolbarButton.Click += (_, _) => ShowToolbar = !ShowToolbar;
         DismissErrorButton.Click += (_, _) => HideError();
 
+        // 事件驱动布局修正：WebViewHost 首次获得有效尺寸时触发一次
+        WebViewHost.EffectiveViewportChanged += OnHostViewportChanged;
+
         SubscribeThemeChanges();
     }
 
@@ -345,13 +348,29 @@ public partial class MarkdownView : UserControl
         }
     }
 
-    /// <summary>在注入 HTML 后强制布局更新</summary>
+    /// <summary>事件驱动布局修正：WebViewHost 首次获得有效尺寸时同步 iframe 布局</summary>
+    private void OnHostViewportChanged(object? sender, Avalonia.Layout.EffectiveViewportChangedEventArgs e)
+    {
+        // 仅在首次获得有效尺寸时触发
+        if (e.EffectiveViewport.Width <= 0 || e.EffectiveViewport.Height <= 0)
+            return;
+
+        WebViewHost.EffectiveViewportChanged -= OnHostViewportChanged;
+
+        if (_webView != null)
+        {
+            _webView.InvalidateMeasure();
+            _webView.InvalidateArrange();
+        }
+    }
+
+    /// <summary>备用：注入 HTML 后立即标记布局失效，事件驱动会在下一帧处理</summary>
     private void ForceLayout()
     {
         WebViewHost.InvalidateMeasure();
         WebViewHost.InvalidateArrange();
-        _webView.InvalidateMeasure();
-        _webView.InvalidateArrange();
+        _webView?.InvalidateMeasure();
+        _webView?.InvalidateArrange();
     }
 
     /// <summary>应用预览配置（JS 调用）</summary>

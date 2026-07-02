@@ -4,8 +4,19 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>AvalonMarkdown.Controls</PackageId>
+    <Version>1.0.0</Version>
+    <Title>AvalonMarkdown.Controls</Title>
+    <Authors>Axvser</Authors>
+    <Description>NativeWebView based Markdown preview control for AvaloniaUI - cross-platform (Desktop / Browser / Mobile).</Description>
+    <PackageTags>avalonia;markdown;webview;preview</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/Axvser/AvalonMarkdown</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Axvser/AvalonMarkdown.git</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
-  
+
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
@@ -17,20 +28,20 @@
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>none</IncludeAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Avalonia.Controls.WebView" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\web\index.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\web\renderer.css">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\web\renderer.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Content Include="Assets\web\index.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\web\renderer.css" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\web\renderer.js" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="True" PackagePath="\" />
   </ItemGroup>
 </Project>
