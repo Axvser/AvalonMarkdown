@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
+    <WasmBuildNative>true</WasmBuildNative>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,8 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj">
-      <DefineConstants>BROWSER</DefineConstants>
-    </ProjectReference>
+    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
   </ItemGroup>
 </Project>

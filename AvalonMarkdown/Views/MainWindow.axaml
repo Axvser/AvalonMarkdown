@@ -1,44 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:AvalonMarkdown.ViewModels"
-        xmlns:avw="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.WebView"
+        xmlns:views="using:AvalonMarkdown.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="AvalonMarkdown.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
         Title="AvalonMarkdown — Markdown Preview">
 
-    <Design.DataContext>
-        <vm:MainViewModel/>
-    </Design.DataContext>
-
-    <Grid ColumnDefinitions="1*, 4, 3*">
-        <DockPanel Grid.Column="0" Margin="8">
-            <TextBlock DockPanel.Dock="Top" Text="Markdown 编辑器"
-                       FontSize="13" FontWeight="SemiBold"
-                       Foreground="{DynamicResource SystemAccentColor}"
-                       Margin="0,0,0,6"/>
-            <TextBox x:Name="MarkdownEditor"
-                     Text="{Binding MarkdownText, Mode=TwoWay}"
-                     TextWrapping="NoWrap"
-                     AcceptsReturn="True" AcceptsTab="True"
-                     FontFamily="Cascadia Code, Consolas, monospace"
-                     FontSize="13"
-                     Background="#1e1e1e" Foreground="#d4d4d4"
-                     BorderThickness="1" BorderBrush="#3c3c3c"
-                     Padding="8"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-        </DockPanel>
-        <Rectangle Grid.Column="1" Fill="#3c3c3c" Width="4"/>
-        <DockPanel Grid.Column="2" Margin="8">
-            <TextBlock DockPanel.Dock="Top" Text="Markdown 预览"
-                       FontSize="13" FontWeight="SemiBold"
-                       Foreground="{DynamicResource SystemAccentColor}"
-                       Margin="0,0,0,6"/>
-            <avw:NativeWebView x:Name="MarkdownPreview"
-                               Background="#1e1e1e"/>
-        </DockPanel>
-    </Grid>
+    <views:MainView x:Name="MainViewHost"/>
 </Window>

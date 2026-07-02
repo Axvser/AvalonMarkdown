@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using AvalonMarkdown.ViewModels;
 using AvalonMarkdown.Views;
 
 namespace AvalonMarkdown;
@@ -15,27 +14,16 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-#if BROWSER
-        if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
-        {
-            singleView.MainView = new BrowserMainView();
-        }
-#else
+        // 运行时分发 — 统一使用 EmbeddedHtmlSourceProvider（data:text/html;base64），全平台一致
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainViewModel()
-            };
+            desktop.MainWindow = new MainWindow();
         }
-        else if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)
+        else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
-            singleViewPlatform.MainView = new MainView
-            {
-                DataContext = new MainViewModel()
-            };
+            singleView.MainView = new Views.MainView();
         }
-#endif
+
         base.OnFrameworkInitializationCompleted();
     }
 }
