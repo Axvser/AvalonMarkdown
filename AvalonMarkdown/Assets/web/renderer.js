@@ -148,26 +148,116 @@
     var currentTheme = 'dark';
     var mermaidInitialized = false;
 
+    function getMermaidThemeVars(theme) {
+        if (theme === 'light') {
+            return {
+                theme: 'base',
+                themeVariables: {
+                    background: '#ffffff',
+                    primaryColor: '#d4e6f9',
+                    primaryBorderColor: '#005fb8',
+                    primaryTextColor: '#333333',
+                    secondaryColor: '#e8f5f0',
+                    secondaryBorderColor: '#2b91af',
+                    secondaryTextColor: '#333333',
+                    tertiaryColor: '#f5f5f5',
+                    tertiaryBorderColor: '#d4d4d4',
+                    lineColor: '#666666',
+                    arrowheadColor: '#005fb8',
+                    textColor: '#333333',
+                    mainBkg: '#ffffff',
+                    nodeBorder: '#005fb8',
+                    clusterBkg: '#f5f5f5',
+                    clusterBorder: '#d4d4d4',
+                    titleColor: '#800000',
+                    edgeLabelBackground: '#ffffff',
+                    nodeTextColor: '#333333',
+                    pieTitleTextColor: '#333333',
+                    pieStrokeWidth: '1px',
+                    pieStrokeColor: '#d4d4d4',
+                    pieSectionTextColor: '#333333',
+                    pieLegendTextColor: '#666666',
+                    pieOpacity: '0.85',
+                    git0: '#e8e8e8',
+                    git1: '#d4e6f9',
+                    git2: '#e8f5f0',
+                    git3: '#fdf6d9',
+                    git4: '#f5e8e8',
+                    git5: '#e8e8f5',
+                    git6: '#f0e8d4',
+                    git7: '#ffffff',
+                    gitBranchLabelColor: '#333333',
+                    gitBranchLabelBg: '#ffffff',
+                    commitLabelColor: '#333333',
+                    commitLabelBg: '#f5f5f5',
+                    tagLabelColor: '#ffffff',
+                    tagLabelBg: '#005fb8',
+                    tagLabelBorder: '#005fb8',
+                }
+            };
+        }
+        // dark (default)
+        return {
+            theme: 'base',
+            themeVariables: {
+                background: '#1e1e1e',
+                primaryColor: '#1e3a5f',
+                primaryBorderColor: '#3794ff',
+                primaryTextColor: '#d4d4d4',
+                secondaryColor: '#1a3a32',
+                secondaryBorderColor: '#4ec9b0',
+                secondaryTextColor: '#d4d4d4',
+                tertiaryColor: '#252526',
+                tertiaryBorderColor: '#3c3c3c',
+                lineColor: '#888888',
+                arrowheadColor: '#3794ff',
+                textColor: '#d4d4d4',
+                mainBkg: '#1e1e1e',
+                nodeBorder: '#569cd6',
+                clusterBkg: '#252526',
+                clusterBorder: '#3c3c3c',
+                titleColor: '#569cd6',
+                edgeLabelBackground: '#2d2d2d',
+                nodeTextColor: '#d4d4d4',
+                pieTitleTextColor: '#d4d4d4',
+                pieStrokeWidth: '1px',
+                pieStrokeColor: '#3c3c3c',
+                pieSectionTextColor: '#d4d4d4',
+                pieLegendTextColor: '#888888',
+                pieOpacity: '0.85',
+                git0: '#2d2d2d',
+                git1: '#1e3a5f',
+                git2: '#1a3a32',
+                git3: '#3a3a1a',
+                git4: '#3a1a1a',
+                git5: '#1a1a3a',
+                git6: '#3a2a1a',
+                git7: '#1e1e1e',
+                gitBranchLabelColor: '#d4d4d4',
+                gitBranchLabelBg: '#252526',
+                commitLabelColor: '#d4d4d4',
+                commitLabelBg: '#2d2d2d',
+                tagLabelColor: '#ffffff',
+                tagLabelBg: '#3794ff',
+                tagLabelBorder: '#3794ff',
+            }
+        };
+    }
+
     function setTheme(theme) {
         if (theme !== 'dark' && theme !== 'light') theme = 'dark';
         currentTheme = theme;
         document.documentElement.className = 'theme-' + theme;
         console.log('[Theme] 切换到: ' + theme);
 
-        // 重新初始化 Mermaid 主题
-        var mermaidTheme = theme === 'dark' ? 'dark' : 'default';
         if (typeof mermaid !== 'undefined') {
-            mermaid.initialize({
-                startOnLoad: false,
-                theme: mermaidTheme,
-                securityLevel: 'loose'
-            });
+            mermaid.initialize(getMermaidThemeVars(theme));
             mermaidInitialized = true;
             // 重新渲染已有的 mermaid 图表
             document.querySelectorAll('.mermaid-container .mermaid').forEach(function(el) {
                 try { mermaid.run({ nodes: [el] }); } catch(e) {}
             });
-            console.log('[Theme] Mermaid 主题已更新: ' + mermaidTheme);
+            console.log('[Theme] Mermaid 主题已更新');
         }
     }
 
@@ -176,14 +266,9 @@
 
     // ===== 初始化 Mermaid（跟随当前主题）=====
     if (typeof mermaid !== 'undefined') {
-        var initialMermaidTheme = currentTheme === 'dark' ? 'dark' : 'default';
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: initialMermaidTheme,
-            securityLevel: 'loose'
-        });
+        mermaid.initialize(getMermaidThemeVars(currentTheme));
         mermaidInitialized = true;
-        console.log('[Mermaid] 主题: ' + initialMermaidTheme);
+        console.log('[Mermaid] 主题已初始化');
     }
 
     // === Markdown-it 配置（VS Code 风格）===
