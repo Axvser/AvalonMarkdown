@@ -2,47 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AvalonMarkdown.Views.MarkdownView">
     <DockPanel>
-        <!-- ═══════════════════ 顶部工具栏 ═══════════════════ -->
-        <Border x:Name="ToolbarPanel"
-                DockPanel.Dock="Top"
-                BorderThickness="0,0,0,1"
-                Padding="8,4">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                <!-- 标题 -->
-                <TextBlock Grid.Column="0"
-                           Text="Markdown"
-                           FontSize="13"
-                           Foreground="{DynamicResource SystemAccentColor}"
-                           VerticalAlignment="Center"
-                           Margin="4,0,12,0"/>
-
-                <Button Grid.Column="1"
-                        x:Name="RestartButton"
-                        Content="Reload"
-                        FontSize="12"
-                        Padding="8,2"
-                        Margin="2,0"
-                        ToolTip.Tip="Reload preview" />
-
-                <Button Grid.Column="2"
-                        x:Name="ToggleToolbarButton"
-                        Content="Hide"
-                        FontSize="12"
-                        Padding="8,2"
-                        Margin="2,0"
-                        ToolTip.Tip="Hide / show toolbar" />
-
-                <!-- 状态指示 -->
-                <TextBlock Grid.Column="4"
-                           x:Name="StatusText"
-                           Text="Loading…"
-                           FontSize="11"
-                           Foreground="#888"
-                           VerticalAlignment="Center"
-                           Margin="4,0"/>
-            </Grid>
-        </Border>
-
         <!-- ═══════════════════ 错误面板（初始隐藏）═══════════════════ -->
         <Border x:Name="ErrorPanel"
                 DockPanel.Dock="Bottom"

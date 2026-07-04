@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -22,19 +23,13 @@ public partial class MarkdownView : UserControl
     private bool _htmlInjected;
     private string? _pendingMarkdown;
     private string _htmlContent = "";
-    private string _currentTheme = "dark";
-    private bool _themeMonitored;
 
-    /// <summary>获取或设置是否显示工具栏</summary>
-    public bool ShowToolbar
-    {
-        get => ToolbarPanel.IsVisible;
-        set
-        {
-            ToolbarPanel.IsVisible = value;
-            ToggleToolbarButton.Content = value ? "Hide" : "Show";
-        }
-    }
+    // ====================================================================
+    // 静态主题管理 — WeakReference 跟踪所有活动实例，响应式推送主题
+    // ====================================================================
+    private static readonly List<WeakReference<MarkdownView>> _instances = new();
+    private static readonly object _lock = new();
+    private static bool _themeSubscribed;
 
     // ====================================================================
     // 公共事件
@@ -66,11 +61,14 @@ public partial class MarkdownView : UserControl
 
         CreateWebView();
         WireEvents();
-        _ = InitializeWebViewAsync();
 
-        // 构造函数阶段直接用 GetCurrentTheme() 设置初始主题配色
+        // 注册到静态实例列表（响应式主题推送用）
+        RegisterInstance();
+
+        // 每次构造都查询当前主题，不依赖任何静态缓存
         ApplyThemeColors(GetCurrentTheme());
-        StatusText.Text = "Loading…";
+
+        _ = InitializeWebViewAsync();
     }
 
     // ====================================================================
@@ -133,14 +131,10 @@ public partial class MarkdownView : UserControl
             // 不支持 WebViewMessages — 静默忽略
         }
 
-        RestartButton.Click += async (_, _) => await RestartPreviewAsync();
-        ToggleToolbarButton.Click += (_, _) => ShowToolbar = !ShowToolbar;
         DismissErrorButton.Click += (_, _) => HideError();
 
         // 事件驱动布局修正：WebViewHost 首次获得有效尺寸时触发一次
         WebViewHost.EffectiveViewportChanged += OnHostViewportChanged;
-
-        SubscribeThemeChanges();
     }
 
     private async Task InitializeWebViewAsync()
@@ -152,28 +146,18 @@ public partial class MarkdownView : UserControl
 
             if (IsDesktop)
             {
-                // Desktop: 写临时文件后用 file:/// 导航（原始可靠方式，CDN/JS 全功能正常）
                 var tempFile = WriteTempHtmlFile(_htmlContent);
                 _webView.Source = new Uri("file:///" + tempFile.Replace('\\', '/'));
             }
-            else
+            else if (OperatingSystem.IsBrowser())
             {
-                // Browser/Mobile: about:blank + document.write 注入
                 _webView.Source = new Uri("about:blank");
             }
-
-            // 安全网：10 秒后若仍未就绪则强制 SetReady（应对某些平台 NavigationCompleted 未触发的情况）
-            _ = Task.Run(async () =>
+            else
             {
-                await Task.Delay(10000);
-                if (!_ready && !_htmlInjected)
-                {
-                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
-                    {
-                        await InjectViaDocumentWriteAsync();
-                    });
-                }
-            });
+                var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_htmlContent));
+                _webView.Source = new Uri("data:text/html;base64," + base64);
+            }
         }
         catch (Exception ex)
         {
@@ -241,10 +225,9 @@ public partial class MarkdownView : UserControl
     {
         if (_ready) return;
         _ready = true;
-        StatusText.Text = "Ready";
 
-        // WebView 就绪后立刻应用系统主题
-        _ = ApplySystemThemeAsync();
+        // 就绪后向 WebView JS 环境同步主题
+        PushThemeToWebView(GetCurrentTheme());
 
         OnReady?.Invoke(this, EventArgs.Empty);
 
@@ -262,19 +245,17 @@ public partial class MarkdownView : UserControl
 
     private void OnNavigationCompleted(object? sender, EventArgs e)
     {
-        if (_htmlInjected)
+        if (_htmlInjected || _ready)
             return;
 
-        if (IsDesktop)
+        if (IsDesktop || !OperatingSystem.IsBrowser())
         {
-            // Desktop: file:/// 加载完毕。阻塞式 <script> 保证 CDN 脚本已全部下载执行，
-            // 无需额外等待，直接 SetReady。
+            _htmlInjected = true;
             ForceLayout();
             SetReady();
         }
         else
         {
-            // Browser/Mobile: about:blank → document.write 注入
             _ = InjectViaDocumentWriteAsync();
         }
     }
@@ -322,25 +303,39 @@ public partial class MarkdownView : UserControl
 
         var escaped = EscapeJsString(markdown);
         await InvokeScriptSafeAsync($"renderMarkdown('{escaped}')");
-        StatusText.Text = "Rendered";
     }
 
-    /// <summary>重启预览（复用已加载页面，不重新导航）</summary>
+    /// <summary>重启预览（重新导航/注入 HTML）</summary>
     public async Task RestartPreviewAsync()
     {
         _ready = false;
         _htmlInjected = false;
         _pendingMarkdown = null;
         HideError();
-        StatusText.Text = "Reloading…";
 
         try
         {
             _htmlContent = _sourceProvider.GetHtmlContent();
 
-            // 不重新导航到新文件/URL，而是直接 document.write 注入更新后的 HTML。
-            // CDN 脚本从浏览器缓存加载，避免网络重下载 + 磁盘 I/O。
-            await InjectViaDocumentWriteAsync();
+            if (IsDesktop)
+            {
+                var tempFile = WriteTempHtmlFile(_htmlContent);
+                _webView.Source = new Uri("file:///" + tempFile.Replace('\\', '/'));
+            }
+            else if (OperatingSystem.IsBrowser())
+            {
+                await InjectViaDocumentWriteAsync();
+            }
+            else
+            {
+                // Mobile (Android/iOS): 用 InvokeScript 执行 location.href 导航
+                // 从 JS 侧发起导航，NativeWebView 的 NavigationCompleted 依然会触发
+                var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_htmlContent));
+                var script = "location.href='data:text/html;base64," + base64 + "'";
+                var result = _webView.InvokeScript(script);
+                if (result is Task t)
+                    await t.WaitAsync(TimeSpan.FromSeconds(5));
+            }
         }
         catch (Exception ex)
         {
@@ -420,7 +415,6 @@ public partial class MarkdownView : UserControl
         ErrorTitle.Text = title;
         ErrorMessage.Text = message;
         ErrorPanel.IsVisible = true;
-        StatusText.Text = $"⚠ {title}";
         ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs(title, message));
     }
 
@@ -429,43 +423,68 @@ public partial class MarkdownView : UserControl
         ErrorPanel.IsVisible = false;
         ErrorTitle.Text = "";
         ErrorMessage.Text = "";
-        if (_ready)
-            StatusText.Text = "Ready";
     }
 
     // ====================================================================
-    // 主题管理
+    // 静态主题管理 — 注册/推送
     // ====================================================================
 
-    private void SubscribeThemeChanges()
+    /// <summary>将当前实例加入静态弱引用列表</summary>
+    private void RegisterInstance()
     {
-        if (_themeMonitored) return;
-        _themeMonitored = true;
-
-        var app = Avalonia.Application.Current;
-        if (app == null) return;
-
-        // 监听系统/应用主题切换
-        app.ActualThemeVariantChanged += OnActualThemeChanged;
-    }
-
-    private void OnActualThemeChanged(object? sender, EventArgs e)
-    {
-        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+        lock (_lock)
         {
-            await ApplySystemThemeAsync();
-        });
+            // 清理已回收的实例
+            _instances.RemoveAll(wr => !wr.TryGetTarget(out _));
+            _instances.Add(new WeakReference<MarkdownView>(this));
+
+            // 首次实例化时订阅全局主题变化（只订阅一次）
+            if (!_themeSubscribed)
+            {
+                var app = Avalonia.Application.Current;
+                if (app != null)
+                {
+                    app.ActualThemeVariantChanged += OnGlobalThemeChanged;
+                    _themeSubscribed = true;
+                }
+            }
+        }
     }
 
-    private async Task ApplySystemThemeAsync()
+    /// <summary>全局主题切换回调 — 推送给所有活着的 MarkdownView 实例</summary>
+    private static void OnGlobalThemeChanged(object? sender, EventArgs e)
     {
         var theme = GetCurrentTheme();
-        if (theme == _currentTheme && _ready) return;
-        _currentTheme = theme;
 
-        // 更新工具栏配色、WebView 背景
+        lock (_lock)
+        {
+            for (int i = _instances.Count - 1; i >= 0; i--)
+            {
+                if (_instances[i].TryGetTarget(out var view))
+                {
+                    // 异步派发到 UI 线程，不阻塞主题事件
+                    _ = Dispatcher.UIThread.InvokeAsync(() => view.ApplyThemePush(theme));
+                }
+                else
+                {
+                    // 实例已 GC，移除
+                    _instances.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    /// <summary>收到主题推送：刷新背景色 + 向 WebView JS 发消息</summary>
+    private async void ApplyThemePush(string theme)
+    {
         ApplyThemeColors(theme);
+        if (_ready)
+            await InvokeScriptSafeAsync($"setTheme('{theme}')");
+    }
 
+    /// <summary>向已就绪的 WebView JS 同步当前主题</summary>
+    private async void PushThemeToWebView(string theme)
+    {
         if (_ready)
             await InvokeScriptSafeAsync($"setTheme('{theme}')");
     }
@@ -474,33 +493,31 @@ public partial class MarkdownView : UserControl
     {
         if (theme == "light")
         {
-            ToolbarPanel.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xf0, 0xf0, 0xf0));
-            ToolbarPanel.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xd4, 0xd4, 0xd4));
-            StatusText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x66, 0x66, 0x66));
             WebViewHost.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xff, 0xff, 0xff));
             if (_webView != null)
                 _webView.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xff, 0xff, 0xff));
         }
         else
         {
-            ToolbarPanel.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x25, 0x25, 0x26));
-            ToolbarPanel.BorderBrush = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x3c, 0x3c, 0x3c));
-            StatusText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x88, 0x88, 0x88));
             WebViewHost.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e));
             if (_webView != null)
                 _webView.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e));
         }
     }
 
+    /// <summary>查询当前 Avalonia 有效主题，失败/未知时回退 Dark</summary>
     private static string GetCurrentTheme()
     {
         var app = Avalonia.Application.Current;
         if (app == null) return "dark";
 
+        // 必须用 ActualThemeVariant：它返回解析后的最终主题（Light/Dark）
+        // 不可用 RequestedThemeVariant，因为 App.axaml 设的是 Default，
+        // 即使系统是 Light 也会返回 Default，导致误判为 dark。
         var variant = app.ActualThemeVariant;
-        if (variant == ThemeVariant.Light)
-            return "light";
-        // Dark 或其他（null / Default）均回退暗色
+        if (variant == ThemeVariant.Light) return "light";
+        if (variant == ThemeVariant.Dark) return "dark";
+
         return "dark";
     }
 
