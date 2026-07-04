@@ -1,0 +1,19 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:AvalonMarkdown.Test.Shared"
+             x:Class="AvalonMarkdown.Test.Shared.App"
+             RequestedThemeVariant="Default">
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- 全局文本元素默认字体：Inter 优先，Microsoft YaHei 作为中文后备 -->
+        <Style Selector="TextElement">
+            <Setter Property="FontFamily"
+                    Value="Inter, Microsoft YaHei" />
+        </Style>
+    </Application.Styles>
+</Application>

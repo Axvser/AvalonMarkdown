@@ -4,13 +4,14 @@
     <File Path="README.md" />
     <File Path="SKILL.md" />
   </Folder>
-  <Project Path="AvalonMarkdown.Android/AvalonMarkdown.Android.csproj">
-    <Deploy />
-  </Project>
-  <Project Path="AvalonMarkdown.Browser/AvalonMarkdown.Browser.csproj" />
-  <Project Path="AvalonMarkdown.Desktop/AvalonMarkdown.Desktop.csproj" />
-  <Project Path="AvalonMarkdown.iOS/AvalonMarkdown.iOS.csproj">
-    <Deploy />
-  </Project>
   <Project Path="AvalonMarkdown/AvalonMarkdown.csproj" />
+  <Project Path="AvalonMarkdown.Test.Shared/AvalonMarkdown.Test.Shared.csproj" />
+  <Project Path="AvalonMarkdown.Test.Desktop/AvalonMarkdown.Test.Desktop.csproj" />
+  <Project Path="AvalonMarkdown.Test.Browser/AvalonMarkdown.Test.Browser.csproj" />
+  <Project Path="AvalonMarkdown.Test.Android/AvalonMarkdown.Test.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="AvalonMarkdown.Test.iOS/AvalonMarkdown.Test.iOS.csproj">
+    <Deploy />
+  </Project>
 </Solution>
