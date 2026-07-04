@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html class="theme-dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Preview</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <link rel="stylesheet" href="renderer.css">
+    <style>
+        /* 运行时错误浮层 — 显示在预览区域内而非静默吞掉 */
+        #error-overlay {
+            display: none;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(45,27,27,0.95);
+            border-top: 2px solid #f14c4c;
+            padding: 12px 16px;
+            font-family: 'Cascadia Code', Consolas, monospace;
+            font-size: 12px;
+            color: #f14c4c;
+            z-index: 9999;
+            max-height: 160px;
+            overflow-y: auto;
+            backdrop-filter: blur(4px);
+        }
+        #error-overlay .error-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        #error-overlay .error-body {
+            color: #d4a0a0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        #error-overlay .error-dismiss {
+            position: absolute;
+            top: 8px; right: 12px;
+            background: none;
+            border: 1px solid #5c2a2a;
+            color: #d4a0a0;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        #error-overlay .error-dismiss:hover {
+            background: #5c2a2a;
+        }
+        /* 加载占位文字 — 跟随主题 */
+        #preview .loading-placeholder {
+            text-align: center;
+            margin-top: 80px;
+        }
+        html.theme-dark #preview .loading-placeholder {
+            color: #888;
+        }
+        html.theme-light #preview .loading-placeholder {
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div id="preview"><p class="loading-placeholder">Loading Previewer…</p></div>
+
+    <!-- 运行时错误浮层 -->
+    <div id="error-overlay">
+        <div class="error-title">⚠ JavaScript 运行时错误</div>
+        <div class="error-body" id="error-body"></div>
+        <button class="error-dismiss" onclick="dismissErrorOverlay()">✕ 关闭</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it-footnote@4.0.0/dist/markdown-it-footnote.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it-task-lists@2.1.1/dist/markdown-it-task-lists.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.10.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>
