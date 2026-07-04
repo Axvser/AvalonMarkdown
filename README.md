@@ -40,26 +40,26 @@ public partial class MainWindow : Window
 
 ### 方法
 
-| 方法 | 返回 | 说明 |
-|------|------|------|
-| `RenderMarkdownAsync(string?)` | `Task` | 渲染 Markdown 内容 |
-| `RestartPreviewAsync()` | `Task` | 重启预览器（重新加载 HTML + JS 环境） |
-| `ApplyConfigAsync(string)` | `Task` | 执行 JS 配置调用 |
-| `InvokeScriptAsync(string)` | `Task<string?>` | 执行自定义 JavaScript |
+| 方法                             | 返回              | 说明                                  |
+| -------------------------------- | ----------------- | ------------------------------------- |
+| `RenderMarkdownAsync(string?)` | `Task`          | 渲染 Markdown 内容                    |
+| `RestartPreviewAsync()`        | `Task`          | 重启预览器（重新加载 HTML + JS 环境） |
+| `ApplyConfigAsync(string)`     | `Task`          | 执行 JS 配置调用                      |
+| `InvokeScriptAsync(string)`    | `Task<string?>` | 执行自定义 JavaScript                 |
 
 ### 事件
 
-| 事件 | 参数 | 触发时机 |
-|------|------|----------|
-| `OnReady` | `EventHandler` | 控件完全就绪，可安全调用 `RenderMarkdownAsync` |
-| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误 |
+| 事件              | 参数                                         | 触发时机                                        |
+| ----------------- | -------------------------------------------- | ----------------------------------------------- |
+| `OnReady`       | `EventHandler`                             | 控件完全就绪，可安全调用`RenderMarkdownAsync` |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误                                  |
 
 ### 错误事件参数
 
-| 成员 | 类型 | 说明 |
-|------|------|------|
-| `Title` | `string` | 错误标题 |
-| `Message` | `string` | 错误详情 |
+| 成员          | 类型         | 说明         |
+| ------------- | ------------ | ------------ |
+| `Title`     | `string`   | 错误标题     |
+| `Message`   | `string`   | 错误详情     |
 | `Timestamp` | `DateTime` | 错误发生时间 |
 
 ## 渲染能力
@@ -88,6 +88,7 @@ public partial class MainWindow : Window
 ```
 
 **加载策略：**
+
 - **Desktop** — 写临时 HTML 文件 → `file:///` 导航（CDN 脚本完整执行）
 - **Browser (WASM)** — `about:blank` → `document.write` 注入（兼容 WASM iframe）
 - **Android / iOS** — `data:text/html;base64` 直接加载（无需 JavaScript 注入）
@@ -104,15 +105,15 @@ public partial class MainWindow : Window
 
 ## 依赖
 
-| 组件 | 用途 |
-|------|------|
-| Avalonia 12.0.1 | UI 框架 |
-| CommunityToolkit.Mvvm 8.4 | MVVM |
-| Avalonia.Controls.WebView 12.0.1 | 跨平台 WebView 封装 |
-| markdown-it 14.1.0 | Markdown 解析 |
-| highlight.js 11.10.0 | 代码高亮 |
-| KaTeX 0.16.11 | 数学公式渲染 |
-| Mermaid 11.4.1 | 图表渲染 |
+| 组件                             | 用途          |
+| -------------------------------- | ------------- |
+| Avalonia 12.0.0                  | UI 框架       |
+| CommunityToolkit.Mvvm 8.4        | MVVM          |
+| Avalonia.Controls.WebView 12.0.0 | WebView       |
+| markdown-it 14.1.0               | Markdown 解析 |
+| highlight.js 11.10.0             | 代码高亮      |
+| KaTeX 0.16.11                    | 数学公式渲染  |
+| Mermaid 11.4.1                   | 图表渲染      |
 
 所有 JS/CSS 依赖通过 `EmbeddedHtmlSourceProvider` 在构建时内联到 HTML，
 **无需网络连接**，仅 KaTeX CSS 字体从 CDN 按需加载。
