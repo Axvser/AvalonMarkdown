@@ -19,33 +19,36 @@
 
     // === 全局错误捕获 — 在控件内显示而非静默吞掉 ===
     window.onerror = function(msg, source, line, col, error) {
-        var detail = msg;
-        if (source) detail += '\n   at ' + source + ':' + line + ':' + col;
-        if (error && error.stack) detail += '\n' + error.stack;
-        showErrorOverlay(detail);
-        post('ERR', detail);
-        return true; // 阻止默认浏览器错误处理
+        // 静默记录所有错误，不显示 UI 浮层。
+        // 需要错误处理时请订阅 MarkdownView.ErrorOccurred 事件。
+        if (error && !(error instanceof Error)) {
+            post('WARN', '[ResourceLoadError] ' + msg);
+        } else {
+            var detail = msg;
+            if (source) detail += '\n   at ' + source + ':' + line + ':' + col;
+            if (error && error.stack) detail += '\n' + error.stack;
+            post('ERR', detail);
+        }
+        return true;
     };
     window.addEventListener('unhandledrejection', function(e) {
         var detail = e.reason ? (e.reason.message || e.reason.toString()) : 'Unhandled Promise rejection';
-        showErrorOverlay(detail);
         post('ERR', '[UnhandledRejection] ' + detail);
     });
 
-    function showErrorOverlay(detail) {
+    // 供 C# 侧手动调用（window.showPreviewError(detail)），默认不自动触发
+    window.showPreviewError = function(detail) {
         var overlay = document.getElementById('error-overlay');
         var body = document.getElementById('error-body');
         if (overlay && body) {
             body.textContent = detail;
             overlay.style.display = 'block';
         }
-    }
+    };
     window.dismissErrorOverlay = function() {
         var overlay = document.getElementById('error-overlay');
         if (overlay) overlay.style.display = 'none';
     };
-    // 暴露给 C# 侧调用
-    window.showPreviewError = showErrorOverlay;
 
     console.log('Markdown Preview 初始化');
     console.log('UA: ' + navigator.userAgent);
@@ -509,4 +512,7 @@
     window.md = md;
     window.escapeHtml = escapeHtml;
     console.log('✅ 初始化完成');
+
+    // 通知 C# 侧所有 CDN 脚本和 renderer.js 已就绪
+    try { window.chrome.webview.postMessage('[READY]'); } catch(e) {}
 })();

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -21,7 +22,6 @@ public partial class MarkdownView : UserControl
     private bool _htmlInjected;
     private string? _pendingMarkdown;
     private string _htmlContent = "";
-    private int _loadSequence;
     private string _currentTheme = "dark";
     private bool _themeMonitored;
 
@@ -71,6 +71,29 @@ public partial class MarkdownView : UserControl
         // 构造函数阶段直接用 GetCurrentTheme() 设置初始主题配色
         ApplyThemeColors(GetCurrentTheme());
         StatusText.Text = "Loading…";
+    }
+
+    // ====================================================================
+    // 布局 — Auto 尺寸修正
+    // ====================================================================
+
+    /// <summary>
+    /// NativeWebView（NativeControlHost）在 HWND 未创建时 DesiredSize = (0,0)，
+    /// 导致 Auto 父容器行/列折叠。此处保证至少返回可用尺寸以维持布局。
+    /// </summary>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var result = base.MeasureOverride(availableSize);
+
+        if ((result.Width <= 0 || double.IsNaN(result.Width)) &&
+            availableSize.Width > 0 && !double.IsNaN(availableSize.Width) && !double.IsInfinity(availableSize.Width))
+            result = new Size(availableSize.Width, result.Height);
+
+        if ((result.Height <= 0 || double.IsNaN(result.Height)) &&
+            availableSize.Height > 0 && !double.IsNaN(availableSize.Height) && !double.IsInfinity(availableSize.Height))
+            result = new Size(result.Width, Math.Min(availableSize.Height, 300));
+
+        return result;
     }
 
     // ====================================================================
@@ -139,18 +162,15 @@ public partial class MarkdownView : UserControl
                 _webView.Source = new Uri("about:blank");
             }
 
-            // 安全网：5 秒后若仍未就绪（如某些平台 NavigationCompleted 未触发），强制注入
+            // 安全网：10 秒后若仍未就绪则强制 SetReady（应对某些平台 NavigationCompleted 未触发的情况）
             _ = Task.Run(async () =>
             {
-                await Task.Delay(5000);
-                if (!_ready)
+                await Task.Delay(10000);
+                if (!_ready && !_htmlInjected)
                 {
                     await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
                     {
-                        if (!_htmlInjected)
-                            await InjectViaDocumentWriteAsync();
-                        else
-                            SetReady();
+                        await InjectViaDocumentWriteAsync();
                     });
                 }
             });
@@ -247,13 +267,10 @@ public partial class MarkdownView : UserControl
 
         if (IsDesktop)
         {
-            // Desktop: file:/// 已加载 → 内容自带 CDN/JS，等待脚本就绪
+            // Desktop: file:/// 加载完毕。阻塞式 <script> 保证 CDN 脚本已全部下载执行，
+            // 无需额外等待，直接 SetReady。
             ForceLayout();
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(2000);
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(SetReady);
-            });
+            SetReady();
         }
         else
         {
@@ -263,16 +280,24 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>
-    /// 接收 WebView 内部消息（console.log/error 等通过 chrome.webview.postMessage 发出）
+    /// 接收 WebView 内部消息（console.log/error/ready 等通过 chrome.webview.postMessage 发出）
     /// </summary>
     public void OnWebViewMessage(object? sender, string message)
     {
+        if (message.StartsWith("[READY]", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_ready && _htmlInjected)
+            {
+                _ = Dispatcher.UIThread.InvokeAsync(SetReady);
+            }
+            return;
+        }
+
         if (message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
             message.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase))
         {
-            // 通过 Dispatcher 回到 UI 线程显示错误
-            _ = Dispatcher.UIThread.InvokeAsync(() =>
-                ShowError("Render error", message));
+            // 不主动显示错误面板，仅触发事件供外部订阅
+            ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", message));
         }
     }
 
@@ -300,10 +325,9 @@ public partial class MarkdownView : UserControl
         StatusText.Text = "Rendered";
     }
 
-    /// <summary>重启预览（重新导航到初始页面）</summary>
+    /// <summary>重启预览（复用已加载页面，不重新导航）</summary>
     public async Task RestartPreviewAsync()
     {
-        var seq = ++_loadSequence;
         _ready = false;
         _htmlInjected = false;
         _pendingMarkdown = null;
@@ -314,37 +338,13 @@ public partial class MarkdownView : UserControl
         {
             _htmlContent = _sourceProvider.GetHtmlContent();
 
-            if (IsDesktop)
-            {
-                var tempFile = WriteTempHtmlFile(_htmlContent);
-                _webView.Source = new Uri("file:///" + tempFile.Replace('\\', '/'));
-            }
-            else
-            {
-                _webView.Source = new Uri("about:blank");
-            }
-
-            // 重启安全网：5 秒后备
-            _ = StartRestartSafetyNetAsync(seq);
+            // 不重新导航到新文件/URL，而是直接 document.write 注入更新后的 HTML。
+            // CDN 脚本从浏览器缓存加载，避免网络重下载 + 磁盘 I/O。
+            await InjectViaDocumentWriteAsync();
         }
         catch (Exception ex)
         {
             ShowError("Restart failed", ex.Message);
-        }
-    }
-
-    private async Task StartRestartSafetyNetAsync(int seq)
-    {
-        await Task.Delay(5000);
-        if (!_ready && seq == _loadSequence)
-        {
-            await Dispatcher.UIThread.InvokeAsync(async () =>
-            {
-                if (!_htmlInjected)
-                    await InjectViaDocumentWriteAsync();
-                else
-                    SetReady();
-            });
         }
     }
 

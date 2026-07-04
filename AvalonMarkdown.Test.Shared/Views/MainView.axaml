@@ -5,7 +5,52 @@
              x:Class="AvalonMarkdown.Test.Shared.Views.MainView"
              x:DataType="vm:MainViewModel">
     <DockPanel>
-        <Grid DockPanel.Dock="Top" Margin="8" RowDefinitions="Auto,8,*">
+        <!-- ═══════ 工具栏：预设样本 + 多视图切换 + 计时 ═══════ -->
+        <Border DockPanel.Dock="Top"
+                BorderBrush="{DynamicResource SystemAccentColor}"
+                BorderThickness="0,0,0,1"
+                Padding="8,4">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="预设:"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <Button Grid.Column="1"
+                        x:Name="SimplePresetButton"
+                        Content="简单"
+                        FontSize="11" Padding="6,2" Margin="2,0"/>
+                <Button Grid.Column="2"
+                        x:Name="FullPresetButton"
+                        Content="完整"
+                        FontSize="11" Padding="6,2" Margin="2,0"/>
+                <Button Grid.Column="3"
+                        x:Name="BigDocPresetButton"
+                        Content="大文档"
+                        FontSize="11" Padding="6,2" Margin="2,0"/>
+
+                <Separator Grid.Column="4" Width="1" Height="16"
+                           Background="#3c3c3c" Margin="8,0" VerticalAlignment="Center"/>
+
+                <Button Grid.Column="5"
+                        x:Name="MultiViewToggle"
+                        Content="单视图"
+                        FontSize="11" Padding="8,2"
+                        ToolTip.Tip="切换单视图/三视图对比模式"/>
+
+                <!-- 单视图计时信息 -->
+                <TextBlock Grid.Column="6"
+                           x:Name="TimingText"
+                           Text="{Binding TimingInfo}"
+                           FontSize="11"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="4,0"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════ 单视图模式 ═══════ -->
+        <Grid x:Name="SingleView" Margin="8" RowDefinitions="Auto,8,*">
             <TextBox x:Name="MarkdownEditor"
                      Text="{Binding MarkdownText}"
                      AcceptsReturn="True"
@@ -13,8 +58,42 @@
                      MinHeight="120"
                      MaxHeight="300"
                      FontSize="13" />
-            <md:MarkdownView x:Name="Preview"
-                             Grid.Row="2" />
+            <md:MarkdownView x:Name="Preview" Grid.Row="2" />
+        </Grid>
+
+        <!-- ═══════ 多视图模式（3 实例并列）═══════ -->
+        <Grid x:Name="MultiView" Margin="8" IsVisible="False"
+              ColumnDefinitions="*,4,*">
+            <!-- 左列：简单 -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0"
+                           x:Name="TimingText1"
+                           Text="{Binding TimingInfo}"
+                           FontSize="11" Foreground="#888"
+                           Margin="0,0,0,4"/>
+                <md:MarkdownView x:Name="Preview1" Grid.Row="1" />
+            </Grid>
+
+            <Rectangle Grid.Column="1" Fill="#3c3c3c" Width="4" IsHitTestVisible="False"/>
+
+            <!-- 右列：上下分割（完整 + 大文档） -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,*,4,Auto,*">
+                <TextBlock Grid.Row="0"
+                           x:Name="TimingText2"
+                           Text="{Binding TimingInfo2}"
+                           FontSize="11" Foreground="#888"
+                           Margin="0,0,0,4"/>
+                <md:MarkdownView x:Name="Preview2" Grid.Row="1" />
+
+                <Rectangle Grid.Row="2" Fill="#3c3c3c" Height="4" IsHitTestVisible="False"/>
+
+                <TextBlock Grid.Row="3"
+                           x:Name="TimingText3"
+                           Text="{Binding TimingInfo3}"
+                           FontSize="11" Foreground="#888"
+                           Margin="0,4,0,0"/>
+                <md:MarkdownView x:Name="Preview3" Grid.Row="4" />
+            </Grid>
         </Grid>
     </DockPanel>
 </UserControl>
