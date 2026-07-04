@@ -1,5 +1,10 @@
 {
-  "configProperties": {
-    "System.Threading.ThreadPool.MaxThreads": 8
-  }
+    "wasmHostProperties": {
+        "perHostConfig": [
+            {
+                "name": "browser",
+                "host": "browser"
+            }
+        ]
+    }
 }

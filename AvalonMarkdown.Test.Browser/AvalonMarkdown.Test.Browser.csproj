@@ -7,9 +7,11 @@
     <WasmBuildNative>true</WasmBuildNative>
   </PropertyGroup>
   <ItemGroup>
+    <StaticWebAssetFingerprintPattern Include="JS" Pattern="*.js" Expression="#[.{fingerprint}]!" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia.Browser" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
     <ProjectReference Include="..\AvalonMarkdown.Test.Shared\AvalonMarkdown.Test.Shared.csproj" />
