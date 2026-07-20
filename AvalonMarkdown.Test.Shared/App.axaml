@@ -10,7 +10,7 @@
     <Application.Styles>
         <FluentTheme />
 
-        <!-- 全局文本元素默认字体：Inter 优先，Microsoft YaHei 作为中文后备 -->
+        <!-- Global text element default font: Inter first, Microsoft YaHei as Chinese fallback -->
         <Style Selector="TextElement">
             <Setter Property="FontFamily"
                     Value="Inter, Microsoft YaHei" />

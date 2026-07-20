@@ -21,7 +21,7 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isMultiView;
 
-    // 每个视图独立的计时器
+    // Independent stopwatch per view
     private readonly Stopwatch _sw1 = new();
     private readonly Stopwatch _sw2 = new();
     private readonly Stopwatch _sw3 = new();
@@ -45,15 +45,15 @@ public partial class MainViewModel : ViewModelBase
         {
             case 1:
                 ms = _sw1.ElapsedMilliseconds;
-                TimingInfo = _firstLoad ? $"⏱ #{index} 首次: {ms}ms" : $"⏱ #{index}: {ms}ms";
+                TimingInfo = _firstLoad ? $"⏱ #{index} First: {ms}ms" : $"⏱ #{index}: {ms}ms";
                 break;
             case 2:
                 ms = _sw2.ElapsedMilliseconds;
-                TimingInfo2 = _firstLoad ? $"⏱ #{index} 首次: {ms}ms" : $"⏱ #{index}: {ms}ms";
+                TimingInfo2 = _firstLoad ? $"⏱ #{index} First: {ms}ms" : $"⏱ #{index}: {ms}ms";
                 break;
             case 3:
                 ms = _sw3.ElapsedMilliseconds;
-                TimingInfo3 = _firstLoad ? $"⏱ #{index} 首次: {ms}ms" : $"⏱ #{index}: {ms}ms";
+                TimingInfo3 = _firstLoad ? $"⏱ #{index} First: {ms}ms" : $"⏱ #{index}: {ms}ms";
                 break;
         }
 
@@ -70,22 +70,47 @@ public partial class MainViewModel : ViewModelBase
     }
 
     public static string GetDefaultMarkdown() => """
-        # Markdown 渲染测试套件 🎯
+        # Markdown Rendering Test Suite 🎯
 
-        ## 1. 文本格式
+        ## 1. Text Formatting
 
-        **粗体** *斜体* ~~删除线~~ `行内代码`
+        **Bold** *Italic* ~~Strikethrough~~ `Inline code` <u>Underline (HTML)</u>
 
-        ## 2. 数学公式
+        ## 2. Links & Images
 
-        行内公式：$E = mc^2$
+        [Visit GitHub](https://github.com)
 
-        独立公式：
-        $$
-        \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
-        $$
+        ![NuGet Version](https://img.shields.io/nuget/v/AvalonMarkdown?logo=nuget&label=NuGet)
 
-        ## 3. 代码高亮
+        ## 3. Lists
+
+        ### Ordered List
+
+        1. First item
+        2. Second item
+        3. Third item
+
+        ### Unordered List
+
+        - Item A
+        - Item B
+        - Item C
+
+        ### Task List
+
+        - [x] Completed task
+        - [ ] Incomplete task
+        - [x] Another done task
+
+        ## 4. Blockquotes
+
+        > This is a blockquote.
+        > Second line of the quote.
+        >
+        > > Nested blockquote
+        > > More nested content
+
+        ## 5. Code Blocks with Syntax Highlighting
 
         ```csharp
         public class Hello
@@ -97,42 +122,127 @@ public partial class MainViewModel : ViewModelBase
         }
         ```
 
-        ## 4. 图表 (Mermaid)
+        ```python
+        def fibonacci(n):
+            a, b = 0, 1
+            for _ in range(n):
+                yield a
+                a, b = b, a + b
+        ```
+
+        ```javascript
+        const greet = (name) => {
+            return `Hello, ${name}!`;
+        };
+        console.log(greet('World'));
+        ```
+
+        ## 6. Tables
+
+        | Language | Typing | Speed | Popularity |
+        |----------|--------|-------|------------|
+        | C#       | Static | Fast  | ★★★★★      |
+        | Python   | Dynamic| Medium| ★★★★★      |
+        | Rust     | Static | Fast  | ★★★★☆      |
+        | JavaScript| Dynamic| Fast  | ★★★★★      |
+
+        ## 7. Math (KaTeX)
+
+        Inline math: $E = mc^2$
+
+        Block math:
+
+        $$
+        \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}
+        $$
+
+        ## 8. Mermaid Diagrams
 
         ```mermaid
         graph TD
-            A[开始] --> B{判断}
-            B -->|是| C[处理]
-            B -->|否| D[结束]
+            A[Start] --> B{Decision}
+            B -->|Yes| C[Process]
+            B -->|No| D[End]
         ```
 
-        ## 5. 表格
+        ```mermaid
+        sequenceDiagram
+            Alice->>John: Hello John, how are you?
+            John-->>Alice: Great!
+        ```
 
-        | 名称 | 价格 | 数量 |
-        |------|------|------|
-        | 苹果 | ¥5.0 | 100 |
-        | 香蕉 | ¥3.5 | 200 |
+        ## 9. PlantUML Diagrams
+
+        ```plantuml
+        @startuml
+        Alice -> Bob: Authentication Request
+        Bob --> Alice: Authentication Response
+        Alice -> Bob: Another request
+        Bob --> Alice: OK
+        @enduml
+        ```
+
+        ```plantuml
+        @startuml
+        start
+        :Initialize;
+        if (Is valid?) then (yes)
+          :Process data;
+        else (no)
+          :Show error;
+          stop
+        endif
+        :Complete;
+        stop
+        @enduml
+        ```
+
+        ## 10. Footnotes
+
+        Here is a footnote reference[^1] and another[^2].
+
+        [^1]: This is the first footnote.
+        [^2]: This is the second footnote with more details.
+
+        ## 11. Horizontal Rule
+
+        ---
+
+        ## 12. HTML Inline
+
+        <span style="color:orange">Orange text via HTML</span>
+
+        <details>
+        <summary>Click to expand</summary>
+        Hidden content here.
+        </details>
+
+        ## 13. Emojis
+
+        🚀 ✅ ❤️ ⭐ 🎉 🔥 🎯
         """;
 
     public static string GetSimpleMarkdown() => """
         # Hello
 
-        快速渲染测试
+        Quick render test
 
-        - 项目 A
-        - 项目 B
-        - 项目 C
+        - Item A
+        - Item B
+        - Item C
+
+        **Bold** *Italic* `code`
         """;
 
     public static string GetBigDocumentMarkdown() => """
-        # 大文档压力测试
+        # Large Document Stress Test
 
-        ## 第一章
+        ## Chapter 1
 
-        这是一段很长的文本，用于测试大规模 Markdown 文档的渲染性能。
-        重复内容用于模拟真实场景下的长文档。
+        This is a long paragraph designed to test rendering performance of large Markdown documents.
+        Repeated content simulates real-world long documents.
 
-        ### 1.1 代码块
+        ### 1.1 Code Blocks
 
         ```python
         def fibonacci(n):
@@ -146,7 +256,7 @@ public partial class MainViewModel : ViewModelBase
         ```
 
         ```javascript
-        // 复杂业务逻辑模拟
+        // Complex business logic simulation
         class DataProcessor {
             constructor(data) {
                 this.data = data;
@@ -166,44 +276,44 @@ public partial class MainViewModel : ViewModelBase
                 return batch.map(item => ({
                     id: item.id,
                     score: Math.sqrt(item.value) * item.weight,
-                    category: item.type === 'A' ? '高端' : '标准'
+                    category: item.type === 'A' ? 'Premium' : 'Standard'
                 }));
             }
         }
         ```
 
-        ### 1.2 数学公式
+        ### 1.2 Math Formulas
 
-        行内公式：当 $a \ne 0$ 时，方程 $ax^2 + bx + c = 0$ 的解为：
+        Inline math: when $a \ne 0$, the solution to $ax^2 + bx + c = 0$ is:
 
         $$
         x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
         $$
 
-        ### 1.3 表格
+        ### 1.3 Tables
 
-        | 城市 | 温度(°C) | 湿度(%) | 风速(km/h) | 空气质量 |
-        |------|----------|---------|------------|----------|
-        | 北京 | 28 | 45 | 12 | 良好 |
-        | 上海 | 32 | 72 | 8 | 中等 |
-        | 广州 | 35 | 85 | 6 | 轻度污染 |
-        | 深圳 | 33 | 78 | 10 | 中等 |
-        | 成都 | 29 | 65 | 5 | 良好 |
+        | City       | Temp(°C) | Humidity(%) | Wind(km/h) | Air Quality |
+        |------------|----------|-------------|------------|-------------|
+        | Beijing    | 28       | 45          | 12         | Good        |
+        | Shanghai   | 32       | 72          | 8          | Moderate    |
+        | Guangzhou  | 35       | 85          | 6          | Light Poll. |
+        | Shenzhen   | 33       | 78          | 10         | Moderate    |
+        | Chengdu    | 29       | 65          | 5          | Good        |
 
-        ## 第二章
+        ## Chapter 2
 
-        > 这是一段很长的引用文本，用于验证引用块的渲染效果。
-        > 第二行引用内容。
+        > This is a long blockquote for testing blockquote rendering.
+        > Second line of quoted content.
         >
-        > > 嵌套引用
-        > > 嵌套第二行
+        > > Nested blockquote
+        > > Nested second line
 
-        - [x] 任务一
-        - [ ] 任务二
-        - [x] 任务三
+        - [x] Task one
+        - [ ] Task two
+        - [x] Task three
 
         ---
 
-        > 性能测试结论：大文档应在 200ms 内完成渲染。
+        > Performance test conclusion: Large documents should render within 200ms.
         """;
 }

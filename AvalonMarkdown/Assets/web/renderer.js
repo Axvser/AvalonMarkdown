@@ -17,10 +17,10 @@
         origError.apply(console, arguments); post('ERR', m);
     };
 
-    // === 全局错误捕获 — 在控件内显示而非静默吞掉 ===
+    // === Global error capture — shown within the control instead of silent swallow ===
     window.onerror = function(msg, source, line, col, error) {
-        // 静默记录所有错误，不显示 UI 浮层。
-        // 需要错误处理时请订阅 MarkdownView.ErrorOccurred 事件。
+        // Silently log all errors, no UI overlay.
+        // Subscribe to MarkdownView.ErrorOccurred for custom error handling.
         if (error && !(error instanceof Error)) {
             post('WARN', '[ResourceLoadError] ' + msg);
         } else {
@@ -36,7 +36,7 @@
         post('ERR', '[UnhandledRejection] ' + detail);
     });
 
-    // 供 C# 侧手动调用（window.showPreviewError(detail)），默认不自动触发
+    // Exposed for C# side to invoke (window.showPreviewError(detail)), not auto-triggered by default
     window.showPreviewError = function(detail) {
         var overlay = document.getElementById('error-overlay');
         var body = document.getElementById('error-body');
@@ -50,10 +50,10 @@
         if (overlay) overlay.style.display = 'none';
     };
 
-    console.log('Markdown Preview 初始化');
+    console.log('Markdown Preview initializing');
     console.log('UA: ' + navigator.userAgent);
 
-    // ===== 预览配置 =====
+    // ===== Preview configuration =====
     var previewConfig = {
         fontSize: 14,
         lineHeight: 1.6,
@@ -70,13 +70,13 @@
         if (config.maxCodeBlockHeight !== undefined) previewConfig.maxCodeBlockHeight = config.maxCodeBlockHeight;
         document.body.style.fontSize = previewConfig.fontSize + 'px';
         document.body.style.lineHeight = previewConfig.lineHeight;
-        // 应用代码块最大高度
+        // Apply code block max height
         applyCodeBlockMaxHeight();
-        // 重新渲染以应用语言标签/复制按钮的显隐
+        // Re-render to apply language label / copy button visibility
         var preview = document.getElementById('preview');
         var text = preview.getAttribute('data-source') || '';
         if (text) window.renderMarkdown(text);
-        console.log('[Config] 已更新', JSON.stringify(previewConfig));
+        console.log('[Config] updated', JSON.stringify(previewConfig));
     };
 
     function applyCodeBlockMaxHeight() {
@@ -86,7 +86,7 @@
             style.id = 'cb-max-height-style';
             document.head.appendChild(style);
         }
-        // 记录当前高度到预览配置，方便 resize 函数读取
+        // Store current height in preview config for resize function
         if (previewConfig.maxCodeBlockHeight > 0) {
             style.textContent = '.code-block-wrapper pre { max-height: ' + previewConfig.maxCodeBlockHeight + 'px; overflow-y: auto; }';
         } else {
@@ -94,10 +94,10 @@
         }
     }
 
-    // 初始化时应用一次
+    // Apply once on init
     applyCodeBlockMaxHeight();
 
-    // ===== 代码块高度调节（每个代码块独立）=====
+    // ===== Per-code-block height adjustment =====
     function increaseCodeHeight(btn) {
         var pre = btn.closest('.code-block-wrapper').querySelector('pre');
         if (!pre) return;
@@ -117,18 +117,18 @@
     window.increaseCodeHeight = increaseCodeHeight;
     window.decreaseCodeHeight = decreaseCodeHeight;
 
-    // ===== 复制代码 =====
+    // ===== Code copy =====
     window.copyCode = function(btn) {
         var wrapper = btn.closest('.code-block-wrapper');
         var code = wrapper ? wrapper.querySelector('code') : null;
         var text = code ? code.textContent : '';
         if (!text) return;
-        // 优先使用 Clipboard API
+        // Prefer Clipboard API
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function() {
-                btn.textContent = '✓ 已复制';
+                btn.textContent = '✓ Copied';
                 btn.classList.add('copied');
-                setTimeout(function() { btn.textContent = '复制'; btn.classList.remove('copied'); }, 2000);
+                setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
             }).catch(function() { fallbackCopy(text, btn); });
         } else {
             fallbackCopy(text, btn);
@@ -140,15 +140,15 @@
         document.body.appendChild(ta); ta.select();
         try {
             document.execCommand('copy');
-            btn.textContent = '✓ 已复制';
+            btn.textContent = '✓ Copied';
             btn.classList.add('copied');
-            setTimeout(function() { btn.textContent = '复制'; btn.classList.remove('copied'); }, 2000);
+            setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
         } catch(e) {}
         document.body.removeChild(ta);
     }
 
-    // ===== 主题管理 =====
-    // 从 html 标签的 class 读取当前主题，而非硬编码
+    // ===== Theme management =====
+    // Read current theme from the html tag's class rather than hard-coding
     var currentTheme = document.documentElement.className.indexOf('theme-light') >= 0 ? 'light' : 'dark';
     var mermaidInitialized = false;
 
@@ -278,16 +278,17 @@
         if (theme !== 'dark' && theme !== 'light') theme = 'dark';
         currentTheme = theme;
         document.documentElement.className = 'theme-' + theme;
-        console.log('[Theme] 切换到: ' + theme);
+        console.log('[Theme] Switched to: ' + theme);
 
         if (typeof mermaid !== 'undefined') {
             mermaid.initialize(getMermaidThemeVars(theme));
             mermaidInitialized = true;
-            // Mermaid 渲染后会替换 <pre class="mermaid"> 为 SVG，
-            // 对已渲染节点再调 mermaid.run 无效。此处通过重渲染整个 Markdown
-            // 重建 .mermaid 元素并使用新主题
+            // Mermaid replaces <pre class="mermaid"> with SVG after rendering,
+            // so calling mermaid.run on already-rendered nodes has no effect.
+            // Here we re-render the entire Markdown
+            // to rebuild .mermaid elements with the new theme
             reRenderMarkdown();
-            console.log('[Theme] Mermaid 主题已更新');
+            console.log('[Theme] Mermaid theme updated');
         }
     }
 
@@ -306,17 +307,17 @@
         }
     }
 
-    // C# 调用入口
+    // C# call entry
     window.setTheme = setTheme;
 
-    // ===== 初始化 Mermaid（跟随当前主题）=====
+    // ===== Initialize Mermaid (follows current theme) =====
     if (typeof mermaid !== 'undefined') {
         mermaid.initialize(getMermaidThemeVars(currentTheme));
         mermaidInitialized = true;
-        console.log('[Mermaid] 主题已初始化');
+        console.log('[Mermaid] Theme initialized');
     }
 
-    // === Markdown-it 配置（VS Code 风格）===
+    // === Markdown-it configuration (VS Code style) ===
     var md = window.markdownit({
         html: true,
         linkify: true,
@@ -329,18 +330,18 @@
                 } catch(e) {}
             }
             if (!codeHtml) codeHtml = md.utils.escapeHtml(str);
-            // 构建头部：语言标签 + 复制按钮
+            // Build header: language label + copy button
             var parts = [];
             if (previewConfig.showCodeLanguage && lang) {
                 parts.push('<span class="code-lang">' + escapeHtml(lang) + '</span>');
             }
             var actions = [];
             if (previewConfig.showCopyButton) {
-                actions.push('<button class="copy-btn" onclick="copyCode(this)">复制</button>');
+                actions.push('<button class="copy-btn" onclick="copyCode(this)">Copy</button>');
             }
-            // 高度 +/- 按钮（每个代码块独立控制）
-            actions.push('<button class="resize-btn" onclick="decreaseCodeHeight(this)" title="缩小">−</button>');
-            actions.push('<button class="resize-btn" onclick="increaseCodeHeight(this)" title="放大">+</button>');
+            // Height +/- buttons (per-code-block independent control)
+            actions.push('<button class="resize-btn" onclick="decreaseCodeHeight(this)" title="Shrink">−</button>');
+            actions.push('<button class="resize-btn" onclick="increaseCodeHeight(this)" title="Enlarge">+</button>');
             parts.push('<span class="code-actions">' + actions.join('') + '</span>');
             var header = parts.length ? '<div class="code-header">' + parts.join('') + '</div>' : '';
             return '<div class="code-block-wrapper">' + header +
@@ -353,8 +354,8 @@
 
     console.log('markdown-it ✅');
 
-    // === 数学公式: VS Code 风格 $...$ / ... ===
-    // 复制自 @vscode/markdown-it-katex 的解析逻辑
+    // === Math: VS Code style $...$ / ... ===
+    // Adapted from @vscode/markdown-it-katex parsing logic
     function isWS(c) { return /^\s$/u.test(c); }
     function isWord(c) { return /^[\w\d]$/u.test(c); }
 
@@ -432,10 +433,10 @@
         return true;
     }, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
 
-    // === 渲染器 ===
+    // === Renderer ===
     function renderKatexInline(latex) {
         try {
-            // detect display math from \begin env
+            // Detect display math from \begin env
             var display = /\\begin\{(align|equation|gather|cd|alignat)\}/i.test(latex);
             return katex.renderToString(latex, { displayMode: display, throwOnError: false });
         } catch(e) {
@@ -460,7 +461,7 @@
         return renderKatexBlock(tokens[idx].content) + '\n';
     };
 
-    // === Mermaid: `mermaid 代码块 ===
+    // === Mermaid / PlantUML code blocks ===
     var origFence = md.renderer.rules.fence;
     md.renderer.rules.fence = function(tokens, idx, options, env, self) {
         var token = tokens[idx];
@@ -471,10 +472,24 @@
                 escapeHtml(token.content) +
                 '</pre></div>\n';
         }
+        if (info === 'plantuml' || info === 'puml') {
+            try {
+                var encoded = window.plantumlEncoder.encode(token.content);
+                var themeClass = currentTheme === 'light' ? 'puml-light' : 'puml-dark';
+                return '<div class="puml-container ' + themeClass + '">' +
+                    '<img src="https://www.plantuml.com/plantuml/svg/' + encoded + '" ' +
+                    'alt="PlantUML Diagram" />' +
+                    '</div>\n';
+            } catch(e) {
+                return '<pre style="color:#f14c4c;border:1px solid #f14c4c;padding:8px;">' +
+                    '⚠ PlantUML render error: ' + escapeHtml(e.message) + '\n\n' +
+                    escapeHtml(token.content) + '</pre>\n';
+            }
+        }
         return origFence ? origFence.call(this, tokens, idx, options, env, self) : '';
     };
 
-    // === Mermaid 渲染（页面加载后） ===
+    // === Mermaid render (after page load) ===
     function renderMermaid() {
         if (typeof mermaid !== 'undefined') {
             try {
@@ -485,13 +500,13 @@
         }
     }
 
-    // === 主渲染函数 ===
+    // === Main render function ===
     window.renderMarkdown = function(text) {
-        console.log('renderMarkdown 被调用, 长度=' + (text ? text.length : 0));
+        console.log('renderMarkdown called, length=' + (text ? text.length : 0));
         var preview = document.getElementById('preview');
-        if (!preview) { console.error('preview 元素不存在'); return; }
+        if (!preview) { console.error('preview element not found'); return; }
         if (!text) {
-            preview.innerHTML = '<p style="color:#888;text-align:center;margin-top:80px;">← 输入 Markdown</p>';
+            preview.innerHTML = '<p style="color:#888;text-align:center;margin-top:80px;">← Enter Markdown</p>';
             preview.removeAttribute('data-source');
             return;
         }
@@ -501,7 +516,7 @@
             preview.querySelectorAll('.mermaid').forEach(function(el) {
                 try { mermaid.run({ nodes: [el] }); } catch(e) {}
             });
-            console.log('✅ 渲染完成');
+            console.log('✅ Render complete');
         } catch(e) {
             console.error('❌ ' + e.message);
             preview.innerHTML = '<pre>' + escapeHtml(text) + '</pre>';
@@ -511,8 +526,8 @@
     window.onMarkdownUpdate = function(text) { window.renderMarkdown(text); };
     window.md = md;
     window.escapeHtml = escapeHtml;
-    console.log('✅ 初始化完成');
+    console.log('✅ Initialization complete');
 
-    // 通知 C# 侧所有 CDN 脚本和 renderer.js 已就绪
+    // Notify C# side that all CDN scripts and renderer.js are ready
     try { window.chrome.webview.postMessage('[READY]'); } catch(e) {}
 })();

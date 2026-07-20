@@ -11,9 +11,9 @@ using AvalonMarkdown.Services;
 namespace AvalonMarkdown.Views;
 
 /// <summary>
-/// 统一的 Markdown 预览控件，封装 NativeWebView 并提供：
-///   • 顶部工具栏（重启预览等）
-///   • 错误捕获与内联显示（而非静默失败或崩溃）
+/// Unified Markdown preview control wrapping NativeWebView, providing:
+///   • Top toolbar (restart preview, etc.)
+///   • Error capture and inline display (instead of silent failure or crash)
 /// </summary>
 public partial class MarkdownView : UserControl
 {
@@ -25,24 +25,24 @@ public partial class MarkdownView : UserControl
     private string _htmlContent = "";
 
     // ====================================================================
-    // 静态主题管理 — WeakReference 跟踪所有活动实例，响应式推送主题
+    // Static theme management — WeakReference tracks all active instances, reactive theme push
     // ====================================================================
     private static readonly List<WeakReference<MarkdownView>> _instances = new();
     private static readonly object _lock = new();
     private static bool _themeSubscribed;
 
     // ====================================================================
-    // 公共事件
+    // Public events
     // ====================================================================
 
-    /// <summary>MarkdownView 完全就绪（HTML 注入 + CDN 脚本加载完成）时触发</summary>
+    /// <summary>Fires when MarkdownView is fully ready (HTML injected + CDN scripts loaded)</summary>
     public event EventHandler? OnReady;
 
-    /// <summary>内部发生可恢复错误时触发</summary>
+    /// <summary>Fires when a recoverable internal error occurs</summary>
     public event EventHandler<MarkdownViewErrorEventArgs>? ErrorOccurred;
 
     // ====================================================================
-    // 构造
+    // Construction
     // ====================================================================
 
     public MarkdownView()
@@ -51,7 +51,7 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>
-    /// 使用依赖注入创建 MarkdownView，允许各平台提供不同的页面来源。
+    /// Creates MarkdownView with dependency injection, allowing different page sources per platform.
     /// </summary>
     public MarkdownView(IWebViewSourceProvider sourceProvider)
     {
@@ -62,22 +62,22 @@ public partial class MarkdownView : UserControl
         CreateWebView();
         WireEvents();
 
-        // 注册到静态实例列表（响应式主题推送用）
+        // Register to static instance list (for reactive theme push)
         RegisterInstance();
 
-        // 每次构造都查询当前主题，不依赖任何静态缓存
+        // Query current theme on each construction, not relying on any static cache
         ApplyThemeColors(GetCurrentTheme());
 
         _ = InitializeWebViewAsync();
     }
 
     // ====================================================================
-    // 布局 — Auto 尺寸修正
+    // Layout — Auto size correction
     // ====================================================================
 
     /// <summary>
-    /// NativeWebView（NativeControlHost）在 HWND 未创建时 DesiredSize = (0,0)，
-    /// 导致 Auto 父容器行/列折叠。此处保证至少返回可用尺寸以维持布局。
+    /// NativeWebView (NativeControlHost) has DesiredSize = (0,0) before HWND is created,
+    /// causing Auto parent row/column collapse. Ensures at least available size is returned to maintain layout.
     /// </summary>
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -95,7 +95,7 @@ public partial class MarkdownView : UserControl
     }
 
     // ====================================================================
-    // WebView 生命周期
+    // WebView lifecycle
     // ====================================================================
 
     private void CreateWebView()
@@ -115,7 +115,7 @@ public partial class MarkdownView : UserControl
     {
         _webView.NavigationCompleted += OnNavigationCompleted;
 
-        // 尝试订阅 WebViewMessages（部分平台/版本可能不支持）
+        // Attempt to subscribe to WebViewMessages (may not be supported on all platforms/versions)
         try
         {
             var msgEvent = _webView.GetType().GetEvent("WebViewMessages");
@@ -128,12 +128,12 @@ public partial class MarkdownView : UserControl
         }
         catch
         {
-            // 不支持 WebViewMessages — 静默忽略
+            // WebViewMessages not supported — silently ignore
         }
 
         DismissErrorButton.Click += (_, _) => HideError();
 
-        // 事件驱动布局修正：WebViewHost 首次获得有效尺寸时触发一次
+        // Event-driven layout fix: fire once when WebViewHost first gets a valid size
         WebViewHost.EffectiveViewportChanged += OnHostViewportChanged;
     }
 
@@ -174,10 +174,10 @@ public partial class MarkdownView : UserControl
     {
         var dir = Path.Combine(Path.GetTempPath(), "AvalonMarkdown");
         Directory.CreateDirectory(dir);
-        // 使用时间戳防缓存
+        // Use timestamp to prevent caching
         var path = Path.Combine(dir, $"preview_{DateTime.Now:HHmmssfff}.html");
         File.WriteAllText(path, html);
-        // 清理 30 秒前的旧临时文件
+        // Clean up old temp files from 30 seconds ago
         try
         {
             foreach (var f in Directory.GetFiles(dir, "preview_*.html"))
@@ -226,7 +226,7 @@ public partial class MarkdownView : UserControl
         if (_ready) return;
         _ready = true;
 
-        // 就绪后向 WebView JS 环境同步主题
+        // Sync theme to WebView JS environment after ready
         PushThemeToWebView(GetCurrentTheme());
 
         OnReady?.Invoke(this, EventArgs.Empty);
@@ -237,10 +237,38 @@ public partial class MarkdownView : UserControl
             _pendingMarkdown = null;
             _ = RenderMarkdownAsync(md);
         }
+
+        // Browser-side iframe needs multiple layout passes to stabilize initial size
+        if (OperatingSystem.IsBrowser())
+            _ = StabilizeBrowserLayoutAsync();
+    }
+
+    /// <summary>
+    /// Browser-side deferred layout fix: WASM render pipeline needs multiple frames
+    /// to complete initial layout; iframe may get a transient size at creation.
+    /// Use incremental delays to repeatedly trigger layout updates for stabilization.
+    /// </summary>
+    private async Task StabilizeBrowserLayoutAsync()
+    {
+        try
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                await Task.Delay(100 * (i + 1));
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ForceLayout();
+                });
+            }
+        }
+        catch
+        {
+            // Silently — layout fix should not block the main flow
+        }
     }
 
     // ====================================================================
-    // 事件处理
+    // Event handling
     // ====================================================================
 
     private void OnNavigationCompleted(object? sender, EventArgs e)
@@ -261,7 +289,7 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>
-    /// 接收 WebView 内部消息（console.log/error/ready 等通过 chrome.webview.postMessage 发出）
+    /// Receives WebView internal messages (console.log/error/ready sent via chrome.webview.postMessage)
     /// </summary>
     public void OnWebViewMessage(object? sender, string message)
     {
@@ -277,16 +305,16 @@ public partial class MarkdownView : UserControl
         if (message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
             message.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase))
         {
-            // 不主动显示错误面板，仅触发事件供外部订阅
+            // Don't show error panel proactively, only fire event for external subscription
             ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", message));
         }
     }
 
     // ====================================================================
-    // 公共 API
+    // Public API
     // ====================================================================
 
-    /// <summary>渲染 Markdown 内容到 WebView</summary>
+    /// <summary>Renders Markdown content to the WebView</summary>
     public async Task RenderMarkdownAsync(string? markdown)
     {
         if (!_ready)
@@ -305,7 +333,7 @@ public partial class MarkdownView : UserControl
         await InvokeScriptSafeAsync($"renderMarkdown('{escaped}')");
     }
 
-    /// <summary>重启预览（重新导航/注入 HTML）</summary>
+    /// <summary>Restarts preview (re-navigate / re-inject HTML)</summary>
     public async Task RestartPreviewAsync()
     {
         _ready = false;
@@ -328,8 +356,8 @@ public partial class MarkdownView : UserControl
             }
             else
             {
-                // Mobile (Android/iOS): 用 InvokeScript 执行 location.href 导航
-                // 从 JS 侧发起导航，NativeWebView 的 NavigationCompleted 依然会触发
+                // Mobile (Android/iOS): use InvokeScript to navigate via location.href
+                // Navigation from JS side still triggers NativeWebView's NavigationCompleted
                 var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_htmlContent));
                 var script = "location.href='data:text/html;base64," + base64 + "'";
                 var result = _webView.InvokeScript(script);
@@ -343,10 +371,10 @@ public partial class MarkdownView : UserControl
         }
     }
 
-    /// <summary>事件驱动布局修正：WebViewHost 首次获得有效尺寸时同步 iframe 布局</summary>
+    /// <summary>Event-driven layout fix: sync iframe layout when WebViewHost first gets a valid size</summary>
     private void OnHostViewportChanged(object? sender, Avalonia.Layout.EffectiveViewportChangedEventArgs e)
     {
-        // 仅在首次获得有效尺寸时触发
+        // Only fire on first valid size
         if (e.EffectiveViewport.Width <= 0 || e.EffectiveViewport.Height <= 0)
             return;
 
@@ -359,7 +387,7 @@ public partial class MarkdownView : UserControl
         }
     }
 
-    /// <summary>备用：注入 HTML 后立即标记布局失效，事件驱动会在下一帧处理</summary>
+    /// <summary>Fallback: invalidate layout immediately after HTML injection, event-driven will process next frame</summary>
     private void ForceLayout()
     {
         WebViewHost.InvalidateMeasure();
@@ -368,14 +396,14 @@ public partial class MarkdownView : UserControl
         _webView?.InvalidateArrange();
     }
 
-    /// <summary>应用预览配置（JS 调用）</summary>
+    /// <summary>Apply preview configuration (JS call)</summary>
     public async Task ApplyConfigAsync(string jsCallExpression)
     {
         if (!_ready) return;
         await InvokeScriptSafeAsync(jsCallExpression);
     }
 
-    /// <summary>执行自定义 JavaScript</summary>
+    /// <summary>Execute custom JavaScript</summary>
     public async Task<string?> InvokeScriptAsync(string script)
     {
         if (!_ready) return null;
@@ -383,7 +411,7 @@ public partial class MarkdownView : UserControl
     }
 
     // ====================================================================
-    // 内部帮助方法
+    // Internal helper methods
     // ====================================================================
 
     private async Task<string?> InvokeScriptSafeAsync(string script)
@@ -426,19 +454,19 @@ public partial class MarkdownView : UserControl
     }
 
     // ====================================================================
-    // 静态主题管理 — 注册/推送
+    // Static theme management — registration / push
     // ====================================================================
 
-    /// <summary>将当前实例加入静态弱引用列表</summary>
+    /// <summary>Register current instance to static weak-reference list</summary>
     private void RegisterInstance()
     {
         lock (_lock)
         {
-            // 清理已回收的实例
+            // Clean up collected instances
             _instances.RemoveAll(wr => !wr.TryGetTarget(out _));
             _instances.Add(new WeakReference<MarkdownView>(this));
 
-            // 首次实例化时订阅全局主题变化（只订阅一次）
+            // Subscribe to global theme change on first instantiation (only once)
             if (!_themeSubscribed)
             {
                 var app = Avalonia.Application.Current;
@@ -451,7 +479,7 @@ public partial class MarkdownView : UserControl
         }
     }
 
-    /// <summary>全局主题切换回调 — 推送给所有活着的 MarkdownView 实例</summary>
+    /// <summary>Global theme change callback — push to all alive MarkdownView instances</summary>
     private static void OnGlobalThemeChanged(object? sender, EventArgs e)
     {
         var theme = GetCurrentTheme();
@@ -462,19 +490,19 @@ public partial class MarkdownView : UserControl
             {
                 if (_instances[i].TryGetTarget(out var view))
                 {
-                    // 异步派发到 UI 线程，不阻塞主题事件
+                    // Dispatch asynchronously to UI thread, do not block theme event
                     _ = Dispatcher.UIThread.InvokeAsync(() => view.ApplyThemePush(theme));
                 }
                 else
                 {
-                    // 实例已 GC，移除
+                    // Instance GC'd, remove
                     _instances.RemoveAt(i);
                 }
             }
         }
     }
 
-    /// <summary>收到主题推送：刷新背景色 + 向 WebView JS 发消息</summary>
+    /// <summary>Receive theme push: refresh background + send message to WebView JS</summary>
     private async void ApplyThemePush(string theme)
     {
         ApplyThemeColors(theme);
@@ -482,7 +510,7 @@ public partial class MarkdownView : UserControl
             await InvokeScriptSafeAsync($"setTheme('{theme}')");
     }
 
-    /// <summary>向已就绪的 WebView JS 同步当前主题</summary>
+    /// <summary>Sync current theme to the ready WebView JS</summary>
     private async void PushThemeToWebView(string theme)
     {
         if (_ready)
@@ -505,15 +533,15 @@ public partial class MarkdownView : UserControl
         }
     }
 
-    /// <summary>查询当前 Avalonia 有效主题，失败/未知时回退 Dark</summary>
+    /// <summary>Query current Avalonia effective theme, fallback to Dark on failure/unknown</summary>
     private static string GetCurrentTheme()
     {
         var app = Avalonia.Application.Current;
         if (app == null) return "dark";
 
-        // 必须用 ActualThemeVariant：它返回解析后的最终主题（Light/Dark）
-        // 不可用 RequestedThemeVariant，因为 App.axaml 设的是 Default，
-        // 即使系统是 Light 也会返回 Default，导致误判为 dark。
+        // Must use ActualThemeVariant: it returns the resolved final theme (Light/Dark).
+        // Do not use RequestedThemeVariant because App.axaml sets Default,
+        // which would return Default even when the system is Light, causing misdetection as dark.
         var variant = app.ActualThemeVariant;
         if (variant == ThemeVariant.Light) return "light";
         if (variant == ThemeVariant.Dark) return "dark";
@@ -533,7 +561,7 @@ public partial class MarkdownView : UserControl
 }
 
 // ====================================================================
-// 错误事件参数
+// Error event args
 // ====================================================================
 
 public class MarkdownViewErrorEventArgs : EventArgs

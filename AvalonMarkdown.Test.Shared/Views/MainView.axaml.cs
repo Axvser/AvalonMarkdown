@@ -20,31 +20,31 @@ public partial class MainView : UserControl
         _vm = new MainViewModel();
         DataContext = _vm;
 
-        // 单视图
+        // Single view
         _singlePreview = this.FindControl<MarkdownView>("Preview")!;
         _singlePreview.OnReady += (_, _) => OnPreviewReady(_singlePreview, _vm.MarkdownText, 1);
         MarkdownEditor.TextChanged += OnMarkdownChanged;
 
-        // 多视图（按需初始化）
+        // Multi-view (initialized on demand)
 
-        // 预设按钮
+        // Preset buttons
         SimplePresetButton.Click += (_, _) => LoadPreset(MainViewModel.GetSimpleMarkdown());
         FullPresetButton.Click += (_, _) => LoadPreset(MainViewModel.GetDefaultMarkdown());
         BigDocPresetButton.Click += (_, _) => LoadPreset(MainViewModel.GetBigDocumentMarkdown());
 
-        // 多视图切换
+        // Multi-view toggle
         MultiViewToggle.Click += (_, _) => ToggleMultiView();
     }
 
     // ====================================================================
-    // 单视图
+    // Single view
     // ====================================================================
 
     private async void OnPreviewReady(MarkdownView? preview, string markdown, int index)
     {
         _vm.RecordReady(index);
 
-        // 等待 WebView 内部 JS 完全就绪
+        // Wait for WebView internal JS to fully initialize
         await Task.Delay(500);
 
         if (preview is not null)
@@ -75,13 +75,13 @@ public partial class MainView : UserControl
     }
 
     // ====================================================================
-    // 多视图切换
+    // Multi-view toggle
     // ====================================================================
 
     private void ToggleMultiView()
     {
         _multiViewMode = !_multiViewMode;
-        MultiViewToggle.Content = _multiViewMode ? "单视图" : "多视图";
+        MultiViewToggle.Content = _multiViewMode ? "Single" : "Multi";
         SingleView.IsVisible = !_multiViewMode;
         MultiView.IsVisible = _multiViewMode;
 
@@ -99,21 +99,21 @@ public partial class MainView : UserControl
 
     private void InitMultiView()
     {
-        if (_multiPv1 is not null) return; // 已初始化
+        if (_multiPv1 is not null) return; // already initialized
 
         _multiPv1 = this.FindControl<MarkdownView>("Preview1")!;
         _multiPv2 = this.FindControl<MarkdownView>("Preview2")!;
         _multiPv3 = this.FindControl<MarkdownView>("Preview3")!;
 
-        // 视图1: 简单
+        // View 1: Simple
         _multiPv1.OnReady += (_, _) =>
             OnPreviewReady(_multiPv1, MainViewModel.GetSimpleMarkdown(), 1);
 
-        // 视图2: 完整
+        // View 2: Full
         _multiPv2.OnReady += (_, _) =>
             OnPreviewReady(_multiPv2, MainViewModel.GetDefaultMarkdown(), 2);
 
-        // 视图3: 大文档
+        // View 3: Big Doc
         _multiPv3.OnReady += (_, _) =>
             OnPreviewReady(_multiPv3, MainViewModel.GetBigDocumentMarkdown(), 3);
     }

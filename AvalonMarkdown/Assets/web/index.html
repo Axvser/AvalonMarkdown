@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="renderer.css">
     <style>
-        /* 运行时错误浮层 — 显示在预览区域内而非静默吞掉 */
+        /* Runtime error overlay — displayed within the preview area instead of silently swallowing */
         #error-overlay {
             display: none;
             position: fixed;
@@ -46,7 +46,7 @@
         #error-overlay .error-dismiss:hover {
             background: #5c2a2a;
         }
-        /* 加载占位文字 — 跟随主题 */
+        /* Loading placeholder — follows theme */
         #preview .loading-placeholder {
             text-align: center;
             margin-top: 80px;
@@ -62,11 +62,11 @@
 <body>
     <div id="preview"><p class="loading-placeholder">Loading Previewer…</p></div>
 
-    <!-- 运行时错误浮层 -->
+    <!-- Runtime error overlay -->
     <div id="error-overlay">
-        <div class="error-title">⚠ JavaScript 运行时错误</div>
+        <div class="error-title">⚠ JavaScript Runtime Error</div>
         <div class="error-body" id="error-body"></div>
-        <button class="error-dismiss" onclick="dismissErrorOverlay()">✕ 关闭</button>
+        <button class="error-dismiss" onclick="dismissErrorOverlay()">✕ Close</button>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
@@ -75,6 +75,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.10.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plantuml-encoder@1.4.0/dist/plantuml-encoder.min.js"></script>
     <script src="renderer.js"></script>
 </body>
 </html>

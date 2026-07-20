@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AvalonMarkdown.Views.MarkdownView">
     <DockPanel>
-        <!-- ═══════════════════ 错误面板（初始隐藏）═══════════════════ -->
+        <!-- ═══════════════════ Error panel (initially hidden) ═══════════════════ -->
         <Border x:Name="ErrorPanel"
                 DockPanel.Dock="Bottom"
                 Background="#2d1b1b"
@@ -11,14 +11,14 @@
                 Padding="12,6"
                 IsVisible="False">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- 错误图标 -->
+                <!-- Error icon -->
                 <TextBlock Grid.Column="0"
                            Text="⚠"
                            Foreground="#f14c4c"
                            FontSize="14"
                            VerticalAlignment="Top"
                            Margin="0,2,8,0"/>
-                <!-- 错误详情 -->
+                <!-- Error details -->
                 <StackPanel Grid.Column="1">
                     <TextBlock x:Name="ErrorTitle"
                                Text="Error"
@@ -32,7 +32,7 @@
                                FontSize="11"
                                Margin="0,2,0,0"/>
                 </StackPanel>
-                <!-- 关闭按钮 -->
+                <!-- Dismiss button -->
                 <Button Grid.Column="2"
                         x:Name="DismissErrorButton"
                         Content="✕"
@@ -47,7 +47,7 @@
             </Grid>
         </Border>
 
-        <!-- ═══════════════════ WebView 承载区域 ═══════════════════ -->
+        <!-- ═══════════════════ WebView hosting area ═══════════════════ -->
         <Grid x:Name="WebViewHost"/>
     </DockPanel>
 </UserControl>

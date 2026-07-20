@@ -1,10 +1,10 @@
 namespace AvalonMarkdown.Services;
 
 /// <summary>
-/// 提供 WebView 加载的完整 HTML 内容。
+/// Provides the complete HTML content for WebView loading.
 /// </summary>
 public interface IWebViewSourceProvider
 {
-    /// <summary>获取完整的 HTML 页面内容（含内联 CSS/JS）</summary>
+    /// <summary>Gets the complete HTML page content (with inlined CSS/JS)</summary>
     string GetHtmlContent();
 }

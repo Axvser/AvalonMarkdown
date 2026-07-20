@@ -9,7 +9,7 @@ internal sealed partial class Program
 {
     private static Task Main(string[] args) => BuildAvaloniaApp()
             .WithInterFont()
-            // 注册自定义字体（中文/Emoji/斜体），供 XAML FontFamily 回退链使用
+            // Register custom fonts (Chinese/Emoji/Italic) for XAML FontFamily fallback chain
             .WithSystemFontSource(new Uri("avares://AvalonMarkdown.Test.Shared/Assets/Fonts/msyh.ttf"))
             .WithSystemFontSource(new Uri("avares://AvalonMarkdown.Test.Shared/Assets/Fonts/NotoColorEmoji.ttf"))
             .WithSystemFontSource(new Uri("avares://AvalonMarkdown.Test.Shared/Assets/Fonts/NotoSans-Italic-VariableFont_wdth,wght.ttf"))

@@ -5,28 +5,28 @@
              x:Class="AvalonMarkdown.Test.Shared.Views.MainView"
              x:DataType="vm:MainViewModel">
     <DockPanel>
-        <!-- ═══════ 工具栏：预设样本 + 多视图切换 + 计时 ═══════ -->
+        <!-- ═══════ Toolbar: Preset samples + multi-view toggle + timing ═══════ -->
         <Border DockPanel.Dock="Top"
                 BorderBrush="{DynamicResource SystemAccentColor}"
                 BorderThickness="0,0,0,1"
                 Padding="8,4">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <TextBlock Grid.Column="0"
-                           Text="预设:"
+                           Text="Presets:"
                            FontSize="12"
                            VerticalAlignment="Center"
                            Margin="0,0,4,0"/>
                 <Button Grid.Column="1"
                         x:Name="SimplePresetButton"
-                        Content="简单"
+                        Content="Simple"
                         FontSize="11" Padding="6,2" Margin="2,0"/>
                 <Button Grid.Column="2"
                         x:Name="FullPresetButton"
-                        Content="完整"
+                        Content="Full"
                         FontSize="11" Padding="6,2" Margin="2,0"/>
                 <Button Grid.Column="3"
                         x:Name="BigDocPresetButton"
-                        Content="大文档"
+                        Content="Big Doc"
                         FontSize="11" Padding="6,2" Margin="2,0"/>
 
                 <Separator Grid.Column="4" Width="1" Height="16"
@@ -34,11 +34,11 @@
 
                 <Button Grid.Column="5"
                         x:Name="MultiViewToggle"
-                        Content="单视图"
+                        Content="Single"
                         FontSize="11" Padding="8,2"
-                        ToolTip.Tip="切换单视图/三视图对比模式"/>
+                        ToolTip.Tip="Toggle single/multi-view comparison mode"/>
 
-                <!-- 单视图计时信息 -->
+                <!-- Single view timing info -->
                 <TextBlock Grid.Column="6"
                            x:Name="TimingText"
                            Text="{Binding TimingInfo}"
@@ -49,7 +49,7 @@
             </Grid>
         </Border>
 
-        <!-- ═══════ 单视图模式 ═══════ -->
+        <!-- ═══════ Single view mode ═══════ -->
         <Grid x:Name="SingleView" Margin="8" RowDefinitions="Auto,8,*">
             <TextBox x:Name="MarkdownEditor"
                      Text="{Binding MarkdownText}"
@@ -61,10 +61,10 @@
             <md:MarkdownView x:Name="Preview" Grid.Row="2" />
         </Grid>
 
-        <!-- ═══════ 多视图模式（3 实例并列）═══════ -->
+        <!-- ═══════ Multi-view mode (3 instances side by side) ═══════ -->
         <Grid x:Name="MultiView" Margin="8" IsVisible="False"
               ColumnDefinitions="*,4,*">
-            <!-- 左列：简单 -->
+            <!-- Left column: Simple -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*">
                 <TextBlock Grid.Row="0"
                            x:Name="TimingText1"
@@ -76,7 +76,7 @@
 
             <Rectangle Grid.Column="1" Fill="#3c3c3c" Width="4" IsHitTestVisible="False"/>
 
-            <!-- 右列：上下分割（完整 + 大文档） -->
+            <!-- Right column: split vertically (Full + Big Doc) -->
             <Grid Grid.Column="2" RowDefinitions="Auto,*,4,Auto,*">
                 <TextBlock Grid.Row="0"
                            x:Name="TimingText2"
