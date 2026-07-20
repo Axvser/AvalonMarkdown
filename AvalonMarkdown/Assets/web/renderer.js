@@ -486,8 +486,76 @@
                     escapeHtml(token.content) + '</pre>\n';
             }
         }
+        if (info === 'video') {
+            var videoSrc = token.content.trim();
+            // Try platform embed first
+            var embedHtml = getPlatformEmbed(videoSrc, 'Embedded Video');
+            if (embedHtml) return embedHtml;
+            // Fallback to direct video file
+            return '<video controls playsinline preload="metadata" style="max-width:100%;height:auto;border-radius:4px;">' +
+                '<source src="' + escapeHtml(videoSrc) + '">' +
+                'Your browser does not support the video element.' +
+                '</video>\n';
+        }
         return origFence ? origFence.call(this, tokens, idx, options, env, self) : '';
     };
+
+    // === Video / Platform embed support ===
+    // Detects direct video files (.mp4, .webm, .ogg, etc.) and renders <video>.
+    // Detects known platform URLs and renders <iframe> embeds.
+    var origImageRender = md.renderer.rules.image;
+    md.renderer.rules.image = function(tokens, idx, options, env, self) {
+        var token = tokens[idx];
+        var src = token.attrs[token.attrIndex('src')][1];
+        var alt = token.content;
+
+        // Platform embed URL patterns
+        var embedHtml = getPlatformEmbed(src, alt);
+        if (embedHtml) return embedHtml;
+
+        // Direct video file
+        var isVideo = /\.(mp4|webm|ogg|mov|avi|mkv)(\?|#|$)/i.test(src);
+        if (isVideo) {
+            return '<video controls playsinline preload="metadata" style="max-width:100%;height:auto;border-radius:4px;">' +
+                '<source src="' + escapeHtml(src) + '">' +
+                'Your browser does not support the video element.' +
+                '</video>\n';
+        }
+        return origImageRender ? origImageRender(tokens, idx, options, env, self) : '';
+    };
+
+    /** Try to convert a URL into a platform embed iframe HTML, or null if not supported. */
+    function getPlatformEmbed(url, label) {
+        // YouTube: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
+        var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) {
+            return '<div class="embed-container">' +
+                '<iframe src="https://www.youtube.com/embed/' + ytMatch[1] + '" ' +
+                'frameborder="0" allowfullscreen allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" ' +
+                'title="' + escapeHtml(label || 'YouTube Video') + '"></iframe></div>\n';
+        }
+
+        // Bilibili: bilibili.com/video/BVxxx  or  player.bilibili.com/player.html?bvid=BVxxx
+        var bvMatch = url.match(/bilibili\.com\/(?:video\/(BV[a-zA-Z0-9_]+)|[^"' ]*bvid=(BV[a-zA-Z0-9_]+))/);
+        var bvid = bvMatch && (bvMatch[1] || bvMatch[2]);
+        if (bvid) {
+            return '<div class="embed-container">' +
+                '<iframe src="https://player.bilibili.com/player.html?bvid=' + bvid + '&autoplay=0&high_quality=1" ' +
+                'frameborder="0" allowfullscreen sandbox="allow-scripts allow-same-origin allow-popups" ' +
+                'title="' + escapeHtml(label || 'Bilibili Video') + '"></iframe></div>\n';
+        }
+
+        // Vimeo: vimeo.com/ID
+        var viMatch = url.match(/vimeo\.com\/(\d+)/);
+        if (viMatch) {
+            return '<div class="embed-container">' +
+                '<iframe src="https://player.vimeo.com/video/' + viMatch[1] + '" ' +
+                'frameborder="0" allowfullscreen allow="autoplay;fullscreen;picture-in-picture" ' +
+                'title="' + escapeHtml(label || 'Vimeo Video') + '"></iframe></div>\n';
+        }
+
+        return null;
+    }
 
     // === Mermaid render (after page load) ===
     function renderMermaid() {

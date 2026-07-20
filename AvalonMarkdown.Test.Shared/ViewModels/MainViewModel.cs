@@ -197,18 +197,22 @@ public partial class MainViewModel : ViewModelBase
         @enduml
         ```
 
-        ## 10. Footnotes
+        ## 10. Video Embeds
+
+        ![Bilibili Test](https://www.bilibili.com/video/BV11UKn6QEEY)
+
+        ## 11. Footnotes
 
         Here is a footnote reference[^1] and another[^2].
 
         [^1]: This is the first footnote.
         [^2]: This is the second footnote with more details.
 
-        ## 11. Horizontal Rule
+        ## 12. Horizontal Rule
 
         ---
 
-        ## 12. HTML Inline
+        ## 13. HTML Inline
 
         <span style="color:orange">Orange text via HTML</span>
 
@@ -217,7 +221,7 @@ public partial class MainViewModel : ViewModelBase
         Hidden content here.
         </details>
 
-        ## 13. Emojis
+        ## 14. Emojis
 
         🚀 ✅ ❤️ ⭐ 🎉 🔥 🎯
         """;
