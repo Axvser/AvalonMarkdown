@@ -68,9 +68,14 @@ public partial class MainWindow : Window
 - **数学公式** — KaTeX（行内 `$...$` / 块级 `$$...$$`）
 - **代码高亮** — highlight.js 11，VS Code 风格配色
 - **图表** — Mermaid 11（流程图、时序图、饼图、Git 图、类图）
+- **PlantUML** — 通过 `plantuml-encoder` 编码后调用 PlantUML 在线服务渲染 SVG，自动适配深色/浅色主题
+- **视频嵌入** — 支持直接视频文件（`.mp4` / `.webm` / `.ogg` / `.mov` 等）和平台 URL 自动识别
+  - **YouTube** — `youtube.com/watch?v=ID` / `youtu.be/ID` → 响应式 iframe 嵌入
+  - **Bilibili** — `bilibili.com/video/BVxxx` → 响应式 iframe 嵌入
+  - **Vimeo** — `vimeo.com/ID` → 响应式 iframe 嵌入
 - **代码块** — 语言标签 · 复制按钮 · 高度调节
 - **任务列表** — 自定义复选框
-- **脚注 / 表格 / 引用 / 删除线 / 上下标**
+- **脚注 / 表格 / 引用 / 删除线 / 上下标
 
 ## 跨平台架构
 
@@ -108,15 +113,15 @@ public partial class MainWindow : Window
 | 组件                             | 用途          |
 | -------------------------------- | ------------- |
 | Avalonia 12.0.0                  | UI 框架       |
-| CommunityToolkit.Mvvm 8.4        | MVVM          |
 | Avalonia.Controls.WebView 12.0.0 | WebView       |
 | markdown-it 14.1.0               | Markdown 解析 |
 | highlight.js 11.10.0             | 代码高亮      |
 | KaTeX 0.16.11                    | 数学公式渲染  |
 | Mermaid 11.4.1                   | 图表渲染      |
+| plantuml-encoder 1.4.0          | PlantUML 编码 |
 
 所有 JS/CSS 依赖通过 `EmbeddedHtmlSourceProvider` 在构建时内联到 HTML，
-**无需网络连接**，仅 KaTeX CSS 字体从 CDN 按需加载。
+**无需网络连接**，仅 KaTeX CSS 字体与 PlantUML SVG 渲染需在线服务。
 
 ## 许可证
 
