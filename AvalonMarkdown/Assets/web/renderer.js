@@ -626,18 +626,23 @@
         preview.setAttribute('data-source', text);
         try {
             preview.innerHTML = md.render(text);
-            // Intercept all links: prevent WebView navigation and notify C# via postMessage
-            // so it can open in system browser (C# side handles the actual URL opening).
+            // Intercept external links:
+            // Replace href with javascript:void(0) to prevent ANY native navigation
+            // on ALL platforms (WebView2 / Android WebView / iOS WKWebView / WASM).
+            // Then use window.open() — the universal web standard — to open in
+            // system browser / new tab. No platform-specific C# bridge needed.
             var links = preview.querySelectorAll('a[href]');
             for (var i = 0; i < links.length; i++) {
                 var a = links[i];
                 var href = a.getAttribute('href');
                 if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+                a.setAttribute('data-href', href);
+                a.href = 'javascript:void(0)';
                 a.setAttribute('rel', 'noopener noreferrer');
                 a.addEventListener('click', (function(url) {
                     return function(e) {
                         e.preventDefault();
-                        post('LINK', url);
+                        window.open(url, '_blank');
                     };
                 })(href));
             }

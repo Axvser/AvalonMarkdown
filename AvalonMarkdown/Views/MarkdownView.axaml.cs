@@ -41,13 +41,6 @@ public partial class MarkdownView : UserControl
     /// <summary>Fires when a recoverable internal error occurs</summary>
     public event EventHandler<MarkdownViewErrorEventArgs>? ErrorOccurred;
 
-    /// <summary>
-    /// Fires when a hyperlink inside the Markdown content is clicked.
-    /// By default, the URL is opened in the system browser.
-    /// Subscribe to override this behavior (e.g., navigate internally).
-    /// </summary>
-    public event EventHandler<LinkClickedEventArgs>? LinkClicked;
-
     // ====================================================================
     // Construction
     // ====================================================================
@@ -313,22 +306,6 @@ public partial class MarkdownView : UserControl
             if (!_ready && _htmlInjected)
             {
                 _ = Dispatcher.UIThread.InvokeAsync(SetReady);
-            }
-            return;
-        }
-
-        if (message.StartsWith("[LINK]", StringComparison.OrdinalIgnoreCase))
-        {
-            var url = message[6..]; // Strip the [LINK] prefix
-            if (!string.IsNullOrEmpty(url))
-            {
-                var args = new LinkClickedEventArgs(url);
-                _ = Dispatcher.UIThread.InvokeAsync(async () =>
-                {
-                    LinkClicked?.Invoke(this, args);
-                    if (!args.Handled)
-                        await OpenInSystemBrowserAsync(url);
-                });
             }
             return;
         }
@@ -606,68 +583,6 @@ public partial class MarkdownView : UserControl
                 .Replace("\t", "\\t");
     }
 
-    /// <summary>
-    /// Opens a URL in the system default browser with platform-appropriate strategy:
-    ///   • Browser (WASM)  — window.open via WebView JS interop (new browser tab)
-    ///   • Desktop         — Process.Start with UseShellExecute
-    ///   • Mobile          — TopLevel.Launcher.OpenAsync (intent-based)
-    /// </summary>
-    private async Task OpenInSystemBrowserAsync(string url)
-    {
-        // Browser (WASM): native browser tab via window.open
-        if (OperatingSystem.IsBrowser())
-        {
-            var escaped = EscapeJsString(url);
-            await InvokeScriptSafeAsync($"window.open('{escaped}', '_blank')");
-            return;
-        }
-
-        // Desktop / Mobile: try Avalonia cross-platform Launcher API first
-        try
-        {
-            var topLevel = TopLevel.GetTopLevel(this);
-            if (topLevel?.Launcher != null)
-            {
-                await topLevel.Launcher.LaunchUriAsync(new Uri(url));
-                return;
-            }
-        }
-        catch
-        {
-            // Launcher not supported — fall through to Process.Start
-        }
-
-        // Desktop fallback: Process.Start with UseShellExecute
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            };
-            System.Diagnostics.Process.Start(psi);
-        }
-        catch
-        {
-            // Platform may not support Process.Start — silently ignore
-        }
-    }
-
-}
-
-// ====================================================================
-// Link clicked event args
-// ====================================================================
-
-public class LinkClickedEventArgs : EventArgs
-{
-    public string Url { get; }
-    public bool Handled { get; set; }
-
-    public LinkClickedEventArgs(string url)
-    {
-        Url = url;
-    }
 }
 
 // ====================================================================

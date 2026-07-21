@@ -54,7 +54,6 @@ public partial class MainWindow : Window
 | ----------------- | -------------------------------------------- | ----------------------------------------------- |
 | `OnReady`       | `EventHandler`                             | 控件完全就绪，可安全调用`RenderMarkdownAsync` |
 | `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误                                  |
-| `LinkClicked` | `EventHandler<LinkClickedEventArgs>` | Markdown 内容中的超链接被点击。默认行为根据平台自动选择：**Desktop** → 系统默认浏览器，**Browser** → 新标签页，**Mobile** → 系统默认浏览器。设置 `Handled = true` 可完全自定义 |
 
 ### 错误事件参数
 
