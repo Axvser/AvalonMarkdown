@@ -410,6 +410,23 @@ public partial class MarkdownView : UserControl
         return await InvokeScriptSafeAsync(script);
     }
 
+    /// <summary>
+    /// Replace the renderer's built-in CSS with a custom stylesheet generated
+    /// by <c>ThemeConfigViewModel.GenerateCss()</c>. The CSS text is injected
+    /// into a <c>&lt;style id="custom-theme-css"&gt;</c> element in the WebView's
+    /// document head, overriding the default theme rules.
+    /// </summary>
+    /// <param name="css">
+    /// Complete CSS text using the exact same selector/variable naming as the
+    /// built-in renderer.css.
+    /// </param>
+    public async Task ApplyCustomCssAsync(string css)
+    {
+        if (!_ready) return;
+        var escaped = EscapeJsString(css);
+        await InvokeScriptSafeAsync($"setCustomCss('{escaped}')");
+    }
+
     // ====================================================================
     // Internal helper methods
     // ====================================================================

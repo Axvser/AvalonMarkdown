@@ -152,6 +152,29 @@
     var currentTheme = document.documentElement.className.indexOf('theme-light') >= 0 ? 'light' : 'dark';
     var mermaidInitialized = false;
 
+    /**
+     * Run mermaid on all .mermaid elements in the given container.
+     * Intentionally no timeout — letting mermaid queue and process freely.
+     * On Browser (WASM), mermaid shares the main thread with Avalonia's UI loop,
+     * Desktop WebView2 runs in a separate process and is unaffected.
+     */
+    function runMermaidAll(container) {
+        var els = container.querySelectorAll('.mermaid');
+        if (els.length === 0) return;
+        var nodes = [];
+        for (var i = 0; i < els.length; i++) nodes.push(els[i]);
+        try {
+            var result = mermaid.run({ nodes: nodes });
+            if (result && typeof result.then === 'function') {
+                result.catch(function(e) {
+                    console.warn('[Mermaid] Render error: ' + e.message);
+                });
+            }
+        } catch(e) {
+            console.warn('[Mermaid] Render error: ' + e.message);
+        }
+    }
+
     function getMermaidThemeVars(theme) {
         if (theme === 'light') {
             return {
@@ -299,16 +322,32 @@
         if (!source) return;
         try {
             preview.innerHTML = md.render(source);
-            preview.querySelectorAll('.mermaid').forEach(function(el) {
-                try { mermaid.run({ nodes: [el] }); } catch(e) {}
-            });
+            runMermaidAll(preview);
         } catch(e) {
             console.error('❌ ' + e.message);
         }
     }
 
+    /**
+     * Replace or create a <style id="custom-theme-css"> in the document head.
+     * The cssText must use the exact same selector naming as the built-in
+     * renderer.css so that all CSS variables and highlight.js rules are
+     * correctly overridden.
+     */
+    function setCustomCss(cssText) {
+        var style = document.getElementById('custom-theme-css');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'custom-theme-css';
+            document.head.appendChild(style);
+        }
+        style.textContent = cssText;
+        console.log('[Theme] Custom CSS applied (' + (cssText ? cssText.length : 0) + ' chars)');
+    }
+
     // C# call entry
     window.setTheme = setTheme;
+    window.setCustomCss = setCustomCss;
 
     // ===== Initialize Mermaid (follows current theme) =====
     if (typeof mermaid !== 'undefined') {
@@ -560,11 +599,8 @@
     // === Mermaid render (after page load) ===
     function renderMermaid() {
         if (typeof mermaid !== 'undefined') {
-            try {
-                mermaid.run({ nodes: [document.querySelector('.mermaid-container')] });
-            } catch(e) {
-                console.warn('Mermaid renders after DOM');
-            }
+            var pv = document.getElementById('preview');
+            if (pv) runMermaidAll(pv);
         }
     }
 
@@ -581,9 +617,7 @@
         preview.setAttribute('data-source', text);
         try {
             preview.innerHTML = md.render(text);
-            preview.querySelectorAll('.mermaid').forEach(function(el) {
-                try { mermaid.run({ nodes: [el] }); } catch(e) {}
-            });
+            runMermaidAll(preview);
             console.log('✅ Render complete');
         } catch(e) {
             console.error('❌ ' + e.message);

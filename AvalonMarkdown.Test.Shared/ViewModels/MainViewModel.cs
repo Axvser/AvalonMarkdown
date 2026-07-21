@@ -21,6 +21,14 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isMultiView;
 
+    [ObservableProperty]
+    private bool _editorExpanded = true;
+
+    public void ToggleEditor()
+    {
+        EditorExpanded = !EditorExpanded;
+    }
+
     // Independent stopwatch per view
     private readonly Stopwatch _sw1 = new();
     private readonly Stopwatch _sw2 = new();
@@ -224,6 +232,37 @@ public partial class MainViewModel : ViewModelBase
         ## 14. Emojis
 
         🚀 ✅ ❤️ ⭐ 🎉 🔥 🎯
+
+        ## 15. Error Resilience (should not crash)
+
+        The following examples contain **intentionally broken syntax** to verify the control handles errors gracefully without freezing the UI.
+
+        ### Bad Mermaid Syntax
+
+        ```mermaid
+        graph TD
+            This is completely invalid mermaid syntax {{{{{{{ }
+        ```
+
+        ```mermaid
+        sequenceDiagram
+            This should break ──>> mermaid parser with garbage data ~~~!!!
+        ```
+
+        ### Bad PlantUML Syntax
+
+        ```plantuml
+        this is not valid plantuml at all @@@@!!!!
+        no startuml no enduml garbage content here
+        ```
+
+        ```plantuml
+        @startuml
+        Alice -> Bob: ini juga tidak valid karena syntax plantuml rusak parah {{{{{{{{{{{{{{
+        Bob --> Alice: balasan yang juga kacau
+        xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        @enduml
+        ```
         """;
 
     public static string GetSimpleMarkdown() => """

@@ -1,0 +1,618 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:vm="clr-namespace:AvalonMarkdown.ViewModels"
+			 x:Class="AvalonMarkdown.Views.MarkdownThemeView"
+			 x:DataType="vm:ThemeConfigViewModel">
+  <DockPanel>
+    <!-- ═══ Collapsible toggle header (built-in, no decorative wrapper) ═══ -->
+    <Border x:Name="ToggleHeader"
+            DockPanel.Dock="Top"
+            Padding="6,3"
+            Cursor="Hand"
+            BorderThickness="0,0,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <TextBlock x:Name="ArrowExpanded" Text="▼"
+                   FontSize="8" Foreground="#888"
+                   VerticalAlignment="Center"/>
+        <TextBlock x:Name="ArrowCollapsed" Text="▶"
+                   FontSize="8" Foreground="#888"
+                   VerticalAlignment="Center"
+                   IsVisible="True"/>
+        <TextBlock Grid.Column="1" Text="  Theme Editor  🎨"
+                   FontSize="11" Foreground="#888"
+                   VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="3" Text="auto"
+                   FontSize="9" Foreground="#666"
+                   VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+
+    <!-- ═══ Collapsible content (default collapsed) ═══ -->
+    <ScrollViewer x:Name="ContentPanel" MaxHeight="300" IsVisible="False">
+	<StackPanel Margin="6" Spacing="0">
+
+		  <!-- ── Background ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding BgHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Background"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgR}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BgR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgR}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgG}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BgG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgG}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgB}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BgB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgB}"
+						 FontSize="10" Width="22" TextAlignment="Center"
+						 VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- ── Text ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding TextHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Text"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding TextR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding TextG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding TextB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- ── Link ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding LinkHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Link"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding LinkHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding LinkR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding LinkR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding LinkR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding LinkG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding LinkG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding LinkG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding LinkB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding LinkB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding LinkB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- ── Heading ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding HeadingHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Heading"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding HeadingHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding HeadingR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding HeadingR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding HeadingR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding HeadingG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding HeadingG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding HeadingG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding HeadingB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding HeadingB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding HeadingB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- ── Code ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding CodeHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Code"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding CodeR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding CodeG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding CodeB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- ── Border ── -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,0">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding BorderHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Border"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BorderHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BorderR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BorderR}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BorderR}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BorderG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BorderG}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BorderG}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto"
+				  Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10"
+					  Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BorderB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255"
+					  Value="{Binding BorderB}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BorderB}"
+						 FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <!-- ════════ Secondary Colors ════════ -->
+		  <Rectangle Height="1" Fill="{DynamicResource SystemAccentColor}" Margin="0,8,0,6" Opacity="0.4"/>
+
+		  <!-- BgSecondary -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding BgSecHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Bg Secondary"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgSecHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgSecR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding BgSecR}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgSecR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgSecG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding BgSecG}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgSecG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding BgSecB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding BgSecB}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding BgSecB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- TextSecondary -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding TextSecHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Text Secondary"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextSecHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextSecR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TextSecR}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextSecR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextSecG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TextSecG}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextSecG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TextSecB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TextSecB}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TextSecB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- CodeBg -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding CodeBgHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Code Background"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeBgHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding CodeBgR}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding CodeBgG}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding CodeBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding CodeBgB}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding CodeBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- PreBg -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding PreBgHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Pre Background"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding PreBgHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding PreBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding PreBgR}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding PreBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding PreBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding PreBgG}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding PreBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding PreBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding PreBgB}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding PreBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <Rectangle Height="1" Fill="#33ffffff" Margin="0,0,0,6"/>
+
+		  <!-- TableBg -->
+		  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+			<Grid ColumnDefinitions="Auto,Auto,*,Auto">
+			  <Border Width="14" Height="14" CornerRadius="3"
+					  Background="{Binding TableBgHex}"
+					  BorderBrush="#44ffffff" BorderThickness="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="Table Header"
+						 FontSize="11" FontWeight="SemiBold"
+						 VerticalAlignment="Center" Margin="8,0,4,0"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TableBgHex}"
+						 FontSize="10" FontFamily="Consolas"
+						 Foreground="#888" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#ff6b6b" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TableBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TableBgR}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TableBgR}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#69db7c" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TableBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TableBgG}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TableBgG}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+			<Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto" Margin="22,1,0,1">
+			  <Border CornerRadius="2" Width="10" Height="10" Background="#74c0fc" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="1" Text="{Binding TableBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			  <Slider Grid.Column="2" Minimum="0" Maximum="255" Value="{Binding TableBgB}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+			  <TextBlock Grid.Column="3" Text="{Binding TableBgB}" FontSize="10" Width="22" TextAlignment="Center" VerticalAlignment="Center"/>
+			</Grid>
+		  </Grid>
+
+		  <!-- ════════ Typography ════════ -->
+		  <Rectangle Height="1" Fill="{DynamicResource SystemAccentColor}" Margin="0,8,0,6" Opacity="0.4"/>
+
+		  <Grid Margin="0,0,0,8">
+			<Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto">
+			  <TextBlock Grid.ColumnSpan="3" Text="Typography"
+						 FontSize="11" FontWeight="SemiBold"
+						 Foreground="{DynamicResource SystemAccentColor}"
+						 Margin="0,0,0,6"/>
+			  <TextBlock Grid.Row="1" Text="Body Font Size"
+						 FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
+			  <Slider Grid.Row="1" Grid.Column="1" Minimum="8" Maximum="32"
+					  Value="{Binding BodyFontSize}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center"/>
+			  <TextBlock Grid.Row="1" Grid.Column="2"
+						 Text="{Binding BodyFontSize, StringFormat='{}{0} px'}"
+						 FontSize="10" Width="40" TextAlignment="Right" VerticalAlignment="Center"/>
+
+			  <TextBlock Grid.Row="2" Text="Code Font Size"
+						 FontSize="10" VerticalAlignment="Center" Margin="0,4,8,0"/>
+			  <Slider Grid.Row="2" Grid.Column="1" Minimum="8" Maximum="24"
+					  Value="{Binding CodeFontSize}"
+					  IsSnapToTickEnabled="True" TickFrequency="1"
+					  VerticalAlignment="Center" Margin="0,4,0,0"/>
+			  <TextBlock Grid.Row="2" Grid.Column="2"
+						 Text="{Binding CodeFontSize, StringFormat='{}{0} px'}"
+						 FontSize="10" Width="40" TextAlignment="Right" VerticalAlignment="Center" Margin="0,4,0,0"/>
+
+			  <TextBlock Grid.Row="3" Text="Line Height"
+						 FontSize="10" VerticalAlignment="Center" Margin="0,4,8,0"/>
+			  <Slider Grid.Row="3" Grid.Column="1" Minimum="1.0" Maximum="2.5"
+					  Value="{Binding LineHeight}"
+					  IsSnapToTickEnabled="True" TickFrequency="0.1"
+					  VerticalAlignment="Center" Margin="0,4,0,0"/>
+			  <TextBlock Grid.Row="3" Grid.Column="2"
+						 Text="{Binding LineHeight, StringFormat='{}{0:F1}'}"
+						 FontSize="10" Width="40" TextAlignment="Right" VerticalAlignment="Center" Margin="0,4,0,0"/>
+			</Grid>
+		  </Grid>
+
+		  <Grid ColumnDefinitions="Auto,*,Auto">
+			<TextBlock Text="Border Radius"
+					   FontSize="10" VerticalAlignment="Center"/>
+			<Slider Grid.Column="1" Minimum="0" Maximum="20"
+					Value="{Binding BorderRadius}"
+					IsSnapToTickEnabled="True" TickFrequency="1"
+					VerticalAlignment="Center" Margin="8,0"/>
+			<TextBlock Grid.Column="2"
+					   Text="{Binding BorderRadius, StringFormat='{}{0} px'}"
+					   FontSize="10" Width="40" TextAlignment="Right" VerticalAlignment="Center"/>
+		  </Grid>
+
+					</StackPanel>
+				  </ScrollViewer>
+				</DockPanel>
+			  </UserControl>
+

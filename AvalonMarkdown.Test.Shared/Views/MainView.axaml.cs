@@ -34,6 +34,14 @@ public partial class MainView : UserControl
 
         // Multi-view toggle
         MultiViewToggle.Click += (_, _) => ToggleMultiView();
+
+        // Editor collapse toggle
+        EditorToggle.PointerPressed += (_, _) =>
+        {
+            _vm.ToggleEditor();
+            EditorArrowExpanded.IsVisible = _vm.EditorExpanded;
+            EditorArrowCollapsed.IsVisible = !_vm.EditorExpanded;
+        };
     }
 
     // ====================================================================
