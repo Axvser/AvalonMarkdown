@@ -1,8 +1,17 @@
 (function() {
-    // === Console → C# bridge ===
+    // === Cross-platform C# bridge ===
+    // Uses the standard chrome.webview.postMessage API (supported by WebView2,
+    // Avalonia WebView Browser backend via av-webview.mjs polyfill, and
+    // Android native WebView via Avalonia's built-in JavaScriptInterface).
     var origLog = console.log, origWarn = console.warn, origError = console.error;
     var post = function(level, msg) {
-        try { window.chrome.webview.postMessage('[' + level + '] ' + msg); } catch(e) {}
+        try { window.chrome.webview.postMessage('[' + level + '] ' + msg); } catch(e) {
+            // Fallback: for environments without chrome.webview (e.g. old Android),
+            // try window.parent.postMessage and Avalonia bridge.
+            try { window.parent.postMessage('[' + level + '] ' + msg, '*'); } catch(e2) {
+                try { window.AvaloniaWebViewBridge.postMessage('[' + level + '] ' + msg); } catch(e3) {}
+            }
+        }
     };
     console.log = function() {
         var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
@@ -617,6 +626,21 @@
         preview.setAttribute('data-source', text);
         try {
             preview.innerHTML = md.render(text);
+            // Intercept all links: prevent WebView navigation and notify C# via postMessage
+            // so it can open in system browser (C# side handles the actual URL opening).
+            var links = preview.querySelectorAll('a[href]');
+            for (var i = 0; i < links.length; i++) {
+                var a = links[i];
+                var href = a.getAttribute('href');
+                if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+                a.setAttribute('rel', 'noopener noreferrer');
+                a.addEventListener('click', (function(url) {
+                    return function(e) {
+                        e.preventDefault();
+                        post('LINK', url);
+                    };
+                })(href));
+            }
             runMermaidAll(preview);
             console.log('✅ Render complete');
         } catch(e) {
@@ -631,5 +655,5 @@
     console.log('✅ Initialization complete');
 
     // Notify C# side that all CDN scripts and renderer.js are ready
-    try { window.chrome.webview.postMessage('[READY]'); } catch(e) {}
+    post('READY', '');
 })();
