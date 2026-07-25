@@ -21,6 +21,7 @@ public partial class MarkdownView : UserControl
     private readonly IWebViewSourceProvider _sourceProvider;
     private bool _ready;
     private bool _htmlInjected;
+    private bool _initialized;
     private string? _pendingMarkdown;
     private string? _lastRenderedText;
     private string _htmlContent = "";
@@ -103,9 +104,11 @@ public partial class MarkdownView : UserControl
 
         // Query current theme on each construction, not relying on any static cache
         ApplyThemeColors(GetCurrentTheme());
-
-        _ = InitializeWebViewAsync();
     }
+
+    // WebView initialization is deferred until the first call to RenderMarkdownAsync,
+    // ensuring the control has finished layout with its final size before the Browser
+    // iframe is created. See RenderMarkdownAsync for the trigger logic.
 
     // ====================================================================
     // Layout — Auto size correction
@@ -143,6 +146,10 @@ public partial class MarkdownView : UserControl
                 : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e)),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+            // Keep hidden until first markdown text triggers initialization.
+            // This avoids creating the Browser iframe at (0,0) before the
+            // control has finished layout with its final size.
+            IsVisible = false,
         };
         WebViewHost.Children.Add(_webView);
     }
@@ -236,6 +243,10 @@ public partial class MarkdownView : UserControl
     {
         if (_ready) return;
         _ready = true;
+
+        // Reveal the WebView now that initialization has completed successfully
+        // and the iframe has its final dimensions.
+        _webView.IsVisible = true;
 
         // Execute synchronously: on Android, NavigationCompleted fires inside
         // onPageFinished(); InvokeScript (evaluateJavascript) must be called
@@ -439,6 +450,17 @@ public partial class MarkdownView : UserControl
     /// <summary>Renders Markdown content to the WebView</summary>
     public async Task RenderMarkdownAsync(string? markdown)
     {
+        // Defer WebView initialization until the first markdown text arrives.
+        // By this point the control has completed layout with its final size,
+        // so the Browser iframe is never created at (0,0).
+        if (!_initialized)
+        {
+            _initialized = true;
+            _pendingMarkdown = markdown;
+            _ = InitializeWebViewAsync();
+            return;
+        }
+
         if (!_ready)
         {
             _pendingMarkdown = markdown;
