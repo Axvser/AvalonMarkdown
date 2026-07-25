@@ -207,7 +207,17 @@ public partial class MainViewModel : ViewModelBase
 
         ## 10. Video Embeds
 
-        ![Bilibili Test](https://www.bilibili.com/video/BV11UKn6QEEY)
+        > Bilibili Video
+
+        ![Test](https://www.bilibili.com/video/BV1Pv411j7xd)
+
+        > YouTube Video
+
+        ![Test](https://www.youtube.com/watch?v=YhKuZImznEE&list=PLrW43fNmjaQWMhFHxS1jpQ34TkHroHJLb)
+
+        > Vimeo Video
+
+        ![Test](https://vimeo.com/76979871)
 
         ## 11. Footnotes
 
