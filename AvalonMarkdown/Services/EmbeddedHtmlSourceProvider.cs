@@ -40,12 +40,12 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
     {
         try
         {
-            var html = ReadAsset("avares://AvalonMarkdown/Assets/web/index.html");
+            var html = ReadAsset("avares://AvalonMarkdown/Assets/AvalonMarkdown/WebView/index.html");
             if (html == null)
                 return FallbackHtml("Cannot find index.html");
 
             // Inline renderer.css
-            var css = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.css");
+            var css = ReadAsset("avares://AvalonMarkdown/Assets/AvalonMarkdown/WebView/renderer.css");
             if (css != null)
             {
                 html = html.Replace(
@@ -54,7 +54,7 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
             }
 
             // Inline renderer.js
-            var js = ReadAsset("avares://AvalonMarkdown/Assets/web/renderer.js");
+            var js = ReadAsset("avares://AvalonMarkdown/Assets/AvalonMarkdown/WebView/renderer.js");
             if (js != null)
             {
                 html = html.Replace(
