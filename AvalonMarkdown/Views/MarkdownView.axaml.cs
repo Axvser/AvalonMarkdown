@@ -197,7 +197,7 @@ public partial class MarkdownView : UserControl
 
             ForceLayout();
             // SetReady() is not called here — it's deferred until the JS [READY]
-            // signal from renderer.js. A 5-second monitor will prompt the user
+            // signal from renderer.js. A 20-second monitor will prompt the user
             // if the renderer takes too long to load.
         }
         catch (Exception ex)
@@ -263,7 +263,7 @@ public partial class MarkdownView : UserControl
     // ====================================================================
 
     /// <summary>
-    /// Starts a 5-second monitor that checks if the renderer has become ready.
+    /// Starts a 20-second monitor that checks if the renderer has become ready.
     /// If not, shows a user-facing warning suggesting a reload. The user decides.
     /// No forced SetReady() — this is purely advisory.
     /// </summary>
@@ -276,8 +276,8 @@ public partial class MarkdownView : UserControl
         {
             try
             {
-                // Wait 5 seconds then check on UI thread
-                await Task.Delay(TimeSpan.FromSeconds(5), token);
+                // Wait 20 seconds then check on UI thread
+                await Task.Delay(TimeSpan.FromSeconds(20), token);
                 if (token.IsCancellationRequested) return;
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
