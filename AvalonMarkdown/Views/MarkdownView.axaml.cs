@@ -22,14 +22,50 @@ public partial class MarkdownView : UserControl
     private bool _ready;
     private bool _htmlInjected;
     private string? _pendingMarkdown;
+    private string? _lastRenderedText;
     private string _htmlContent = "";
     private LocalHtmlServer? _localServer;
     // ====================================================================
-    // Static theme management — WeakReference tracks all active instances, reactive theme push
+    // Static theme management
     // ====================================================================
     private static readonly List<WeakReference<MarkdownView>> _instances = new();
     private static readonly object _lock = new();
     private static bool _themeSubscribed;
+
+    // ====================================================================
+    // Bindable Text property — uses Myers diff to avoid redundant re-renders
+    // ====================================================================
+
+    static MarkdownView()
+    {
+        TextProperty.Changed.AddClassHandler<MarkdownView>(OnTextChanged);
+    }
+
+    /// <summary>Gets or sets the Markdown text to render.</summary>
+    public static readonly StyledProperty<string?> TextProperty =
+        AvaloniaProperty.Register<MarkdownView, string?>(
+            nameof(Text),
+            defaultBindingMode: Avalonia.Data.BindingMode.TwoWay,
+            enableDataValidation: false);
+
+    public string? Text
+    {
+        get => GetValue(TextProperty);
+        set => SetValue(TextProperty, value);
+    }
+
+    private static void OnTextChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        var newText = e.NewValue as string;
+
+        // Myers diff: skip if the new value is semantically identical to the last rendered text.
+        // This avoids redundant InvokeScript calls when the binding pushes the same value.
+        if (MyersDiff.AreEqual(sender._lastRenderedText, newText))
+            return;
+
+        sender._lastRenderedText = newText;
+        _ = sender.RenderMarkdownAsync(newText);
+    }
 
     // ====================================================================
     // Public events
@@ -160,8 +196,6 @@ public partial class MarkdownView : UserControl
         {
             ShowError("Init failed", ex.Message);
         }
-
-        await Task.CompletedTask;
     }
 
     private static bool IsDesktop =>
@@ -203,23 +237,23 @@ public partial class MarkdownView : UserControl
         if (_ready) return;
         _ready = true;
 
-        // Defer JS-interaction work to the dispatcher queue so the WebView
-        // has time to finalize its internal state — especially important on
-        // Android where NavigationCompleted may fire before the JS engine
-        // is ready to accept InvokeScript calls.
-        _ = Dispatcher.UIThread.InvokeAsync(() =>
+        // Execute synchronously: on Android, NavigationCompleted fires inside
+        // onPageFinished(); InvokeScript (evaluateJavascript) must be called
+        // synchronously in that context to be reliably delivered.
+        PushThemeToWebView(GetCurrentTheme());
+
+        OnReady?.Invoke(this, EventArgs.Empty);
+
+        if (_pendingMarkdown != null)
         {
-            PushThemeToWebView(GetCurrentTheme());
+            var md = _pendingMarkdown;
+            _pendingMarkdown = null;
+            _ = RenderMarkdownAsync(md);
 
-            OnReady?.Invoke(this, EventArgs.Empty);
-
-            if (_pendingMarkdown != null)
-            {
-                var md = _pendingMarkdown;
-                _pendingMarkdown = null;
-                _ = RenderMarkdownAsync(md);
-            }
-        });
+            // Android WebView may silently drop the first evaluateJavascript
+            // call. Schedule a safety retry at the next dispatcher frame.
+            _ = Dispatcher.UIThread.InvokeAsync(() => _ = RenderMarkdownAsync(md));
+        }
 
         // Browser-side iframe needs multiple layout passes to stabilize initial size
         if (OperatingSystem.IsBrowser())
@@ -631,5 +665,189 @@ public class MarkdownViewErrorEventArgs : EventArgs
     {
         Title = title;
         Message = message;
+    }
+}
+
+// ====================================================================
+// Myers diff algorithm — O(ND) shortest edit script
+// ====================================================================
+
+/// <summary>
+/// Linear-space Myers diff (O(ND) time, O(N) space).
+/// Uses the classic "middle snake" divide-and-conquer to compute the
+/// shortest edit script between two strings — the same algorithm Git uses.
+/// </summary>
+internal static class MyersDiff
+{
+    /// <summary>Returns true if <paramref name="oldText"/> and <paramref name="newText"/> are semantically identical.</summary>
+    public static bool AreEqual(string? oldText, string? newText)
+    {
+        if (ReferenceEquals(oldText, newText)) return true;
+        if (oldText is null || newText is null) return false;
+        if (oldText.Length != newText.Length) return false;
+        return oldText.AsSpan().SequenceEqual(newText.AsSpan());
+    }
+
+    /// <summary>Computes the shortest edit script between two strings.</summary>
+    public static List<EditOp> Diff(string? oldText, string? newText)
+    {
+        var result = new List<EditOp>();
+        ComputeSes(oldText ?? "", newText ?? "", 0, (oldText ?? "").Length, 0, (newText ?? "").Length, result);
+        return result;
+    }
+
+    private static void ComputeSes(string a, string b, int loA, int hiA, int loB, int hiB, List<EditOp> result)
+    {
+        // Trim common prefix
+        while (loA < hiA && loB < hiB && a[loA] == b[loB])
+        {
+            result.Add(new EditOp(OpKind.Equal, b[loB].ToString()));
+            loA++; loB++;
+        }
+
+        // Trim common suffix
+        while (loA < hiA && loB < hiB && a[hiA - 1] == b[hiB - 1])
+        {
+            hiA--; hiB--;
+        }
+
+        var n = hiA - loA;
+        var m = hiB - loB;
+
+        if (n == 0 && m == 0) return;
+
+        if (n == 0)
+        {
+            for (var i = loB; i < hiB; i++)
+                result.Add(new EditOp(OpKind.Insert, b[i].ToString()));
+            return;
+        }
+
+        if (m == 0)
+        {
+            for (var i = loA; i < hiA; i++)
+                result.Add(new EditOp(OpKind.Delete, a[i].ToString()));
+            return;
+        }
+
+        // Find the middle snake using the Myers algorithm
+        var maxD = (n + m + 1) / 2;
+        var maxSize = 2 * maxD + 1;
+        var offset = maxD;
+
+        var vf = new int[maxSize];  // forward search
+        var vb = new int[maxSize];  // backward search
+
+        Array.Fill(vf, -1);
+        Array.Fill(vb, -1);
+
+        vf[1 + offset] = loA;
+        vb[1 + offset] = hiA;
+
+        var x = loA;
+        var y = loB;
+        var found = false;
+
+        for (var d = 0; d <= maxD; d++)
+        {
+            // Forward search
+            for (var k = -d; k <= d; k += 2)
+            {
+                var idx = k + offset;
+                x = (k == -d || (k != d && vf[idx - 1] < vf[idx + 1]))
+                    ? vf[idx + 1]
+                    : vf[idx - 1] + 1;
+                y = x - k;
+
+                while (x < hiA && y < hiB && a[x] == b[y])
+                {
+                    x++; y++;
+                }
+
+                vf[idx] = x;
+
+                // Check for overlap with backward search
+                var bk = hiA - hiB - k;
+                var bidx = bk + offset;
+                if (bk >= -(d - 1) && bk <= (d - 1) && bidx >= 0 && bidx < maxSize)
+                {
+                    if (vb[bidx] != -1 && vf[idx] >= vb[bidx])
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (found) break;
+
+            // Backward search
+            for (var k = -d; k <= d; k += 2)
+            {
+                var idx = k + offset;
+                x = (k == -d || (k != d && vb[idx - 1] > vb[idx + 1]))
+                    ? vb[idx + 1]
+                    : vb[idx - 1] - 1;
+                y = x - (hiA - hiB - k);
+
+                while (x > loA && y > loB && a[x - 1] == b[y - 1])
+                {
+                    x--; y--;
+                }
+
+                vb[idx] = x;
+
+                // Check for overlap with forward search
+                var fk = k + (hiA - hiB);
+                var fidx = fk + offset;
+                if (fk >= -(d) && fk <= d && fidx >= 0 && fidx < maxSize)
+                {
+                    if (vf[fidx] != -1 && vf[fidx] >= vb[idx])
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (found) break;
+        }
+
+        // Recurse on left and right of the middle snake
+        var midA = x;
+        var midB = y;
+
+        ComputeSes(a, b, loA, midA, loB, midB, result);
+
+        // Add the middle snake itself (matching characters)
+        while (midA < hiA && midB < hiB && a[midA] == b[midB])
+        {
+            result.Add(new EditOp(OpKind.Equal, a[midA].ToString()));
+            midA++; midB++;
+        }
+
+        ComputeSes(a, b, midA, hiA, midB, hiB, result);
+    }
+}
+
+/// <summary>Type of edit operation in a diff.</summary>
+internal enum OpKind { Equal, Insert, Delete }
+
+/// <summary>A single edit operation from a Myers diff.</summary>
+internal readonly struct EditOp
+{
+    public OpKind Kind { get; }
+    public string Value { get; }
+
+    public EditOp(OpKind kind, string value)
+    {
+        Kind = kind;
+        Value = value;
+    }
+
+    public void Deconstruct(out OpKind kind, out string value)
+    {
+        kind = Kind;
+        value = Value;
     }
 }

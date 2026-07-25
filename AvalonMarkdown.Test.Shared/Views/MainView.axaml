@@ -83,7 +83,8 @@
               <md:MarkdownThemeView Target="{Binding #Preview}" />
             </Border>
 
-            <md:MarkdownView x:Name="Preview" Grid.Row="4" />
+            <md:MarkdownView x:Name="Preview" Grid.Row="4"
+                              Text="{Binding MarkdownText}" />
         </Grid>
 
         <!-- ═══════ Multi-view mode (3 instances side by side) ═══════ -->
