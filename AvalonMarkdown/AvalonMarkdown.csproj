@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Remove="Assets\logo.png" />
   </ItemGroup>
 
   <ItemGroup>
