@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -25,8 +24,6 @@ public partial class MarkdownView : UserControl
     private string? _pendingMarkdown;
     private string _htmlContent = "";
     private LocalHtmlServer? _localServer;
-    private CancellationTokenSource? _loadCts;
-
     // ====================================================================
     // Static theme management — WeakReference tracks all active instances, reactive theme push
     // ====================================================================
@@ -164,10 +161,6 @@ public partial class MarkdownView : UserControl
             ShowError("Init failed", ex.Message);
         }
 
-        // Start a monitor that warns the user if the renderer takes too long to become ready.
-        // No forced timeouts — the user decides whether to retry.
-        StartLoadStuckMonitor();
-
         await Task.CompletedTask;
     }
 
@@ -196,9 +189,6 @@ public partial class MarkdownView : UserControl
                 await t.WaitAsync(TimeSpan.FromSeconds(5));
 
             ForceLayout();
-            // SetReady() is not called here — it's deferred until the JS [READY]
-            // signal from renderer.js. A 20-second monitor will prompt the user
-            // if the renderer takes too long to load.
         }
         catch (Exception ex)
         {
@@ -211,23 +201,25 @@ public partial class MarkdownView : UserControl
     private void SetReady()
     {
         if (_ready) return;
-
-        // Cancel the load-stuck monitor — we're ready
-        _loadCts?.Cancel();
-
         _ready = true;
 
-        // Sync theme to WebView JS environment after ready
-        PushThemeToWebView(GetCurrentTheme());
-
-        OnReady?.Invoke(this, EventArgs.Empty);
-
-        if (_pendingMarkdown != null)
+        // Defer JS-interaction work to the dispatcher queue so the WebView
+        // has time to finalize its internal state — especially important on
+        // Android where NavigationCompleted may fire before the JS engine
+        // is ready to accept InvokeScript calls.
+        _ = Dispatcher.UIThread.InvokeAsync(() =>
         {
-            var md = _pendingMarkdown;
-            _pendingMarkdown = null;
-            _ = RenderMarkdownAsync(md);
-        }
+            PushThemeToWebView(GetCurrentTheme());
+
+            OnReady?.Invoke(this, EventArgs.Empty);
+
+            if (_pendingMarkdown != null)
+            {
+                var md = _pendingMarkdown;
+                _pendingMarkdown = null;
+                _ = RenderMarkdownAsync(md);
+            }
+        });
 
         // Browser-side iframe needs multiple layout passes to stabilize initial size
         if (OperatingSystem.IsBrowser())
@@ -256,46 +248,6 @@ public partial class MarkdownView : UserControl
         {
             // Silently — layout fix should not block the main flow
         }
-    }
-
-    // ====================================================================
-    // Load-stuck monitor — warns the user without forcing ready
-    // ====================================================================
-
-    /// <summary>
-    /// Starts a 20-second monitor that checks if the renderer has become ready.
-    /// If not, shows a user-facing warning suggesting a reload. The user decides.
-    /// No forced SetReady() — this is purely advisory.
-    /// </summary>
-    private void StartLoadStuckMonitor()
-    {
-        _loadCts?.Cancel();
-        _loadCts = new CancellationTokenSource();
-        var token = _loadCts.Token;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                // Wait 20 seconds then check on UI thread
-                await Task.Delay(TimeSpan.FromSeconds(20), token);
-                if (token.IsCancellationRequested) return;
-
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (token.IsCancellationRequested || _ready) return;
-
-                    ShowError(
-                        "Render Loading",
-                        "The renderer is taking longer than expected to load. " +
-                        "This may be caused by network issues or CDN blocking. " +
-                        "Try ⟳ Retry to reload the preview.");
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancelled via SetReady() or page restart — expected
-            }
-        }, token);
     }
 
     // ====================================================================
@@ -393,9 +345,6 @@ public partial class MarkdownView : UserControl
     /// <summary>Restarts preview (re-navigate / re-inject HTML)</summary>
     public async Task RestartPreviewAsync()
     {
-        // Cancel any pending load-stuck monitor from the previous session
-        _loadCts?.Cancel();
-
         _ready = false;
         _htmlInjected = false;
         _pendingMarkdown = null;
@@ -421,9 +370,6 @@ public partial class MarkdownView : UserControl
                 await _localServer.StartAsync();
                 _webView.Source = new Uri(_localServer.BaseUrl);
             }
-
-            // Start a fresh load-stuck monitor for the new session
-            StartLoadStuckMonitor();
         }
         catch (Exception ex)
         {
