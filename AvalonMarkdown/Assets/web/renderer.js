@@ -578,7 +578,7 @@
         var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
         if (ytMatch) {
             return '<div class="embed-container">' +
-                '<iframe src="https://www.youtube.com/embed/' + ytMatch[1] + '" ' +
+                '<iframe src="https://www.youtube-nocookie.com/embed/' + ytMatch[1] + '" ' +
                 'frameborder="0" allowfullscreen allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" ' +
                 'title="' + escapeHtml(label || 'YouTube Video') + '"></iframe></div>\n';
         }
@@ -642,7 +642,13 @@
                 a.addEventListener('click', (function(url) {
                     return function(e) {
                         e.preventDefault();
-                        window.open(url, '_blank');
+                        // WebView2 (desktop): send to C# to open in OS browser
+                        // WASM/browser: use window.open
+                        if (window.chrome && window.chrome.webview) {
+                            window.chrome.webview.postMessage('[LINK]' + url);
+                        } else {
+                            window.open(url, '_blank');
+                        }
                     };
                 })(href));
             }

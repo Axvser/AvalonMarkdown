@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -23,6 +23,7 @@ public partial class MarkdownView : UserControl
     private bool _htmlInjected;
     private string? _pendingMarkdown;
     private string _htmlContent = "";
+    private LocalHtmlServer? _localServer;
 
     // ====================================================================
     // Static theme management — WeakReference tracks all active instances, reactive theme push
@@ -148,8 +149,12 @@ public partial class MarkdownView : UserControl
 
             if (IsDesktop)
             {
-                var tempFile = WriteTempHtmlFile(_htmlContent);
-                _webView.Source = new Uri("file:///" + tempFile.Replace('\\', '/'));
+                // Start a local HTTP server to serve the HTML page over http://127.0.0.1.
+                // This avoids YouTube error 153 caused by the file:// origin being rejected
+                // by YouTube's iframe embed player.
+                _localServer = new LocalHtmlServer(_htmlContent);
+                await _localServer.StartAsync();
+                _webView.Source = new Uri(_localServer.BaseUrl);
             }
             else if (OperatingSystem.IsBrowser())
             {
@@ -171,23 +176,6 @@ public partial class MarkdownView : UserControl
 
     private static bool IsDesktop =>
         Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-
-    private static string WriteTempHtmlFile(string html)
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "AvalonMarkdown");
-        Directory.CreateDirectory(dir);
-        // Use timestamp to prevent caching
-        var path = Path.Combine(dir, $"preview_{DateTime.Now:HHmmssfff}.html");
-        File.WriteAllText(path, html);
-        // Clean up old temp files from 30 seconds ago
-        try
-        {
-            foreach (var f in Directory.GetFiles(dir, "preview_*.html"))
-                if (f != path && File.GetLastWriteTime(f) < DateTime.Now.AddSeconds(-30))
-                    File.Delete(f);
-        } catch { }
-        return path;
-    }
 
     private async Task InjectViaDocumentWriteAsync()
     {
@@ -315,6 +303,15 @@ public partial class MarkdownView : UserControl
         {
             // Don't show error panel proactively, only fire event for external subscription
             ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", message));
+            return;
+        }
+
+        if (message.StartsWith("[LINK]", StringComparison.OrdinalIgnoreCase))
+        {
+            var url = message[6..].Trim();
+            if (!string.IsNullOrEmpty(url))
+                _ = OpenUrlInBrowserAsync(url);
+            return;
         }
     }
 
@@ -355,8 +352,15 @@ public partial class MarkdownView : UserControl
 
             if (IsDesktop)
             {
-                var tempFile = WriteTempHtmlFile(_htmlContent);
-                _webView.Source = new Uri("file:///" + tempFile.Replace('\\', '/'));
+                // Dispose previous server if any, start a new one
+                if (_localServer is not null)
+                {
+                    await _localServer.DisposeAsync();
+                    _localServer = null;
+                }
+                _localServer = new LocalHtmlServer(_htmlContent);
+                await _localServer.StartAsync();
+                _webView.Source = new Uri(_localServer.BaseUrl);
             }
             else if (OperatingSystem.IsBrowser())
             {
@@ -461,6 +465,33 @@ public partial class MarkdownView : UserControl
             ShowError("Script error", $"{ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Opens a URL in the operating system's default browser.
+    /// On desktop (WebView2), this ensures links bypass the WebView and open externally.
+    /// On WASM/browser, this is a no-op since JS handles the link directly via window.open.
+    /// </summary>
+    private async Task OpenUrlInBrowserAsync(string url)
+    {
+        try
+        {
+            if (IsDesktop)
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError("Open Link", $"Failed to open {url}: {ex.Message}");
+        }
+
+        await Task.CompletedTask;
     }
 
     private void ShowError(string title, string message)
@@ -572,6 +603,20 @@ public partial class MarkdownView : UserControl
         if (variant == ThemeVariant.Dark) return "dark";
 
         return "dark";
+    }
+
+    /// <summary>
+    /// Clean up the local HTTP server when the control is removed from the visual tree.
+    /// </summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+
+        if (_localServer is not null)
+        {
+            _ = _localServer.DisposeAsync();
+            _localServer = null;
+        }
     }
 
     private static string EscapeJsString(string s)
