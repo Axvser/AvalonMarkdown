@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using AvalonMarkdown.Services;
@@ -453,27 +453,22 @@ public partial class MarkdownView : UserControl
 
     /// <summary>
     /// Opens a URL in the operating system's default browser.
-    /// Works on desktop (WebView2) and Android — Process.Start with UseShellExecute
-    /// launches the OS browser. On WASM/browser this is a no-op since JS handles
-    /// the link directly via window.open.
+    /// Uses <see cref="TopLevel.Launcher"/> (cross-platform: desktop, Android, iOS).
     /// </summary>
     private async Task OpenUrlInBrowserAsync(string url)
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.Launcher is { } launcher)
             {
-                FileName = url,
-                UseShellExecute = true
-            };
-            Process.Start(psi);
+                await launcher.LaunchUriAsync(new Uri(url));
+            }
         }
         catch (Exception ex)
         {
             ShowError("Open Link", $"Failed to open {url}: {ex.Message}");
         }
-
-        await Task.CompletedTask;
     }
 
     private void ShowError(string title, string message)
