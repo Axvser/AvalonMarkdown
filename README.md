@@ -20,7 +20,15 @@ dotnet add package AvalonMarkdown
 </Window>
 ```
 
-### 2. 在代码中渲染
+### 2. 数据绑定方式（推荐）
+
+绑定 Markdown 文本到 `Text` 属性，控件自动渲染并去重：
+
+```xml
+<md:MarkdownView Text="{Binding MarkdownContent}" />
+```
+
+### 3. 事件驱动方式
 
 ```csharp
 public partial class MainWindow : Window
@@ -38,22 +46,28 @@ public partial class MainWindow : Window
 
 ## API 参考
 
+### 属性
+
+| 属性     | 类型     | 绑定模式 | 说明                                                   |
+| -------- | -------- | -------- | ------------------------------------------------------ |
+| `Text` | `string?` | TwoWay   | Markdown 文本，自动渲染（带 Myers diff 去重避免重复渲染） |
+
 ### 方法
 
-| 方法                             | 返回              | 说明                                  |
-| -------------------------------- | ----------------- | ------------------------------------- |
-| `RenderMarkdownAsync(string?)` | `Task`          | 渲染 Markdown 内容                    |
-| `RestartPreviewAsync()`        | `Task`          | 重启预览器（重新加载 HTML + JS 环境） |
-| `ApplyConfigAsync(string)`     | `Task`          | 执行 JS 配置调用（如 `setPreviewConfig({...})`） |
-| `InvokeScriptAsync(string)`    | `Task<string?>` | 执行自定义 JavaScript                 |
-| `ApplyCustomCssAsync(string)`  | `Task`          | 注入自定义 CSS 文本以覆盖渲染器主题样式 |
+| 方法                                   | 返回              | 说明                                                         |
+| -------------------------------------- | ----------------- | ------------------------------------------------------------ |
+| `RenderMarkdownAsync(string?)`       | `Task`          | 渲染 Markdown 内容                                           |
+| `RestartPreviewAsync()`              | `Task`          | 重启预览器（重新建立本地 HTTP 服务器 + 导航）                  |
+| `ApplyConfigAsync(string)`           | `Task`          | 执行 JS 配置表达式（如 `"setPreviewConfig({fontSize:16})"`） |
+| `InvokeScriptAsync(string)`          | `Task<string?>` | 执行自定义 JavaScript                                        |
+| `ApplyCustomCssAsync(string)`        | `Task`          | 注入自定义 CSS 以覆盖渲染器主题样式                           |
 
 ### 事件
 
-| 事件              | 参数                                         | 触发时机                                        |
-| ----------------- | -------------------------------------------- | ----------------------------------------------- |
-| `OnReady`       | `EventHandler`                             | 控件完全就绪，可安全调用`RenderMarkdownAsync` |
-| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误                                  |
+| 事件              | 参数                                         | 触发时机                                                   |
+| ----------------- | -------------------------------------------- | ---------------------------------------------------------- |
+| `OnReady`       | `EventHandler`                             | 控件完全就绪（HTML 加载 + JS CDN 脚本加载完成），可安全调用 `RenderMarkdownAsync` |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误                                              |
 
 ### 错误事件参数
 
@@ -77,13 +91,13 @@ public partial class MainWindow : Window
 - **6 种扩展颜色**：次级背景、次级文字、行内代码背景、代码块背景、表格表头背景
 - **排版设置**：正文字号、代码字号、行高、圆角
 - **highlight.js 颜色**：关键字、字符串、注释、类型等独立控制
-- **自动推送**：修改后自动注入 CSS 到绑定的 MarkdownView 控件
+- **自动推送**：修改后自动调用 `ApplyCustomCssAsync` 注入到绑定的 MarkdownView 控件
 
 ## 渲染能力
 
 - **Markdown** — markdown-it 14 + footnote / task-lists / 删除线
 - **数学公式** — KaTeX（行内 `$...$` / 块级 `$$...$$`）
-- **代码高亮** — highlight.js 11，VS Code 风格配色（支持自定义颜色覆盖）
+- **代码高亮** — highlight.js 11，VS Code 风格配色（支持通过 `ApplyCustomCssAsync` 自定义颜色覆盖）
 - **图表** — Mermaid 11（流程图、时序图、饼图、Git 图、类图）
 - **PlantUML** — 通过 `plantuml-encoder` 编码后调用 PlantUML 在线服务渲染 SVG，自动适配深色/浅色主题
 - **视频嵌入** — 支持直接视频文件（`.mp4` / `.webm` / `.ogg` / `.mov` / `.avi` / `.mkv`）和平台 URL 自动识别
@@ -99,38 +113,53 @@ public partial class MainWindow : Window
 ## 跨平台架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MarkdownView 控件                      │
-│   (Avalonia UserControl + NativeWebView)                 │
-├─────────┬──────────┬───────────┬────────────┬────────────┤
-│ Desktop │ Browser  │  Android  │    iOS     │  未来平台   │
-│ WebView2 │ WASM     │ WebView   │ WKWebView  │           │
-│ file://  │ about:   │ data:     │ data:      │           │
-│ 临时文件 │ blank +  │ base64    │ base64     │           │
-│         │ doc.write │           │            │           │
-└─────────┴──────────┴───────────┴────────────┴────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                    MarkdownView 控件                       │
+│   (Avalonia UserControl + NativeWebView)                   │
+├───────────┬───────────┬───────────┬───────────┬───────────┤
+│  Desktop  │  Browser  │  Android  │    iOS    │  未来平台  │
+│ WebView2  │   WASM    │ WebView   │ WKWebView │           │
+│ http://   │ about:    │ http://   │ http://   │           │
+│ 127.0.0.1 │ blank +   │ 127.0.0.1 │ 127.0.0.1 │           │
+│ :dynport  │ doc.write │ :dynport  │ :dynport  │           │
+└───────────┴───────────┴───────────┴───────────┴───────────┘
 ```
 
-**加载策略：**
+### 加载策略
 
-- **Desktop** — 写临时 HTML 文件 → `file:///` 导航（CDN 脚本完整执行）
-- **Browser (WASM)** — `about:blank` → `document.write` 注入（兼容 WASM iframe）
-- **Android / iOS** — `data:text/html;base64` 直接加载（无需 JavaScript 注入）
+所有平台统一使用 `EmbeddedHtmlSourceProvider` 在运行时读取嵌入资源并内联 `renderer.css` / `renderer.js`，然后根据不同平台采用不同加载路径：
+
+- **Desktop（WebView2）** — 启动 `LocalHtmlServer`（循环回环 `http://127.0.0.1:dynamic-port`）→ 导航到该地址
+  - 使用 `http://` 而非 `file://` 以避免第三方 iframe（如 YouTube）的同源策略限制
+- **Android / iOS** — 与 Desktop 相同：启动 `LocalHtmlServer` → `http://127.0.0.1:dynamic-port` 导航
+- **Browser（WASM）** — `about:blank` → `document.write` 注入完整 HTML（WASM 沙箱中无法启动 TCP 服务）
+
+### 平台就绪信号差异
+
+| 平台      | 就绪检测机制                                                                 |
+| --------- | ---------------------------------------------------------------------------- |
+| Desktop   | `NavigationCompleted` 时 CDN 脚本已加载完成，直接 `SetReady()`                 |
+| Android   | `NavigationCompleted` 早于 CDN 脚本加载 → 轮询 `typeof window.renderMarkdown === 'function'`（200ms 间隔，15s 超时） |
+| iOS       | 与 Android 相同（同一体系架构）                                                |
+| Browser   | `InjectViaDocumentWriteAsync` 完成后通过 `document.write` 同步执行 CDN 脚本    |
 
 ## 依赖
 
-| 组件                             | 用途          |
-| -------------------------------- | ------------- |
-| Avalonia 12.0.0                  | UI 框架       |
-| Avalonia.Controls.WebView 12.0.0 | WebView       |
-| markdown-it 14.1.0               | Markdown 解析 |
-| highlight.js 11.10.0             | 代码高亮      |
-| KaTeX 0.16.11                    | 数学公式渲染  |
-| Mermaid 11.4.1                   | 图表渲染      |
-| plantuml-encoder 1.4.0          | PlantUML 编码 |
+| 组件                                        | 用途                   | 加载方式                |
+| ------------------------------------------- | ---------------------- | ----------------------- |
+| Avalonia                                    | UI 框架                 | NuGet                   |
+| Avalonia.Controls.WebView                   | NativeWebView 控件      | NuGet                   |
+| renderer.js（内联）                         | 渲染器核心逻辑          | 嵌入资源（构建时内联）    |
+| renderer.css（内联）                        | 渲染器样式              | 嵌入资源（构建时内联）    |
+| markdown-it 14.1.0 / footnote / task-lists  | Markdown 解析           | CDN（运行时加载）        |
+| highlight.js 11.10.0                        | 代码高亮                | CDN（运行时加载）        |
+| KaTeX 0.16.11                               | 数学公式渲染            | CDN（运行时加载）        |
+| Mermaid 11.4.1                              | 图表渲染                | CDN（运行时加载）        |
+| plantuml-encoder 1.4.0                      | PlantUML 编码           | CDN（运行时加载）        |
 
-所有 JS/CSS 依赖通过 `EmbeddedHtmlSourceProvider` 在构建时内联到 HTML，
-**无需网络连接**，仅 KaTeX CSS 字体与 PlantUML SVG 渲染需在线服务。
+> **网络需求**：仅 `renderer.js` / `renderer.css` / `index.html` 通过嵌入资源在构建时内联。
+> CDN 库（markdown-it、highlight.js、KaTeX、Mermaid、plantuml-encoder）**需要运行时网络加载**。
+> 若 CDN 被网络或跟踪防护拦截，仅影响对应功能（如数学公式或图表无法渲染），基本 Markdown 预览不受影响。
 
 ## 主题系统
 
@@ -142,7 +171,7 @@ public partial class MainWindow : Window
 // 2. JS 端：setTheme('light'|'dark') 切换 CSS class + Mermaid 主题 + 重新渲染
 ```
 
-通过 `MarkdownThemeView` 控件可实现实时颜色自定义，修改结果通过 `setCustomCss()` JS 接口自动注入 WebView。
+通过 `MarkdownThemeView` 控件可实现实时颜色自定义，修改结果通过 `ApplyCustomCssAsync` 接口自动注入 WebView。
 
 ## 许可证
 
