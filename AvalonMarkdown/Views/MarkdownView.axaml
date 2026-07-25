@@ -10,7 +10,7 @@
                 BorderThickness="0,1,0,0"
                 Padding="12,6"
                 IsVisible="False">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                 <!-- Error icon -->
                 <TextBlock Grid.Column="0"
                            Text="⚠"
@@ -32,8 +32,20 @@
                                FontSize="11"
                                Margin="0,2,0,0"/>
                 </StackPanel>
-                <!-- Dismiss button -->
+                <!-- Retry button (reload renderer) -->
                 <Button Grid.Column="2"
+                        x:Name="RetryButton"
+                        Content="⟳ Retry"
+                        FontSize="11"
+                        Background="Transparent"
+                        BorderThickness="1"
+                        BorderBrush="#5c2a2a"
+                        Foreground="#d4a0a0"
+                        Padding="8,2"
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Top"/>
+                <!-- Dismiss button -->
+                <Button Grid.Column="3"
                         x:Name="DismissErrorButton"
                         Content="✕"
                         FontSize="11"
@@ -42,7 +54,7 @@
                         BorderBrush="#5c2a2a"
                         Foreground="#d4a0a0"
                         Padding="8,2"
-                        Margin="12,0,0,0"
+                        Margin="4,0,0,0"
                         VerticalAlignment="Top"/>
             </Grid>
         </Border>

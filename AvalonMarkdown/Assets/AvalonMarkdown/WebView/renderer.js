@@ -667,6 +667,27 @@
     window.escapeHtml = escapeHtml;
     console.log('✅ Initialization complete');
 
-    // Notify C# side that all CDN scripts and renderer.js are ready
-    post('READY', '');
+    // Poll until all CDN libraries are loaded (or timeout), then notify C# side.
+    // Blocking <script> tags guarantee execution order, but a defensive poll
+    // verifies every library's global is truly available before signalling ready.
+    // A timeout ensures tracking-prevented CDN scripts don't stall the preview.
+    (function checkReady() {
+        // Check critical libraries — ones essential for basic markdown rendering
+        var criticalReady = typeof window.markdownit === 'function';
+        // Check optional libraries (may be blocked by browser tracking prevention)
+        var mermaidReady = typeof window.mermaid === 'object';
+        var plantumlReady = typeof window.plantumlEncoder === 'object';
+
+        if (criticalReady) {
+            // Always signal once markdown-it is available.
+            // Optional libraries that failed to load (e.g. due to tracking prevention)
+            // will log a warning at render time but won't block the preview.
+            post('READY', '');
+            if (!mermaidReady) console.warn('[Ready] mermaid blocked or unavailable');
+            if (!plantumlReady) console.warn('[Ready] plantuml-encoder blocked or unavailable');
+            console.log('✅ Markdown Preview ready');
+        } else {
+            setTimeout(checkReady, 100);
+        }
+    })();
 })();

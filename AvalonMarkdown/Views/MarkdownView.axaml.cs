@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -24,6 +25,7 @@ public partial class MarkdownView : UserControl
     private string? _pendingMarkdown;
     private string _htmlContent = "";
     private LocalHtmlServer? _localServer;
+    private CancellationTokenSource? _loadCts;
 
     // ====================================================================
     // Static theme management — WeakReference tracks all active instances, reactive theme push
@@ -116,25 +118,22 @@ public partial class MarkdownView : UserControl
     {
         _webView.NavigationCompleted += OnNavigationCompleted;
 
-        // Subscribe to WebMessageReceived (Avalonia.Controls.WebView 12.0+)
-        // This event fires when JS sends a message via chrome.webview.postMessage (WebView2 / WASM)
-        // or via the platform's native JS bridge (Android / iOS / macOS / Linux).
+        // Subscribe to WebMessageReceived — fires when JS sends a message via
+        // chrome.webview.postMessage (WebView2 / WASM) or the native JS bridge.
+        // Wrap in try-catch for platforms (e.g. Android) where the event may not
+        // be fully supported at runtime despite being present at compile time.
         try
         {
-            var msgEvent = _webView.GetType().GetEvent("WebMessageReceived");
-            if (msgEvent != null)
-            {
-                var handler = Delegate.CreateDelegate(msgEvent.EventHandlerType!,
-                    this, nameof(OnWebViewMessage));
-                msgEvent.AddEventHandler(_webView, handler);
-            }
+            _webView.WebMessageReceived += OnWebViewMessage;
         }
         catch
         {
-            // WebMessageReceived not supported — silently ignore
+            // WebMessageReceived not supported on this platform — silently ignore.
+            // The Desktop/Browser paths don't depend on it for SetReady().
         }
 
         DismissErrorButton.Click += (_, _) => HideError();
+        RetryButton.Click += (_, _) => _ = RestartPreviewAsync();
 
         // Event-driven layout fix: fire once when WebViewHost first gets a valid size
         WebViewHost.EffectiveViewportChanged += OnHostViewportChanged;
@@ -165,6 +164,10 @@ public partial class MarkdownView : UserControl
             ShowError("Init failed", ex.Message);
         }
 
+        // Start a monitor that warns the user if the renderer takes too long to become ready.
+        // No forced timeouts — the user decides whether to retry.
+        StartLoadStuckMonitor();
+
         await Task.CompletedTask;
     }
 
@@ -193,7 +196,9 @@ public partial class MarkdownView : UserControl
                 await t.WaitAsync(TimeSpan.FromSeconds(5));
 
             ForceLayout();
-            await Task.Delay(2000);
+            // SetReady() is not called here — it's deferred until the JS [READY]
+            // signal from renderer.js. A 5-second monitor will prompt the user
+            // if the renderer takes too long to load.
         }
         catch (Exception ex)
         {
@@ -201,13 +206,15 @@ public partial class MarkdownView : UserControl
             _htmlInjected = false;
             return;
         }
-
-        SetReady();
     }
 
     private void SetReady()
     {
         if (_ready) return;
+
+        // Cancel the load-stuck monitor — we're ready
+        _loadCts?.Cancel();
+
         _ready = true;
 
         // Sync theme to WebView JS environment after ready
@@ -252,6 +259,46 @@ public partial class MarkdownView : UserControl
     }
 
     // ====================================================================
+    // Load-stuck monitor — warns the user without forcing ready
+    // ====================================================================
+
+    /// <summary>
+    /// Starts a 5-second monitor that checks if the renderer has become ready.
+    /// If not, shows a user-facing warning suggesting a reload. The user decides.
+    /// No forced SetReady() — this is purely advisory.
+    /// </summary>
+    private void StartLoadStuckMonitor()
+    {
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+        var token = _loadCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Wait 5 seconds then check on UI thread
+                await Task.Delay(TimeSpan.FromSeconds(5), token);
+                if (token.IsCancellationRequested) return;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (token.IsCancellationRequested || _ready) return;
+
+                    ShowError(
+                        "Render Loading",
+                        "The renderer is taking longer than expected to load. " +
+                        "This may be caused by network issues or CDN blocking. " +
+                        "Try ⟳ Retry to reload the preview.");
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled via SetReady() or page restart — expected
+            }
+        }, token);
+    }
+
+    // ====================================================================
     // Event handling
     // ====================================================================
 
@@ -264,6 +311,10 @@ public partial class MarkdownView : UserControl
         {
             _htmlInjected = true;
             ForceLayout();
+            // NavigationCompleted fires when the page frame has loaded all content,
+            // including blocking CDN scripts (markdown-it, highlight.js, mermaid, etc.).
+            // The JS [READY] signal from renderer.js serves as secondary confirmation
+            // and helps verify the JS→C# bridge is functional.
             SetReady();
         }
         else
@@ -287,7 +338,14 @@ public partial class MarkdownView : UserControl
         {
             if (!_ready && _htmlInjected)
             {
-                _ = Dispatcher.UIThread.InvokeAsync(SetReady);
+                try
+                {
+                    _ = Dispatcher.UIThread.InvokeAsync(SetReady);
+                }
+                catch
+                {
+                    // Ignore — SetReady() happens via NavigationCompleted path
+                }
             }
             return;
         }
@@ -335,6 +393,9 @@ public partial class MarkdownView : UserControl
     /// <summary>Restarts preview (re-navigate / re-inject HTML)</summary>
     public async Task RestartPreviewAsync()
     {
+        // Cancel any pending load-stuck monitor from the previous session
+        _loadCts?.Cancel();
+
         _ready = false;
         _htmlInjected = false;
         _pendingMarkdown = null;
@@ -360,6 +421,9 @@ public partial class MarkdownView : UserControl
                 await _localServer.StartAsync();
                 _webView.Source = new Uri(_localServer.BaseUrl);
             }
+
+            // Start a fresh load-stuck monitor for the new session
+            StartLoadStuckMonitor();
         }
         catch (Exception ex)
         {
