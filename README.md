@@ -1,17 +1,18 @@
-# AvalonMarkdown
+﻿# AvalonMarkdown
 
-跨平台 Markdown 预览控件，基于 **AvaloniaUI** + **NativeWebView**。
-写一次控件，运行于 Desktop (WebView2) / Browser (WASM) / Android / iOS。
+> 🌏 [中文文档](README.zh.md)
 
-## 安装
+A Markdown preview control built on **AvaloniaUI**'s **NativeWebView**.
+
+## Installation
 
 ```bash
 dotnet add package AvalonMarkdown
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 在 XAML 中声明
+### 1. Declare in XAML
 
 ```xml
 <Window xmlns="https://github.com/avaloniaui"
@@ -20,15 +21,15 @@ dotnet add package AvalonMarkdown
 </Window>
 ```
 
-### 2. 数据绑定方式（推荐）
+### 2. Data Binding (Recommended)
 
-绑定 Markdown 文本到 `Text` 属性，控件自动渲染并去重：
+Bind Markdown text to the `Text` property; the control automatically renders and deduplicates updates:
 
 ```xml
 <md:MarkdownView Text="{Binding MarkdownContent}" />
 ```
 
-### 3. 事件驱动方式
+### 3. Event-Driven Approach
 
 ```csharp
 public partial class MainWindow : Window
@@ -44,135 +45,227 @@ public partial class MainWindow : Window
 }
 ```
 
-## API 参考
+## API Reference
 
-### 属性
+### Properties
 
-| 属性     | 类型     | 绑定模式 | 说明                                                   |
-| -------- | -------- | -------- | ------------------------------------------------------ |
-| `Text` | `string?` | TwoWay   | Markdown 文本，自动渲染（带 Myers diff 去重避免重复渲染） |
+| Property | Type     | Binding Mode | Description |
+| -------- | -------- | ------------ | ----------- |
+| `Text`   | `string?` | TwoWay       | Markdown text; auto-renders with Myers diff deduplication to avoid redundant renders |
 
-### 方法
+### Methods
 
-| 方法                                   | 返回              | 说明                                                         |
-| -------------------------------------- | ----------------- | ------------------------------------------------------------ |
-| `RenderMarkdownAsync(string?)`       | `Task`          | 渲染 Markdown 内容                                           |
-| `RestartPreviewAsync()`              | `Task`          | 重启预览器（重新建立本地 HTTP 服务器 + 导航）                  |
-| `ApplyConfigAsync(string)`           | `Task`          | 执行 JS 配置表达式（如 `"setPreviewConfig({fontSize:16})"`） |
-| `InvokeScriptAsync(string)`          | `Task<string?>` | 执行自定义 JavaScript                                        |
-| `ApplyCustomCssAsync(string)`        | `Task`          | 注入自定义 CSS 以覆盖渲染器主题样式                           |
+| Method                                       | Return            | Description |
+| -------------------------------------------- | ----------------- | ----------- |
+| `RenderMarkdownAsync(string?)`               | `Task`            | Renders Markdown content |
+| `RestartPreviewAsync()`                      | `Task`            | Restarts the previewer (re-establishes local HTTP server + navigation) |
+| `ApplyConfigAsync(string)`                   | `Task`            | Executes a JS config expression (e.g., `"setPreviewConfig({fontSize:16})"`) |
+| `InvokeScriptAsync(string)`                  | `Task<string?>`   | Executes custom JavaScript |
+| `ApplyCustomCssAsync(string)`                | `Task`            | Injects custom CSS to override renderer theme styles |
 
-### 事件
+### Events
 
-| 事件              | 参数                                         | 触发时机                                                   |
-| ----------------- | -------------------------------------------- | ---------------------------------------------------------- |
-| `OnReady`       | `EventHandler`                             | 控件完全就绪（HTML 加载 + JS CDN 脚本加载完成），可安全调用 `RenderMarkdownAsync` |
-| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误                                              |
+| Event           | Parameters                                  | Trigger Condition |
+| --------------- | ------------------------------------------- | ----------------- |
+| `OnReady`       | `EventHandler`                              | Control is fully ready (HTML loaded + JS CDN scripts loaded); safe to call `RenderMarkdownAsync` |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>`  | Internal recoverable errors (JS runtime errors / CDN load timeout / script timeout / link open failures, etc.) |
 
-### 错误事件参数
+### Built-in Error Panel
 
-| 成员          | 类型         | 说明         |
-| ------------- | ------------ | ------------ |
-| `Title`     | `string`   | 错误标题     |
-| `Message`   | `string`   | 错误详情     |
-| `Timestamp` | `DateTime` | 错误发生时间 |
+`MarkdownView` includes a built-in error panel at the bottom (initially hidden), which automatically appears when internal errors occur:
 
-## MarkdownThemeView（主题编辑器）
+| Control             | Description |
+| ------------------- | ----------- |
+| `ErrorTitle`        | Error title (red) |
+| `ErrorMessage`      | Error details (auto-wrapped) |
+| `RetryButton`       | Click to call `RestartPreviewAsync()` and restart the preview |
+| `DismissErrorButton`| Click to dismiss the error panel |
 
-内置的即用型主题编辑控件，提供 RGB 滑块实时自定义 MarkdownView 渲染外观。
+### Error Event Arguments
+
+| Member      | Type       | Description |
+| ----------- | ---------- | ----------- |
+| `Title`     | `string`   | Error title |
+| `Message`   | `string`   | Error details |
+| `Timestamp` | `DateTime` | Time the error occurred |
+
+## MarkdownThemeView (Theme Editor)
+
+A ready-to-use theme editing control that provides RGB sliders for real-time customization of the MarkdownView rendering appearance.
 
 ```xml
 <md:MarkdownView x:Name="Preview" />
 <md:MarkdownThemeView Target="{Binding #Preview}" />
 ```
 
-支持自定义：
-- **6 种核心颜色**：背景、文字、链接、标题、行内代码、边框（RGB 三通道滑块）
-- **6 种扩展颜色**：次级背景、次级文字、行内代码背景、代码块背景、表格表头背景
-- **排版设置**：正文字号、代码字号、行高、圆角
-- **highlight.js 颜色**：关键字、字符串、注释、类型等独立控制
-- **自动推送**：修改后自动调用 `ApplyCustomCssAsync` 注入到绑定的 MarkdownView 控件
+Collapsed by default; expand the editing panel by clicking the title bar. Supports customization of:
 
-## 渲染能力
+### Colors (RGB Three-Channel Sliders + Real-Time Hex Preview)
 
-- **Markdown** — markdown-it 14 + footnote / task-lists / 删除线
-- **数学公式** — KaTeX（行内 `$...$` / 块级 `$$...$$`）
-- **代码高亮** — highlight.js 11，VS Code 风格配色（支持通过 `ApplyCustomCssAsync` 自定义颜色覆盖）
-- **图表** — Mermaid 11（流程图、时序图、饼图、Git 图、类图）
-- **PlantUML** — 通过 `plantuml-encoder` 编码后调用 PlantUML 在线服务渲染 SVG，自动适配深色/浅色主题
-- **视频嵌入** — 支持直接视频文件（`.mp4` / `.webm` / `.ogg` / `.mov` / `.avi` / `.mkv`）和平台 URL 自动识别
-  - **YouTube** — `youtube.com/watch?v=ID` / `youtu.be/ID` → 响应式 iframe 嵌入
-  - **Bilibili** — `bilibili.com/video/BVxxx` → 响应式 iframe 嵌入
-  - **Vimeo** — `vimeo.com/ID` → 响应式 iframe 嵌入
-- **代码块** — 语言标签 · 复制按钮 · 高度调节（+/- 逐块独立控制）· 可配置最大高度
-- **任务列表** — 自定义复选框
-- **脚注 / 表格 / 引用 / 删除线**
-- **预览配置** — 通过 `setPreviewConfig` 动态调整字体大小、行高、代码语言标签显示、复制按钮开关、代码块最大高度
-- **主题编辑器** — 内置 `MarkdownThemeView` 控件，提供 RGB 滑块实时自定义颜色与排版
+- **6 Core Colors**: Background, Text, Link, Heading, Inline Code Text, Border
+- **6 Extended Colors**: Secondary Background, Secondary Text, Inline Code Background, Code Block Background, Table Header Background, Scrollbar (Thumb/Hover)
+- **Blockquote Colors**: Blockquote Left Border, Blockquote Background
+- **Auto-Derived**: Modifying core color R/G/B channels automatically updates Secondary Background, Secondary Text, Inline Code Background, Code Block Background, Table Header Background, Blockquote Border, and Scrollbar colors
 
-## 跨平台架构
+### Typography
+
+| Property          | Default | Description |
+| ----------------- | ------- | ----------- |
+| `BodyFontSize`    | 14px    | — |
+| `CodeFontSize`    | 13px    | — |
+| `LineHeight`      | 1.6     | — |
+| `BorderRadius`    | 6px     | Code block border radius |
+
+### Mermaid Diagrams
+
+| Property                         | Default | Description |
+| -------------------------------- | ------- | ----------- |
+| `MermaidTheme`                   | `dark`  | `dark` / `light` / `base` |
+| `MermaidBgHex`                   | `#1E1E1E` | RGB three-channel slider |
+| `MermaidContainerPadding`        | 8px     | — |
+| `MermaidContainerMargin`         | 16px    | — |
+| `MermaidBorderRadius`            | 4px     | — |
+
+### PlantUML Diagrams
+
+| Property                 | Default  | Description |
+| ------------------------ | -------- | ----------- |
+| `PumlBgHex`              | `#1E1E1E` | RGB three-channel slider |
+| `PumlContainerPadding`   | 12px     | — |
+| `PumlContainerMargin`    | 8px      | — |
+| `PumlBorderRadius`       | 6px      | — |
+| `PumlDarkInvert`         | 0.882    | CSS `filter: invert()` value in dark mode |
+
+### highlight.js Code Highlighting Colors
+
+Supports independent control of the following syntax highlighting color categories:
+
+| Group                       | Properties (Examples)                 | Default     |
+| --------------------------- | ------------------------------------- | ----------- |
+| Keyword / Literal / Symbol  | `HljsKeyword` / `Literal` / `Symbol` / `Name` | `#569cd6` |
+| Built-in / Type             | `HljsBuiltIn` / `Type`                | `#4ec9b0` |
+| Class / Number              | `HljsClass` / `Number`                | `#b5cea8` |
+| String / Meta-String        | `HljsString` / `MetaString`           | `#d69d85` |
+| Title                       | `HljsTitle` / `TitleClass` / `TitleClassInherited` | `#DCDCAA` / `#4EC9B0` |
+| Parameters / Variables      | `HljsParams` / `Variable` / `TemplateVariable` | `#9CDCFE` / `#bd63c5` |
+| Comments / Quotes           | `HljsComment` / `Quote`               | `#6a9955` |
+| Attributes / Tags / Meta    | `HljsAttr` / `Attribute` / `Meta` / `Tag` | `#9cdcfe` / `#9b9b9b` / `#569cd6` |
+| Selectors                   | `HljsSelectorAttr` / `SelectorClass` / `SelectorId` etc. | `#d7ba7d` |
+| Background / Foreground     | `HljsBackground` / `Foreground`       | `#1e1e1e` / `#dcdcdc` |
+
+### Auto-Push
+
+All property changes automatically mark dirty data; a 10Hz timer periodically calls `ApplyCustomCssAsync` to inject updates into the bound MarkdownView control (held via WeakReference, doesn't block GC).
+
+## Rendering Capabilities
+
+renderer.js loads third-party libraries via CDN and executes the full rendering pipeline inside the WebView:
+
+- **Markdown** — markdown-it 14.1.0 + footnote 4.0.0 + task-lists 2.1.1 + strikethrough
+- **Math Formulas** — KaTeX 0.16.11 (inline `$...$` / block `$$...$$`)
+- **Code Highlighting** — highlight.js 11.10.0, VS Code-style color scheme (supports full token color customization via `ApplyCustomCssAsync` / Theme Editor)
+- **Diagrams** — Mermaid 11.4.1 (flowcharts, sequence diagrams, pie charts, Git graphs, class diagrams, state diagrams)
+- **PlantUML** — Encoded via `plantuml-encoder` 1.4.0 and rendered as SVG through the PlantUML online service, with dark/light theme adaptation (CSS `invert()` + `hue-rotate()`)
+- **Video Embedding** — Supports direct video files (`.mp4` / `.webm` / `.ogg` / `.mov` / `.avi` / `.mkv`) and auto-detection of platform URLs
+  - **YouTube** — `youtube.com/watch?v=ID` / `youtu.be/ID` → responsive iframe embedding
+  - **Bilibili** — `bilibili.com/video/BVxxx` → responsive iframe embedding
+  - **Vimeo** — `vimeo.com/ID` → responsive iframe embedding
+- **Code Blocks** — Language labels · Copy button (with `navigator.clipboard` or `document.execCommand` fallback) · Height adjustment (+/- per-block independent control) · Configurable max height (`maxCodeBlockHeight`)
+- **Task Lists** — Custom checkboxes
+- **Footnotes / Tables / Blockquotes / Strikethrough**
+- **External Links** — Auto-intercepted and opened in the system browser via C# bridge (`window.open` fallback for WASM environments)
+- **Preview Configuration** — Dynamic adjustment via `setPreviewConfig` for font size (`fontSize`), line height (`lineHeight`), code language label display (`showCodeLanguage`), copy button toggle (`showCopyButton`), and code block max height (`maxCodeBlockHeight`)
+- **Theme Editor** — Built-in `MarkdownThemeView` control providing RGB sliders for real-time customization of colors, typography, Mermaid/PlantUML styles, and code highlighting colors
+
+### JS-Exposed Global Functions
+
+| Function                                  | Description |
+| ----------------------------------------- | ----------- |
+| `window.renderMarkdown(text)`             | Renders Markdown text to the preview area |
+| `window.onMarkdownUpdate(text)`           | Alias for `renderMarkdown` |
+| `window.setPreviewConfig(config)`         | Updates preview configuration and re-renders |
+| `window.setTheme(theme)`                  | Switches theme (`'light'` / `'dark'`), updates CSS class + Mermaid theme + re-renders |
+| `window.setCustomCss(cssText)`            | Replaces `<style id="custom-theme-css">` content to override default styles |
+| `window.showPreviewError(detail)`         | Displays a JS runtime error overlay |
+| `window.dismissErrorOverlay()`            | Closes the JS runtime error overlay |
+| `window.escapeHtml(s)`                    | HTML escape utility function |
+
+### WebView Error Handling
+
+- **C# Side**: `MarkdownView` includes a built-in bottom error panel (ErrorPanel) that automatically appears on errors, with retry and dismiss buttons
+- **JS Side**: An `error-overlay` overlay (with close button) inside the WebView is automatically triggered by `window.onerror` and `unhandledrejection`
+- All errors are simultaneously raised via the `ErrorOccurred` event for external subscription
+
+## Cross-Platform Architecture
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│                    MarkdownView 控件                       │
+│                    MarkdownView Control                   │
 │   (Avalonia UserControl + NativeWebView)                   │
 ├───────────┬───────────┬───────────┬───────────┬───────────┤
-│  Desktop  │  Browser  │  Android  │    iOS    │  未来平台  │
-│ WebView2  │   WASM    │ WebView   │ WKWebView │           │
+│  Desktop  │  Browser  │  Android  │    iOS    │  Future   │
+│ WebView2  │   WASM    │ WebView   │ WKWebView │ Platforms │
 │ http://   │ about:    │ http://   │ http://   │           │
 │ 127.0.0.1 │ blank +   │ 127.0.0.1 │ 127.0.0.1 │           │
 │ :dynport  │ doc.write │ :dynport  │ :dynport  │           │
 └───────────┴───────────┴───────────┴───────────┴───────────┘
 ```
 
-### 加载策略
+### Loading Strategy
 
-所有平台统一使用 `EmbeddedHtmlSourceProvider` 在运行时读取嵌入资源并内联 `renderer.css` / `renderer.js`，然后根据不同平台采用不同加载路径：
+All platforms use `EmbeddedHtmlSourceProvider` (implementing `IWebViewSourceProvider`) to read embedded resources at runtime and inline `renderer.css` / `renderer.js`, then follow different loading paths per platform:
 
-- **Desktop（WebView2）** — 启动 `LocalHtmlServer`（循环回环 `http://127.0.0.1:dynamic-port`）→ 导航到该地址
-  - 使用 `http://` 而非 `file://` 以避免第三方 iframe（如 YouTube）的同源策略限制
-- **Android / iOS** — 与 Desktop 相同：启动 `LocalHtmlServer` → `http://127.0.0.1:dynamic-port` 导航
-- **Browser（WASM）** — `about:blank` → `document.write` 注入完整 HTML（WASM 沙箱中无法启动 TCP 服务）
+- **Desktop (WebView2)** — Starts `LocalHtmlServer` (loopback `http://127.0.0.1:dynamic-port`) → navigates to that address
+  - Uses `http://` instead of `file://` to avoid same-origin policy restrictions for third-party iframes (e.g., YouTube)
+- **Android / iOS** — Same as Desktop: starts `LocalHtmlServer` → navigates to `http://127.0.0.1:dynamic-port`
+- **Browser (WASM)** — `about:blank` → `document.write` injects full HTML (TCP services cannot be started within WASM sandbox)
 
-### 平台就绪信号差异
+> **Extension Point**: The `IWebViewSourceProvider` interface allows custom HTML content sources for injecting different page structures or CDN mirror addresses.
 
-| 平台      | 就绪检测机制                                                                 |
-| --------- | ---------------------------------------------------------------------------- |
-| Desktop   | `NavigationCompleted` 时 CDN 脚本已加载完成，直接 `SetReady()`                 |
-| Android   | `NavigationCompleted` 早于 CDN 脚本加载 → 轮询 `typeof window.renderMarkdown === 'function'`（200ms 间隔，15s 超时） |
-| iOS       | 与 Android 相同（同一体系架构）                                                |
-| Browser   | `InjectViaDocumentWriteAsync` 完成后通过 `document.write` 同步执行 CDN 脚本    |
+### Platform Readiness Signal Differences
 
-## 依赖
+| Platform  | Readiness Detection Mechanism |
+| --------- | ----------------------------- |
+| Desktop   | CDN scripts loaded by the time `NavigationCompleted` fires; calls `SetReady()` directly |
+| Android   | `NavigationCompleted` fires before CDN scripts load → polls `typeof window.renderMarkdown === 'function'` (200ms interval, 15s timeout) |
+| iOS       | Same as Android (same architecture) |
+| Browser   | CDN scripts executed synchronously via `document.write` after `InjectViaDocumentWriteAsync` completes |
 
-| 组件                                        | 用途                   | 加载方式                |
-| ------------------------------------------- | ---------------------- | ----------------------- |
-| Avalonia                                    | UI 框架                 | NuGet                   |
-| Avalonia.Controls.WebView                   | NativeWebView 控件      | NuGet                   |
-| renderer.js（内联）                         | 渲染器核心逻辑          | 嵌入资源（构建时内联）    |
-| renderer.css（内联）                        | 渲染器样式              | 嵌入资源（构建时内联）    |
-| markdown-it 14.1.0 / footnote / task-lists  | Markdown 解析           | CDN（运行时加载）        |
-| highlight.js 11.10.0                        | 代码高亮                | CDN（运行时加载）        |
-| KaTeX 0.16.11                               | 数学公式渲染            | CDN（运行时加载）        |
-| Mermaid 11.4.1                              | 图表渲染                | CDN（运行时加载）        |
-| plantuml-encoder 1.4.0                      | PlantUML 编码           | CDN（运行时加载）        |
+## Dependencies
 
-> **网络需求**：仅 `renderer.js` / `renderer.css` / `index.html` 通过嵌入资源在构建时内联。
-> CDN 库（markdown-it、highlight.js、KaTeX、Mermaid、plantuml-encoder）**需要运行时网络加载**。
-> 若 CDN 被网络或跟踪防护拦截，仅影响对应功能（如数学公式或图表无法渲染），基本 Markdown 预览不受影响。
+| Component                                     | Purpose                   | Loading Method |
+| --------------------------------------------- | ------------------------- | -------------- |
+| Avalonia                                      | UI Framework              | NuGet          |
+| Avalonia.Controls.WebView                     | NativeWebView Control     | NuGet          |
+| renderer.js (inlined)                         | Renderer core logic       | Embedded resource (inlined at build time) |
+| renderer.css (inlined)                        | Renderer styles           | Embedded resource (inlined at build time) |
+| markdown-it 14.1.0 / footnote 4.0.0 / task-lists 2.1.1 | Markdown parsing          | CDN (loaded at runtime) |
+| highlight.js 11.10.0                          | Code highlighting         | CDN (loaded at runtime) |
+| KaTeX 0.16.11 / katex.min.css                 | Math formula rendering + CSS styles | CDN (loaded at runtime) |
+| Mermaid 11.4.1                                | Diagram rendering         | CDN (loaded at runtime) |
+| plantuml-encoder 1.4.0                        | PlantUML encoding         | CDN (loaded at runtime) |
 
-## 主题系统
+> **Network Requirements**: Only `renderer.js` / `renderer.css` / `index.html` are embedded resources inlined at build time.
+> CDN libraries (markdown-it and plugins, highlight.js, KaTeX with CSS, Mermaid, plantuml-encoder) **require runtime network loading**.
+> If CDN is blocked by network or tracking protection, only the corresponding features are affected (e.g., math formulas or diagrams fail to render); basic Markdown preview remains functional.
+> The control includes a 15-second JS readiness timeout detection; if exceeded, an error panel is displayed.
 
-支持自动跟随系统主题（Light / Dark），所有活动实例响应式同步：
+## Theme System
+
+Supports automatic system theme following (Light / Dark), with all active instances (managed via a static WeakReference list) synchronizing reactively:
 
 ```csharp
-// 系统主题变化时自动推送
-// 1. C# 端：WebViewHost / NativeWebView 背景色
-// 2. JS 端：setTheme('light'|'dark') 切换 CSS class + Mermaid 主题 + 重新渲染
+// Auto-pushed on system theme change
+// 1. C# side: WebViewHost / NativeWebView background color
+// 2. JS side: setTheme('light'|'dark') toggles CSS class + Mermaid theme + re-renders
 ```
 
-通过 `MarkdownThemeView` 控件可实现实时颜色自定义，修改结果通过 `ApplyCustomCssAsync` 接口自动注入 WebView。
+- On first `MarkdownView` instance creation, subscribes to the global `Application.Current.ActualThemeVariantChanged` event
+- On theme change, iterates through the static instance list and calls `PushThemeToWebView` for each WebView
+- Also updates the theme class in the HTML returned by `LocalHtmlServer` to ensure consistency on restart/refresh
 
-## 许可证
+Real-time color customization is available via the `MarkdownThemeView` control; modifications are automatically injected into the WebView through the `ApplyCustomCssAsync` interface. A 10Hz `DispatcherTimer` with dirty flag ensures efficient batching, avoiding excessive script calls during rapid slider dragging.
+
+## License
 
 MIT © Axvser
