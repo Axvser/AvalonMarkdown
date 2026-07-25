@@ -147,23 +147,17 @@ public partial class MarkdownView : UserControl
             _htmlContent = _sourceProvider.GetHtmlContent();
             _htmlInjected = false;
 
-            if (IsDesktop)
-            {
-                // Start a local HTTP server to serve the HTML page over http://127.0.0.1.
-                // This avoids YouTube error 153 caused by the file:// origin being rejected
-                // by YouTube's iframe embed player.
-                _localServer = new LocalHtmlServer(_htmlContent);
-                await _localServer.StartAsync();
-                _webView.Source = new Uri(_localServer.BaseUrl);
-            }
-            else if (OperatingSystem.IsBrowser())
+            if (OperatingSystem.IsBrowser())
             {
                 _webView.Source = new Uri("about:blank");
             }
             else
             {
-                var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_htmlContent));
-                _webView.Source = new Uri("data:text/html;base64," + base64);
+                // Use a local HTTP server (http://127.0.0.1) instead of file:// or data: URIs.
+                // YouTube's iframe embed rejects non-http origins with error 153.
+                _localServer = new LocalHtmlServer(_htmlContent);
+                await _localServer.StartAsync();
+                _webView.Source = new Uri(_localServer.BaseUrl);
             }
         }
         catch (Exception ex)
@@ -350,7 +344,11 @@ public partial class MarkdownView : UserControl
         {
             _htmlContent = _sourceProvider.GetHtmlContent();
 
-            if (IsDesktop)
+            if (OperatingSystem.IsBrowser())
+            {
+                await InjectViaDocumentWriteAsync();
+            }
+            else
             {
                 // Dispose previous server if any, start a new one
                 if (_localServer is not null)
@@ -361,20 +359,6 @@ public partial class MarkdownView : UserControl
                 _localServer = new LocalHtmlServer(_htmlContent);
                 await _localServer.StartAsync();
                 _webView.Source = new Uri(_localServer.BaseUrl);
-            }
-            else if (OperatingSystem.IsBrowser())
-            {
-                await InjectViaDocumentWriteAsync();
-            }
-            else
-            {
-                // Mobile (Android/iOS): use InvokeScript to navigate via location.href
-                // Navigation from JS side still triggers NativeWebView's NavigationCompleted
-                var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_htmlContent));
-                var script = "location.href='data:text/html;base64," + base64 + "'";
-                var result = _webView.InvokeScript(script);
-                if (result is Task t)
-                    await t.WaitAsync(TimeSpan.FromSeconds(5));
             }
         }
         catch (Exception ex)
@@ -469,22 +453,20 @@ public partial class MarkdownView : UserControl
 
     /// <summary>
     /// Opens a URL in the operating system's default browser.
-    /// On desktop (WebView2), this ensures links bypass the WebView and open externally.
-    /// On WASM/browser, this is a no-op since JS handles the link directly via window.open.
+    /// Works on desktop (WebView2) and Android — Process.Start with UseShellExecute
+    /// launches the OS browser. On WASM/browser this is a no-op since JS handles
+    /// the link directly via window.open.
     /// </summary>
     private async Task OpenUrlInBrowserAsync(string url)
     {
         try
         {
-            if (IsDesktop)
+            var psi = new ProcessStartInfo
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                };
-                Process.Start(psi);
-            }
+                FileName = url,
+                UseShellExecute = true
+            };
+            Process.Start(psi);
         }
         catch (Exception ex)
         {

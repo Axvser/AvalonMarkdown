@@ -13,6 +13,14 @@
             }
         }
     };
+
+    // Post a message to the C# host. Returns true if any bridge succeeded, false if all failed.
+    function postMessageToHost(msg) {
+        try { window.chrome.webview.postMessage(msg); return true; } catch(e) {}
+        try { window.parent.postMessage(msg, '*'); return true; } catch(e) {}
+        try { window.AvaloniaWebViewBridge.postMessage(msg); return true; } catch(e) {}
+        return false;
+    }
     console.log = function() {
         var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
         origLog.apply(console, arguments); post('LOG', m);
@@ -629,8 +637,9 @@
             // Intercept external links:
             // Replace href with javascript:void(0) to prevent ANY native navigation
             // on ALL platforms (WebView2 / Android WebView / iOS WKWebView / WASM).
-            // Then use window.open() — the universal web standard — to open in
-            // system browser / new tab. No platform-specific C# bridge needed.
+            // Then try postMessageToHost (sends [LINK] to C# via available bridge).
+            // C# side opens the URL in the OS browser (Process.Start on desktop/Android).
+            // Falls back to window.open() on WASM where no C# bridge exists.
             var links = preview.querySelectorAll('a[href]');
             for (var i = 0; i < links.length; i++) {
                 var a = links[i];
@@ -642,11 +651,10 @@
                 a.addEventListener('click', (function(url) {
                     return function(e) {
                         e.preventDefault();
-                        // WebView2 (desktop): send to C# to open in OS browser
-                        // WASM/browser: use window.open
-                        if (window.chrome && window.chrome.webview) {
-                            window.chrome.webview.postMessage('[LINK]' + url);
-                        } else {
+                        // Desktop (WebView2): chrome.webview sends [LINK] to C#
+                        // Android: AvaloniaWebViewBridge sends [LINK] to C#
+                        // WASM/browser: fall through to window.open
+                        if (!postMessageToHost('[LINK]' + url)) {
                             window.open(url, '_blank');
                         }
                     };
