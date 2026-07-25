@@ -288,7 +288,7 @@ public partial class MarkdownView : UserControl
     // Event handling
     // ====================================================================
 
-    private void OnNavigationCompleted(object? sender, EventArgs e)
+    private async void OnNavigationCompleted(object? sender, EventArgs e)
     {
         if (_htmlInjected || _ready)
             return;
@@ -297,11 +297,21 @@ public partial class MarkdownView : UserControl
         {
             _htmlInjected = true;
             ForceLayout();
-            // NavigationCompleted fires when the page frame has loaded all content,
-            // including blocking CDN scripts (markdown-it, highlight.js, mermaid, etc.).
-            // The JS [READY] signal from renderer.js serves as secondary confirmation
-            // and helps verify the JS→C# bridge is functional.
-            SetReady();
+
+            if (IsDesktop)
+            {
+                // Desktop (WebView2): NavigationCompleted fires after the page frame
+                // and all blocking CDN scripts have loaded — safe to SetReady immediately.
+                SetReady();
+            }
+            else
+            {
+                // Android/iOS: NavigationCompleted may fire before JS CDN scripts
+                // (markdown-it, highlight.js, mermaid, etc.) have finished loading.
+                // Wait for JS readiness before signaling that the preview is ready.
+                await WaitForJsReadyAsync();
+                SetReady();
+            }
         }
         else
         {
@@ -350,6 +360,75 @@ public partial class MarkdownView : UserControl
             if (!string.IsNullOrEmpty(url))
                 _ = OpenUrlInBrowserAsync(url);
             return;
+        }
+    }
+
+    // ====================================================================
+    // JS readiness polling (Android / iOS)
+    // ====================================================================
+
+    /// <summary>
+    /// Polls the WebView JS environment until <c>window.renderMarkdown</c> is available,
+    /// or a 15-second timeout is reached. Used on Android/iOS where NavigationCompleted
+    /// may fire before CDN scripts (markdown-it, highlight.js, etc.) finish loading.
+    /// </summary>
+    private async Task WaitForJsReadyAsync()
+    {
+        const int maxRetries = 75; // ~15 seconds at 200ms intervals
+        for (var i = 0; i < maxRetries; i++)
+        {
+            if (await CheckJsReadyAsync())
+                return;
+            await Task.Delay(200);
+        }
+
+        // Timeout: JS didn't become ready — show error but still allow SetReady
+        // so the preview doesn't hang forever.
+        ShowError("JS Ready Timeout",
+            "CDN scripts failed to load after 15s. Check network or tracking protection.");
+    }
+
+    /// <summary>
+    /// Checks if <c>window.renderMarkdown</c> is available in the WebView JS context.
+    /// Handles both Desktop (synchronous string result) and Android (Task&lt;string?&gt; via evaluateJavascript).
+    ///
+    /// IMPORTANT: The JS expression must return a <b>non-string</b> value (number or boolean),
+    /// because Android's evaluateJavascript JSON-encodes string results (adding quotes),
+    /// which would make a simple equality check like <c>value == "1"</c> always fail.
+    /// Numbers and booleans JSON-encode without extra quoting.
+    /// </summary>
+    private async Task<bool> CheckJsReadyAsync()
+    {
+        try
+        {
+            // Use number 1/0 instead of string '1'/''
+            // to avoid JSON encoding adding quotes on Android's evaluateJavascript.
+            var script = "typeof window.renderMarkdown === 'function' ? 1 : 0";
+            var result = _webView.InvokeScript(script);
+
+            if (result is Task<string?> task)
+            {
+                // Android: InvokeScript returns Task<string?> via evaluateJavascript.
+                // evaluateJavascript JSON-encodes the result; for numbers the encoding
+                // is just the bare number string (no extra quotes).
+                var value = await task.WaitAsync(TimeSpan.FromSeconds(3));
+                return string.Equals(value?.Trim(), "1", StringComparison.Ordinal);
+            }
+
+            if (result is Task t)
+            {
+                // Unknown platform with Task return — await and assume ready
+                await t.WaitAsync(TimeSpan.FromSeconds(3));
+                return true;
+            }
+
+            // Desktop (WebView2): InvokeScript returns the string directly.
+            // ExecuteScriptAsync also returns a JSON-encoded result.
+            return string.Equals(result?.ToString()?.Trim(), "1", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
         }
     }
 
