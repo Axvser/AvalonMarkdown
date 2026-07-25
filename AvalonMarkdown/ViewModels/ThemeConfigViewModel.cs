@@ -136,6 +136,9 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CodeBgHex));
         OnPropertyChanged(nameof(PreBgHex));
         OnPropertyChanged(nameof(TableBgHex));
+        OnPropertyChanged(nameof(MermaidBgHex));
+        OnPropertyChanged(nameof(MermaidThemeDisplay));
+        OnPropertyChanged(nameof(PumlBgHex));
         OnPropertyChanged(nameof(BodyFontSize));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(LineHeight));
@@ -286,7 +289,70 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     public string TableBgHex => $"#{TableBgR:X2}{TableBgG:X2}{TableBgB:X2}";
     // ──────────────────────────────────────────────────
 
-    public string MermaidTheme { get; set; } = "dark";
+    // ════════════════════════════════════════════════════════════
+    //  Mermaid Diagrams section
+    // ════════════════════════════════════════════════════════════
+
+    #region Mermaid properties
+    private string _mermaidTheme = "dark";
+    public string MermaidTheme
+    {
+        get => _mermaidTheme;
+        set
+        {
+            if (SetProperty(ref _mermaidTheme, value))
+            {
+                OnPropertyChanged(nameof(MermaidThemeDisplay));
+                MarkDirty();
+            }
+        }
+    }
+
+    /// <summary>Display label for the theme value (used in UI).</summary>
+    public string MermaidThemeDisplay => _mermaidTheme;
+
+    // Mermaid container background
+    private int _mermaidBgR = 30;
+    private int _mermaidBgG = 30;
+    private int _mermaidBgB = 30;
+    public int MermaidBgR { get => _mermaidBgR; set => SetProperty(ref _mermaidBgR, value); }
+    public int MermaidBgG { get => _mermaidBgG; set => SetProperty(ref _mermaidBgG, value); }
+    public int MermaidBgB { get => _mermaidBgB; set => SetProperty(ref _mermaidBgB, value); }
+    public string MermaidBgHex => $"#{MermaidBgR:X2}{MermaidBgG:X2}{MermaidBgB:X2}";
+
+    private double _mermaidContainerPadding = 8;
+    private double _mermaidContainerMargin = 16;
+    private int _mermaidBorderRadius = 4;
+
+    public double MermaidContainerPadding { get => _mermaidContainerPadding; set => SetProperty(ref _mermaidContainerPadding, value); }
+    public double MermaidContainerMargin  { get => _mermaidContainerMargin;  set => SetProperty(ref _mermaidContainerMargin,  value); }
+    public int    MermaidBorderRadius     { get => _mermaidBorderRadius;     set => SetProperty(ref _mermaidBorderRadius,     value); }
+    #endregion
+
+    // ════════════════════════════════════════════════════════════
+    //  PlantUML Diagrams section
+    // ════════════════════════════════════════════════════════════
+
+    #region PlantUML properties
+    // PlantUML container background
+    private int _pumlBgR = 30;
+    private int _pumlBgG = 30;
+    private int _pumlBgB = 30;
+    public int PumlBgR { get => _pumlBgR; set => SetProperty(ref _pumlBgR, value); }
+    public int PumlBgG { get => _pumlBgG; set => SetProperty(ref _pumlBgG, value); }
+    public int PumlBgB { get => _pumlBgB; set => SetProperty(ref _pumlBgB, value); }
+    public string PumlBgHex => $"#{PumlBgR:X2}{PumlBgG:X2}{PumlBgB:X2}";
+
+    private double _pumlContainerPadding = 12;
+    private double _pumlContainerMargin = 8;
+    private int _pumlBorderRadius = 6;
+    private double _pumlDarkInvert = 0.882;
+
+    public double PumlContainerPadding { get => _pumlContainerPadding; set => SetProperty(ref _pumlContainerPadding, value); }
+    public double PumlContainerMargin  { get => _pumlContainerMargin;  set => SetProperty(ref _pumlContainerMargin,  value); }
+    public int    PumlBorderRadius     { get => _pumlBorderRadius;     set => SetProperty(ref _pumlBorderRadius,     value); }
+    public double PumlDarkInvert       { get => _pumlDarkInvert;       set => SetProperty(ref _pumlDarkInvert,       value); }
+    #endregion
 
     // ──────────────────────────────────────────────────
     //  highlight.js — keyword / literal / symbol / name
@@ -501,6 +567,35 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         sb.AppendLine("html.theme-dark .hljs-literal,");
         sb.AppendLine("html.theme-light .hljs-literal {");
         sb.AppendLine($"    color: {HljsLiteral};");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  Mermaid Diagrams
+        // ════════════════════════════════════════════════════════════
+        sb.AppendLine("/* === Mermaid diagram overrides === */");
+        sb.AppendLine($".mermaid-container {{");
+        sb.AppendLine($"    background: {MermaidBgHex};");
+        sb.AppendLine($"    padding: {MermaidContainerPadding}px;");
+        sb.AppendLine($"    margin: {MermaidContainerMargin}px 0;");
+        sb.AppendLine($"    border-radius: {MermaidBorderRadius}px;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  PlantUML Diagrams
+        // ════════════════════════════════════════════════════════════
+        sb.AppendLine("/* === PlantUML diagram overrides === */");
+        sb.AppendLine($".puml-container {{");
+        sb.AppendLine($"    background: {PumlBgHex};");
+        sb.AppendLine($"    padding: {PumlContainerPadding}px;");
+        sb.AppendLine($"    margin: {PumlContainerMargin}px 0;");
+        sb.AppendLine($"    border-radius: {PumlBorderRadius}px;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+        sb.AppendLine(".puml-dark img {");
+        sb.AppendLine($"    filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
+        sb.AppendLine($"    -webkit-filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
         sb.AppendLine("}");
 
         return sb.ToString();
