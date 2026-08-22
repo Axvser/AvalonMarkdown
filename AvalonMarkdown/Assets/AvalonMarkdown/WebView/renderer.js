@@ -5,12 +5,30 @@
     // Android native WebView via Avalonia's built-in JavaScriptInterface).
     var origLog = console.log, origWarn = console.warn, origError = console.error;
     var post = function(level, msg) {
-        try { window.chrome.webview.postMessage('[' + level + '] ' + msg); } catch(e) {
-            // Fallback: for environments without chrome.webview (e.g. old Android),
-            // try window.parent.postMessage and Avalonia bridge.
-            try { window.parent.postMessage('[' + level + '] ' + msg, '*'); } catch(e2) {
-                try { window.AvaloniaWebViewBridge.postMessage('[' + level + '] ' + msg); } catch(e3) {}
-            }
+        var data = '[' + level + '] ' + msg;
+        // Try every known Avalonia JS→C# bridge in order. Only the first that
+        // succeeds is used; guards keep a throwing bridge from breaking the rest.
+        if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            try { window.chrome.webview.postMessage(data); return; } catch (e) { /* next */ }
+        }
+        if (window.AvaloniaWebViewBridge && window.AvaloniaWebViewBridge.postMessage) {
+            try { window.AvaloniaWebViewBridge.postMessage(data); return; } catch (e) { /* next */ }
+        }
+        if (typeof window.invokeCSharpAction === 'function') {
+            try { window.invokeCSharpAction(data); return; } catch (e) { /* next */ }
+        }
+        if (window.external && typeof window.external.notify === 'function') {
+            try { window.external.notify(data); return; } catch (e) { /* next */ }
+        }
+        if (window.webkit && window.webkit.messageHandlers &&
+            window.webkit.messageHandlers.postAvWebViewMessage) {
+            try { window.webkit.messageHandlers.postAvWebViewMessage.postMessage(data); return; } catch (e) { /* next */ }
+        }
+        // Browser/WASM iframe without any bridge shim → relay to the host page.
+        // Guard with window.parent !== window so a top-level page (Android WebView)
+        // never self-posts and swallows the message.
+        if (window.parent !== window) {
+            try { window.parent.postMessage(data, '*'); } catch (e2) { /* last resort */ }
         }
     };
     console.log = function() {
@@ -783,8 +801,11 @@
                         // and iframe (window.parent.postMessage) — same chain used for console logs.
                         post('LINK', url);
                         // Pure browser / WASM: no bridge available, post() silently fails.
-                        // Fall back to window.open for these environments.
-                        if (!window.chrome?.webview && !window.AvaloniaWebViewBridge) {
+                        // Fall back to window.open — but only for web-safe schemes. A custom
+                        // scheme like app:// must never trigger window.open (Android WebView
+                        // would show net::ERR_UNKNOWN_URL_SCHEME); it is meant for C# interception.
+                        if (!window.chrome?.webview && !window.AvaloniaWebViewBridge &&
+                            /^(https?|mailto|tel):/i.test(url)) {
                             window.open(url, '_blank');
                         }
                     };

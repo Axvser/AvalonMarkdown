@@ -147,6 +147,16 @@ public partial class MainView : UserControl
             await Task.Delay(500);
             _captureLog.AppendLine("[filter] done — real-preview-error should be present, injected-extension-error absent");
 
+            // Verify the app:// link pipeline end-to-end: click dispatch → post('LINK')
+            // → C# LinkClicked → demo swaps content (this is what Android hit).
+            _captureLog.AppendLine("\n=== Phase: app:// link interception ===");
+            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            var clickResult = await _singlePreview.InvokeScriptAsync(
+                "var a = document.querySelector('a[data-href=\"app://about\"]'); a ? (a.click(), 1) : 0;");
+            await Task.Delay(500);
+            var swapped = _vm.MarkdownText.StartsWith("# 📖");
+            _captureLog.AppendLine($"[applink] dispatch={clickResult} markdown-swapped={swapped}");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)
