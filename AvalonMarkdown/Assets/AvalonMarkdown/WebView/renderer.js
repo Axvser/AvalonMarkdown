@@ -668,18 +668,29 @@
     // scrollbar — wheel, touch, keyboard, or thumb drag — auto-scroll is suspended
     // until they stop for `autoScrollCooldown` ms.
     var scrollState = {
-        lastUserActivity: 0,  // 0 = never scrolled → always follow
-        programmatic: false   // guard flag for our own scrollToBottom() calls
+        lastUserActivity: 0,       // 0 = never scrolled → always follow
+        programmaticTarget: null   // scrollTop we asked for via auto-scroll, or null
     };
 
     function markUserScroll() {
         scrollState.lastUserActivity = Date.now();
     }
 
-    // A scroll-position change we didn't trigger means the user scrolled
-    // (scrollbar drag / wheel / touch / keyboard). Passive — we never preventDefault.
+    // A scroll-position change is "the user's" unless it lands on the target we set
+    // programmatically. Position comparison (not a timer) is used because the scroll
+    // event from scrollTop assignment is async and can be delayed past any fixed
+    // timeout under heavy layout (e.g. wide streaming tables) — a delayed event must
+    // still be recognized as ours, or auto-scroll would misclassify it as a user
+    // scroll and suppress itself for the whole cooldown.
     window.addEventListener('scroll', function() {
-        if (scrollState.programmatic) return;
+        if (scrollState.programmaticTarget !== null) {
+            var scroller = document.scrollingElement || document.documentElement || document.body;
+            if (Math.abs(scroller.scrollTop - scrollState.programmaticTarget) <= 2) {
+                scrollState.programmaticTarget = null;  // reached our own target → ours
+                return;
+            }
+            scrollState.programmaticTarget = null;  // user moved away from our target
+        }
         markUserScroll();
     }, { passive: true });
 
@@ -705,10 +716,8 @@
 
     function scrollToBottom() {
         var scroller = document.scrollingElement || document.documentElement || document.body;
-        scrollState.programmatic = true;
-        scroller.scrollTop = scroller.scrollHeight;
-        // Clear the guard shortly after so genuine user scrolls are detected again.
-        setTimeout(function() { scrollState.programmatic = false; }, 80);
+        scrollState.programmaticTarget = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        scroller.scrollTop = scrollState.programmaticTarget;
     }
 
     function maybeAutoScroll() {
@@ -722,12 +731,10 @@
         var p = Math.max(0, Math.min(100, Number(percent) || 0));
         var scroller = document.scrollingElement || document.documentElement || document.body;
         var max = scroller.scrollHeight - scroller.clientHeight;
-        scrollState.programmatic = true;
         scroller.scrollTop = max > 0 ? max * (p / 100) : 0;
         // Treat the jump like a manual scroll so auto-scroll doesn't immediately
         // yank the view back to the bottom on the next content update.
         scrollState.lastUserActivity = Date.now();
-        setTimeout(function() { scrollState.programmatic = false; }, 80);
     };
 
     // Current vertical scroll progress (0-100) of the document, for scroll-sync.
@@ -739,11 +746,9 @@
     };
 
     function scrollToHeading(el) {
-        scrollState.programmatic = true;
         el.scrollIntoView({ block: 'start' });
         // Treat the jump like a manual scroll so auto-scroll doesn't yank back.
         scrollState.lastUserActivity = Date.now();
-        setTimeout(function() { scrollState.programmatic = false; }, 80);
     }
 
     // Scroll to the heading whose rendered text matches (case-insensitive, exact

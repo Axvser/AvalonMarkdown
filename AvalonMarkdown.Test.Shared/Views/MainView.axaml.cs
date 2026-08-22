@@ -119,6 +119,30 @@ public partial class MainView : UserControl
                 _captureLog.AppendLine($"[scroll] set={target} read={read?.ToString("0.#") ?? "null"}");
             }
 
+            // Agent-style streaming: rapid updates with a growing table must keep the
+            // view pinned to the bottom (auto-scroll follows). This is the table case
+            // where a delayed scroll event used to misclassify auto-scroll as a user
+            // scroll and suppress itself for the whole cooldown.
+            _captureLog.AppendLine("\n=== Phase: auto-scroll follows streaming table ===");
+            var seed = new StringBuilder("# Streaming\n\n| # | A | B | C | D |\n|---|---|---|---|---|\n");
+            for (int i = 0; i < 30; i++) seed.AppendLine($"| {i} | a{i} | b{i} | c{i} | d{i} |");
+            _vm.MarkdownText = seed.ToString();
+            await Task.Delay(400); // let the initial render + auto-scroll settle
+            var streamLagged = false;
+            for (int i = 0; i < 12; i++)
+            {
+                seed.AppendLine($"| {30 + i} | extra-a{i} | extra-b{i} | extra-c{i} | extra-d{i} |");
+                _vm.MarkdownText = seed.ToString();
+                await Task.Delay(80);
+                var p = await _singlePreview!.GetScrollProgressAsync();
+                if (p is null || p < 95)
+                {
+                    streamLagged = true;
+                    _captureLog.AppendLine($"[stream] iter={i} progress={p?.ToString("0.#") ?? "null"} (expect ~100)");
+                }
+            }
+            _captureLog.AppendLine($"[stream] done lagged={streamLagged} (expect False)");
+
             // Verify heading listing + navigation (for TOC).
             _captureLog.AppendLine("\n=== Phase: heading navigation ===");
             var headings = await _singlePreview!.GetHeadingsAsync();
