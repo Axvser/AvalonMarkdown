@@ -1,4 +1,8 @@
 using System;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using AvalonMarkdown.Views;
 using AvalonMarkdown.Test.Shared.ViewModels;
@@ -11,6 +15,11 @@ public partial class MainView : UserControl
     private MarkdownView? _singlePreview;
     private MarkdownView? _multiPv1, _multiPv2, _multiPv3;
     private bool _multiViewMode;
+
+    // ── Automated error-capture test (AVALON_CAPTURE_ERRORS=1) ──
+    private readonly StringBuilder _captureLog = new();
+    private bool _captureDone;
+    private bool _captureStarted;
 
     public MainView()
     {
@@ -26,6 +35,10 @@ public partial class MainView : UserControl
             _vm.RecordReady(1);
             _vm.RecordRendered(1);
         };
+
+        // When AVALON_CAPTURE_ERRORS=1, run the automated error-capture test and exit.
+        if (Environment.GetEnvironmentVariable("AVALON_CAPTURE_ERRORS") == "1")
+            StartCaptureTest();
 
         // LinkClicked example: intercept app:// links for in-app navigation.
         // Everything else (https://, mailto:, …) is left unhandled and still opens
@@ -47,6 +60,110 @@ public partial class MainView : UserControl
             EditorArrowExpanded.IsVisible = _vm.EditorExpanded;
             EditorArrowCollapsed.IsVisible = !_vm.EditorExpanded;
         };
+    }
+
+    // ====================================================================
+    // Automated error-capture test
+    // ====================================================================
+
+    private void StartCaptureTest()
+    {
+        _captureLog.AppendLine("=== AvalonMarkdown error-capture test ===");
+
+        // Capture unhandled C# exceptions.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            _captureLog.AppendLine($"[FATAL][C#] UnhandledException: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            _captureLog.AppendLine($"[FATAL][C#] UnobservedTaskException: {e.Exception}");
+            e.SetObserved();
+        };
+
+        // Capture every JS console message (renderer.js bridges console.log/warn/error).
+        _singlePreview!.ConsoleMessage += (_, e) =>
+            _captureLog.AppendLine($"[JS:{e.Level}] {e.Message}");
+        _singlePreview.ErrorOccurred += (_, e) =>
+            _captureLog.AppendLine($"[C#-Event] ErrorOccurred: {e.Title} — {e.Message}");
+
+        // Start the sequence once the preview is ready; watchdog in case it never is.
+        _singlePreview.OnReady += (_, _) => BeginCaptureSequence();
+        _ = Task.Delay(TimeSpan.FromSeconds(45)).ContinueWith(_ => FinishCapture(timeout: true));
+    }
+
+    private void BeginCaptureSequence()
+    {
+        if (_captureStarted) return;
+        _captureStarted = true;
+        _ = RunCaptureSequenceAsync();
+    }
+
+    private async Task RunCaptureSequenceAsync()
+    {
+        try
+        {
+            // Each phase waits for the JS "✅ Render complete" signal (via ConsoleMessage),
+            // then a grace delay lets async mermaid/plantuml errors land.
+            await RunPhaseAsync("Simple", () => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown());
+            await RunPhaseAsync("Full (incl. intentionally-broken mermaid/plantuml)",
+                () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("BigDoc", () => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown());
+
+            FinishCapture(timeout: false);
+        }
+        catch (Exception ex)
+        {
+            _captureLog.AppendLine($"[FATAL][C#] capture driver: {ex}");
+            FinishCapture(timeout: false);
+        }
+    }
+
+    private async Task RunPhaseAsync(string name, Action load)
+    {
+        _captureLog.AppendLine($"\n=== Phase: {name} ===");
+        load();
+
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<MarkdownConsoleMessageEventArgs>? watcher = null;
+        watcher = (_, e) =>
+        {
+            if (e.Level == "LOG" && e.Message.Contains("Render complete")) completed.TrySetResult(true);
+        };
+        _singlePreview!.ConsoleMessage += watcher;
+        try
+        {
+            if (await Task.WhenAny(completed.Task, Task.Delay(TimeSpan.FromSeconds(12))) == completed.Task)
+                _captureLog.AppendLine($"[phase] '{name}' render completed");
+            else
+                _captureLog.AppendLine($"[phase] '{name}' TIMEOUT waiting for render-complete");
+        }
+        finally
+        {
+            _singlePreview.ConsoleMessage -= watcher;
+        }
+
+        // Grace period for async diagram (mermaid/plantuml) errors to surface.
+        await Task.Delay(TimeSpan.FromSeconds(2));
+    }
+
+    private void FinishCapture(bool timeout)
+    {
+        if (_captureDone) return;
+        _captureDone = true;
+
+        if (timeout)
+            _captureLog.AppendLine("\n[FATAL] watchdog timeout — preview never became ready");
+
+        try
+        {
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "error-capture.log");
+            File.WriteAllText(path, _captureLog.ToString());
+            Console.WriteLine($"[capture] wrote {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[capture] failed to write log: {ex.Message}");
+        }
+        Environment.Exit(timeout ? 1 : 0);
     }
 
     /// <summary>

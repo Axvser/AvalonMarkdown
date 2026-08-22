@@ -80,6 +80,8 @@ public partial class MainViewModel : ViewModelBase
     public static string GetDefaultMarkdown() => """
         # Markdown Rendering Test Suite 🎯
 
+        A feature tour of **AvalonMarkdown** — text formatting, links, lists, tables, math (KaTeX), code highlighting, diagrams (Mermaid / PlantUML), video embeds, footnotes, HTML, and error resilience.
+
         ## 1. Text Formatting
 
         **Bold** *Italic* ~~Strikethrough~~ `Inline code` <u>Underline (HTML)</u>
@@ -160,10 +162,10 @@ public partial class MainViewModel : ViewModelBase
 
         Inline math: $E = mc^2$
 
-        Block math:
+        Block math — the quadratic formula:
 
         $$
-        \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}
+        x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
         $$
 
         ## 8. Mermaid Diagrams

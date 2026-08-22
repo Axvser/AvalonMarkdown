@@ -87,6 +87,13 @@ public partial class MarkdownView : UserControl
     /// </summary>
     public event EventHandler<MarkdownLinkClickedEventArgs>? LinkClicked;
 
+    /// <summary>
+    /// Fires for every console message emitted by the WebView's JavaScript
+    /// (log / warn / error / unhandled rejection). Useful for diagnostics —
+    /// fatal JS errors also surface through <see cref="ErrorOccurred"/>.
+    /// </summary>
+    public event EventHandler<MarkdownConsoleMessageEventArgs>? ConsoleMessage;
+
     // ====================================================================
     // Construction
     // ====================================================================
@@ -366,11 +373,20 @@ public partial class MarkdownView : UserControl
             return;
         }
 
-        if (message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
+        if (message.StartsWith("[LOG]", StringComparison.OrdinalIgnoreCase) ||
+            message.StartsWith("[WARN]", StringComparison.OrdinalIgnoreCase) ||
+            message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
             message.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase))
         {
-            // Don't show error panel proactively, only fire event for external subscription
-            ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", message));
+            // Surface every JS console message for diagnostics.
+            var close = message.IndexOf(']');
+            var level = close > 0 ? message[1..close].ToUpperInvariant() : "LOG";
+            var text = close > 0 ? message[(close + 1)..].Trim() : message;
+            ConsoleMessage?.Invoke(this, new MarkdownConsoleMessageEventArgs(level, text));
+
+            // Fatal JS errors also surface through ErrorOccurred (no error panel).
+            if (level is "ERR" or "ERROR")
+                ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", text));
             return;
         }
 
@@ -812,6 +828,26 @@ public class MarkdownLinkClickedEventArgs : EventArgs
     public MarkdownLinkClickedEventArgs(string url)
     {
         Url = url;
+    }
+}
+
+/// <summary>
+/// Event arguments for <see cref="MarkdownView.ConsoleMessage"/> — a console message
+/// emitted by the WebView's JavaScript. <see cref="Level"/> is one of
+/// <c>LOG</c> / <c>WARN</c> / <c>ERR</c>.
+/// </summary>
+public class MarkdownConsoleMessageEventArgs : EventArgs
+{
+    /// <summary>The console level: LOG, WARN, or ERR.</summary>
+    public string Level { get; }
+
+    /// <summary>The message text emitted by JavaScript.</summary>
+    public string Message { get; }
+
+    public MarkdownConsoleMessageEventArgs(string level, string message)
+    {
+        Level = level;
+        Message = message;
     }
 }
 
