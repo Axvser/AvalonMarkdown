@@ -30,7 +30,7 @@
     // Browser extensions / ad & translate scripts inject code that throws errors
     // unrelated to the preview (e.g. Google Translate's www.google.com/js/th/...).
     // Filter those so the error stream only surfaces errors from the preview itself.
-    var EXTERNAL_NOISE = /google\.com|googleapis\.com|gstatic\.com|doubleclick\.net|googletagmanager\.com|google-analytics\.com|translate\.|chrome-extension:\/\/|moz-extension:\/\/|ms-browser-extension:\/\/|safari-extension:\/\//i;
+    var EXTERNAL_NOISE = /google\.com|googleapis\.com|gstatic\.com|vimeocdn\.com|player\.vimeo\.com|doubleclick\.net|googletagmanager\.com|google-analytics\.com|translate\.|chrome-extension:\/\/|moz-extension:\/\/|ms-browser-extension:\/\/|safari-extension:\/\//i;
     function isExternalNoise(text) {
         return EXTERNAL_NOISE.test(String(text || ''));
     }

@@ -5,6 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="./app.css" />
+    <script>
+        // Host-level filter: browser extensions (e.g. Google Translate) and embedded
+        // player scripts (e.g. Vimeo) throw errors on the host page. Suppress them
+        // before the WASM runtime's global handler turns them into .NET exceptions
+        // in the console. Registered before main.js boots the runtime.
+        (function () {
+            var NOISE = /google\.com|googleapis\.com|gstatic\.com|vimeocdn\.com|player\.vimeo\.com|doubleclick\.net|googletagmanager\.com|google-analytics\.com|translate\.|chrome-extension:\/\/|moz-extension:\/\/|ms-browser-extension:\/\/|safari-extension:\/\//i;
+            function noiseText(e) {
+                if (!e) return '';
+                if (e.error) return (e.error.stack || '') + (e.error.message || '');
+                return (e.message || '') + ' ' + (e.filename || '');
+            }
+            function block(e) {
+                if (NOISE.test(noiseText(e))) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                }
+            }
+            window.addEventListener('error', block, true);
+            window.addEventListener('unhandledrejection', block, true);
+        })();
+    </script>
 </head>
 <body>
 <div id="out">
