@@ -66,6 +66,7 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 | Member | Type | Description |
 | --- | --- | --- |
 | `Text` | `string?` | Markdown content (two-way bindable) |
+| `Placeholder` | `string?` | Text shown when content is empty (default blank) |
 | `OnReady` | `event` | Fires when the preview is ready to render |
 | `LinkClicked` | `event` | Fires on every hyperlink click; `Handled = true` intercepts navigation |
 | `ErrorOccurred` | `event` | Fires on internal recoverable errors |

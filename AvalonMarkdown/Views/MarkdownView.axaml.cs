@@ -43,6 +43,7 @@ public partial class MarkdownView : UserControl
     static MarkdownView()
     {
         TextProperty.Changed.AddClassHandler<MarkdownView>(OnTextChanged);
+        PlaceholderProperty.Changed.AddClassHandler<MarkdownView>(OnPlaceholderChanged);
     }
 
     /// <summary>Gets or sets the Markdown text to render.</summary>
@@ -56,6 +57,31 @@ public partial class MarkdownView : UserControl
     {
         get => GetValue(TextProperty);
         set => SetValue(TextProperty, value);
+    }
+
+    /// <summary>
+    /// Text shown when the preview has no content (like a TextBox placeholder).
+    /// Defaults to empty → the pane is blank. Changing it re-applies to the renderer.
+    /// </summary>
+    public static readonly StyledProperty<string?> PlaceholderProperty =
+        AvaloniaProperty.Register<MarkdownView, string?>(nameof(Placeholder));
+
+    public string? Placeholder
+    {
+        get => GetValue(PlaceholderProperty);
+        set => SetValue(PlaceholderProperty, value);
+    }
+
+    private static void OnPlaceholderChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (sender._ready)
+            _ = sender.PushPlaceholderAsync();
+    }
+
+    private async Task PushPlaceholderAsync()
+    {
+        var escaped = EscapeJsString(Placeholder ?? "");
+        await InvokeScriptSafeAsync($"setPreviewConfig({{ placeholder: '{escaped}' }})");
     }
 
     private static void OnTextChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
@@ -276,6 +302,7 @@ public partial class MarkdownView : UserControl
         // onPageFinished(); InvokeScript (evaluateJavascript) must be called
         // synchronously in that context to be reliably delivered.
         PushThemeToWebView(GetCurrentTheme());
+        _ = PushPlaceholderAsync();
 
         OnReady?.Invoke(this, EventArgs.Empty);
 

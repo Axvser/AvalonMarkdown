@@ -150,6 +150,14 @@ img { max-width: 100%; }
 .katex-error { color: #f14c4c; }
 .katex-block { text-align: center; margin: 16px 0; overflow-x: auto; }
 .mermaid-container { text-align: center; margin: 16px 0; }
+/* Empty-state placeholder (configurable via emptyPlaceholder; blank by default) */
+.empty-placeholder {
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: 80px;
+    font-style: italic;
+    user-select: none;
+}
 
 /* ===== Code block wrapper (language label + copy button) ===== */
 /* Remove markdown-it outer <pre> border to avoid double borders */

@@ -66,6 +66,7 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 | 成员 | 类型 | 说明 |
 | --- | --- | --- |
 | `Text` | `string?` | Markdown 内容（双向绑定） |
+| `Placeholder` | `string?` | 内容为空时显示的提示文本（默认空白） |
 | `OnReady` | `event` | 预览就绪时触发 |
 | `LinkClicked` | `event` | 每个超链接点击时触发；`Handled = true` 可接管导航 |
 | `ErrorOccurred` | `event` | 内部可恢复错误时触发 |

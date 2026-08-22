@@ -183,6 +183,20 @@ public partial class MainView : UserControl
                 "var b = (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) || (window.AvaloniaWebViewBridge && window.AvaloniaWebViewBridge.postMessage) || typeof window.invokeCSharpAction === 'function' || (window.external && typeof window.external.notify === 'function') || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.postAvWebViewMessage); b ? 1 : 0;");
             _captureLog.AppendLine($"[applink] dispatch={clickResult} markdown-swapped={swapped} hasBridge={bridgeDetected}");
 
+            // Empty-state placeholder: blank by default, configurable text when set.
+            _captureLog.AppendLine("\n=== Phase: empty placeholder ===");
+            _vm.MarkdownText = "";
+            await Task.Delay(300);
+            var emptyLen = await _singlePreview!.InvokeScriptAsync(
+                "document.getElementById('preview').innerHTML.length");
+            _captureLog.AppendLine($"[placeholder] empty default innerHTML-length={emptyLen} (expect 0)");
+            await _singlePreview.ApplyConfigAsync("setPreviewConfig({ placeholder: 'Type something…' })");
+            await Task.Delay(200);
+            var phText = await _singlePreview.InvokeScriptAsync(
+                "document.getElementById('preview').textContent");
+            _captureLog.AppendLine($"[placeholder] set placeholder textContent={phText?.Trim()} (expect 'Type something…')");
+            await _singlePreview.ApplyConfigAsync("setPreviewConfig({ placeholder: '' })");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)

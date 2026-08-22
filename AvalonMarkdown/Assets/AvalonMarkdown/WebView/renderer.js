@@ -113,7 +113,9 @@
         //   bottom (agent-friendly). Disabled while the user is operating the scrollbar.
         // autoScrollCooldown: ms of scrollbar inactivity before auto-scroll resumes.
         autoScrollOnUpdate: true,
-        autoScrollCooldown: 2000
+        autoScrollCooldown: 2000,
+        // placeholder: text shown when the preview has no content; empty = blank.
+        placeholder: ""
     };
 
     window.setPreviewConfig = function(config) {
@@ -124,6 +126,7 @@
         if (config.maxCodeBlockHeight !== undefined) previewConfig.maxCodeBlockHeight = config.maxCodeBlockHeight;
         if (config.autoScrollOnUpdate !== undefined) previewConfig.autoScrollOnUpdate = config.autoScrollOnUpdate;
         if (config.autoScrollCooldown !== undefined) previewConfig.autoScrollCooldown = config.autoScrollCooldown;
+        if (config.placeholder !== undefined) previewConfig.placeholder = config.placeholder;
         document.body.style.fontSize = previewConfig.fontSize + 'px';
         document.body.style.lineHeight = previewConfig.lineHeight;
         // Apply code block max height
@@ -133,7 +136,12 @@
         // must not yank the user's scroll position to the bottom.
         var preview = document.getElementById('preview');
         var text = preview.getAttribute('data-source') || '';
-        if (text) window.renderMarkdown(text, false);
+        if (text) {
+            window.renderMarkdown(text, false);
+        } else if (config.placeholder !== undefined) {
+            // Re-render the empty state so a changed placeholder takes effect.
+            window.renderMarkdown('', false);
+        }
         console.log('[Config] updated', JSON.stringify(previewConfig));
     };
 
@@ -789,7 +797,10 @@
         var preview = document.getElementById('preview');
         if (!preview) { console.error('preview element not found'); return; }
         if (!text) {
-            preview.innerHTML = '<p style="color:#888;text-align:center;margin-top:80px;">← Enter Markdown</p>';
+            // Empty state: show a configurable placeholder, or a blank pane by default.
+            preview.innerHTML = previewConfig.placeholder
+                ? '<p class="empty-placeholder">' + escapeHtml(previewConfig.placeholder) + '</p>'
+                : '';
             preview.removeAttribute('data-source');
             return;
         }
