@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -107,6 +108,34 @@ public partial class MainView : UserControl
             await RunPhaseAsync("Full (incl. intentionally-broken mermaid/plantuml)",
                 () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
             await RunPhaseAsync("BigDoc", () => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown());
+
+            // Verify the native scroll-progress API round-trips through the WebView.
+            _captureLog.AppendLine("\n=== Phase: ScrollToProgressAsync round-trip ===");
+            foreach (var target in new[] { 0.0, 30.0, 70.0, 100.0 })
+            {
+                await _singlePreview!.ScrollToProgressAsync(target);
+                await Task.Delay(250);
+                var read = await _singlePreview.GetScrollProgressAsync();
+                _captureLog.AppendLine($"[scroll] set={target} read={read?.ToString("0.#") ?? "null"}");
+            }
+
+            // Verify heading listing + navigation (for TOC).
+            _captureLog.AppendLine("\n=== Phase: heading navigation ===");
+            var headings = await _singlePreview!.GetHeadingsAsync();
+            _captureLog.AppendLine($"[headings] count={headings.Count}");
+            foreach (var h in headings.Take(6))
+                _captureLog.AppendLine($"[heading] h{h.Level}: {h.Text}");
+
+            var lastH2 = headings.LastOrDefault(h => h.Level == 2);
+            if (lastH2 is not null)
+            {
+                var found = await _singlePreview.NavigateToHeadingAsync(lastH2.Text);
+                await Task.Delay(300);
+                var prog = await _singlePreview.GetScrollProgressAsync();
+                _captureLog.AppendLine($"[nav] to '{lastH2.Text}' found={found} progress={prog?.ToString("0.#") ?? "null"}");
+            }
+            var miss = await _singlePreview.NavigateToHeadingAsync("This heading does not exist");
+            _captureLog.AppendLine($"[nav] missing-heading found={miss} (expect False)");
 
             FinishCapture(timeout: false);
         }

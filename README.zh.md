@@ -74,6 +74,10 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 | `ApplyConfigAsync(js)` | `Task` | 应用预览配置 |
 | `ApplyCustomCssAsync(css)` | `Task` | 注入自定义 CSS |
 | `InvokeScriptAsync(js)` | `Task<string?>` | 执行自定义 JavaScript |
+| `ScrollToProgressAsync(percent)` | `Task` | 定位预览到文档垂直进度位置（0–100） |
+| `GetScrollProgressAsync()` | `Task<double?>` | 获取当前垂直滚动进度（0–100） |
+| `NavigateToHeadingAsync(heading)` | `Task<bool>` | 滚动到匹配的标题（用于目录跳转）；返回是否找到 |
+| `GetHeadingsAsync()` | `Task<IReadOnlyList<MarkdownHeading>>` | 列出所有标题（文本 + 级别）以构建目录 |
 
 ## MarkdownThemeView
 

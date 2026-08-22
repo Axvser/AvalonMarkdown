@@ -676,6 +676,68 @@
         scrollToBottom();
     }
 
+    // Scroll the preview to a vertical progress position (0-100) of the document.
+    // Exposed for C# via MarkdownView.ScrollToProgressAsync.
+    window.setScrollProgress = function(percent) {
+        var p = Math.max(0, Math.min(100, Number(percent) || 0));
+        var scroller = document.scrollingElement || document.documentElement || document.body;
+        var max = scroller.scrollHeight - scroller.clientHeight;
+        scrollState.programmatic = true;
+        scroller.scrollTop = max > 0 ? max * (p / 100) : 0;
+        // Treat the jump like a manual scroll so auto-scroll doesn't immediately
+        // yank the view back to the bottom on the next content update.
+        scrollState.lastUserActivity = Date.now();
+        setTimeout(function() { scrollState.programmatic = false; }, 80);
+    };
+
+    // Current vertical scroll progress (0-100) of the document, for scroll-sync.
+    window.getScrollProgress = function() {
+        var scroller = document.scrollingElement || document.documentElement || document.body;
+        var max = scroller.scrollHeight - scroller.clientHeight;
+        if (max <= 0) return 0;
+        return (scroller.scrollTop / max) * 100;
+    };
+
+    function scrollToHeading(el) {
+        scrollState.programmatic = true;
+        el.scrollIntoView({ block: 'start' });
+        // Treat the jump like a manual scroll so auto-scroll doesn't yank back.
+        scrollState.lastUserActivity = Date.now();
+        setTimeout(function() { scrollState.programmatic = false; }, 80);
+    }
+
+    // Scroll to the heading whose rendered text matches (case-insensitive, exact
+    // first, then prefix). Returns 1 if found, 0 otherwise. Exposed for C# via
+    // MarkdownView.NavigateToHeadingAsync.
+    window.navigateToHeading = function(text) {
+        var target = String(text || '').replace(/^#+\s*/, '').trim();
+        if (!target) return 0;
+        var targetL = target.toLowerCase();
+        var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        var fallback = null;
+        for (var i = 0; i < headings.length; i++) {
+            var h = headings[i];
+            var hL = (h.textContent || '').trim().toLowerCase();
+            if (hL === targetL) { scrollToHeading(h); return 1; }
+            if (!fallback && hL.indexOf(targetL) === 0) fallback = h;
+        }
+        if (fallback) { scrollToHeading(fallback); return 1; }
+        return 0;
+    };
+
+    // All headings [{ text, level }] in document order — for building a TOC.
+    // Return the array directly (not JSON.stringify): WebView2 / evaluateJavascript
+    // JSON-serialize the last expression, so a string return would be double-encoded.
+    window.getHeadings = function() {
+        var out = [];
+        var hs = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        for (var i = 0; i < hs.length; i++) {
+            var level = parseInt(hs[i].tagName.charAt(1), 10);
+            out.push({ text: (hs[i].textContent || '').trim(), level: level });
+        }
+        return out;
+    };
+
     // === Main render function ===
     window.renderMarkdown = function(text, followToBottom) {
         console.log('renderMarkdown called, length=' + (text ? text.length : 0));

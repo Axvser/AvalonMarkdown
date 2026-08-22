@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -569,6 +572,65 @@ public partial class MarkdownView : UserControl
         await InvokeScriptSafeAsync(jsCallExpression);
     }
 
+    /// <summary>
+    /// Scrolls the preview to a vertical progress position (0–100) of the document.
+    /// Useful for editor↔preview scroll sync or "jump to 30% of the page". Call after
+    /// the preview is ready (see <see cref="OnReady"/>). Progress outside [0,100] is clamped.
+    /// </summary>
+    public async Task ScrollToProgressAsync(double percent)
+    {
+        if (!_ready) return;
+        var p = Math.Clamp(percent, 0, 100);
+        await InvokeScriptSafeAsync($"setScrollProgress({p.ToString("0.##", CultureInfo.InvariantCulture)})");
+    }
+
+    /// <summary>
+    /// Returns the current vertical scroll progress (0–100) of the document, or
+    /// <c>null</c> if the preview is not ready / the value can't be read.
+    /// </summary>
+    public async Task<double?> GetScrollProgressAsync()
+    {
+        if (!_ready) return null;
+        var result = await InvokeScriptAsync("getScrollProgress()");
+        if (result is null) return null;
+        if (double.TryParse(result, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+            return Math.Clamp(v, 0, 100);
+        return null;
+    }
+
+    /// <summary>
+    /// Scrolls the preview so the heading whose rendered text matches
+    /// <paramref name="headingText"/> is at the top (exact match first, then prefix).
+    /// Returns <c>true</c> if a heading was found and scrolled to. Combine with
+    /// <see cref="GetHeadingsAsync"/> to build a table of contents.
+    /// </summary>
+    public async Task<bool> NavigateToHeadingAsync(string headingText)
+    {
+        if (!_ready || string.IsNullOrWhiteSpace(headingText)) return false;
+        var escaped = EscapeJsString(headingText.Trim());
+        var result = await InvokeScriptAsync($"navigateToHeading('{escaped}')");
+        return string.Equals(result?.Trim(), "1", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns all headings in the preview (rendered text + level) in document order,
+    /// for building a table of contents. Returns an empty list if not ready.
+    /// </summary>
+    public async Task<IReadOnlyList<MarkdownHeading>> GetHeadingsAsync()
+    {
+        if (!_ready) return Array.Empty<MarkdownHeading>();
+        var result = await InvokeScriptAsync("getHeadings()");
+        if (string.IsNullOrEmpty(result)) return Array.Empty<MarkdownHeading>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<MarkdownHeading>>(result) ?? new List<MarkdownHeading>();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<MarkdownHeading>();
+        }
+    }
+
     /// <summary>Execute custom JavaScript</summary>
     public async Task<string?> InvokeScriptAsync(string script)
     {
@@ -602,6 +664,12 @@ public partial class MarkdownView : UserControl
         try
         {
             var result = _webView.InvokeScript(script);
+            if (result is Task<string?> taskString)
+            {
+                // Android: evaluateJavascript returns Task<string?>. Extract the value
+                // so callers like GetScrollProgressAsync work cross-platform.
+                return await taskString.WaitAsync(TimeSpan.FromSeconds(5));
+            }
             if (result is Task t)
             {
                 await t.WaitAsync(TimeSpan.FromSeconds(5));
@@ -849,6 +917,18 @@ public class MarkdownConsoleMessageEventArgs : EventArgs
         Level = level;
         Message = message;
     }
+}
+
+/// <summary>A heading in the rendered preview, as returned by <see cref="MarkdownView.GetHeadingsAsync"/>.</summary>
+public class MarkdownHeading
+{
+    /// <summary>The rendered heading text (inline markdown stripped).</summary>
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    /// <summary>The heading level (1–6).</summary>
+    [JsonPropertyName("level")]
+    public int Level { get; set; }
 }
 
 // ====================================================================

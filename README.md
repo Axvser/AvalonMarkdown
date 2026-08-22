@@ -74,6 +74,10 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 | `ApplyConfigAsync(js)` | `Task` | Applies preview configuration |
 | `ApplyCustomCssAsync(css)` | `Task` | Injects custom CSS overrides |
 | `InvokeScriptAsync(js)` | `Task<string?>` | Executes custom JavaScript |
+| `ScrollToProgressAsync(percent)` | `Task` | Scrolls the preview to a vertical progress position (0–100) |
+| `GetScrollProgressAsync()` | `Task<double?>` | Returns the current vertical scroll progress (0–100) |
+| `NavigateToHeadingAsync(heading)` | `Task<bool>` | Scrolls to the matching heading (for TOC); returns whether found |
+| `GetHeadingsAsync()` | `Task<IReadOnlyList<MarkdownHeading>>` | Lists all headings (text + level) to build a table of contents |
 
 ## MarkdownThemeView
 
