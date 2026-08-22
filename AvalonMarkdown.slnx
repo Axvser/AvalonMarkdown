@@ -2,7 +2,6 @@
   <Folder Name="/Docs/">
     <File Path="LICENSE.txt" />
     <File Path="README.md" />
-    <File Path="SKILL.md" />
   </Folder>
   <Project Path="AvalonMarkdown/AvalonMarkdown.csproj" />
   <Project Path="AvalonMarkdown.Test.Shared/AvalonMarkdown.Test.Shared.csproj" />
