@@ -31,6 +31,17 @@
             try { window.parent.postMessage(data, '*'); } catch (e2) { /* last resort */ }
         }
     };
+
+    // True when any Avalonia JS→C# bridge is reachable, so the page should route
+    // navigation through C# instead of falling back to window.open (which on Android
+    // WebView navigates the current page and would overwrite the preview).
+    function hasBridge() {
+        return !!(window.chrome && window.chrome.webview && window.chrome.webview.postMessage) ||
+            !!(window.AvaloniaWebViewBridge && window.AvaloniaWebViewBridge.postMessage) ||
+            typeof window.invokeCSharpAction === 'function' ||
+            !!(window.external && typeof window.external.notify === 'function') ||
+            !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.postAvWebViewMessage);
+    }
     console.log = function() {
         var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
         origLog.apply(console, arguments); post('LOG', m);
@@ -800,12 +811,11 @@
                         // The post() function handles WebView2, Android (AvaloniaWebViewBridge),
                         // and iframe (window.parent.postMessage) — same chain used for console logs.
                         post('LINK', url);
-                        // Pure browser / WASM: no bridge available, post() silently fails.
-                        // Fall back to window.open — but only for web-safe schemes. A custom
-                        // scheme like app:// must never trigger window.open (Android WebView
-                        // would show net::ERR_UNKNOWN_URL_SCHEME); it is meant for C# interception.
-                        if (!window.chrome?.webview && !window.AvaloniaWebViewBridge &&
-                            /^(https?|mailto|tel):/i.test(url)) {
+                        // Fall back to window.open only when NO C# bridge is reachable
+                        // (e.g. the raw page opened directly in a browser). With any bridge,
+                        // navigation is routed through C# — window.open on Android WebView
+                        // would navigate the current page and overwrite the preview.
+                        if (!hasBridge() && /^(https?|mailto|tel):/i.test(url)) {
                             window.open(url, '_blank');
                         }
                     };

@@ -155,7 +155,9 @@ public partial class MainView : UserControl
                 "var a = document.querySelector('a[data-href=\"app://about\"]'); a ? (a.click(), 1) : 0;");
             await Task.Delay(500);
             var swapped = _vm.MarkdownText.StartsWith("# 📖");
-            _captureLog.AppendLine($"[applink] dispatch={clickResult} markdown-swapped={swapped}");
+            var bridgeDetected = await _singlePreview.InvokeScriptAsync(
+                "var b = (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) || (window.AvaloniaWebViewBridge && window.AvaloniaWebViewBridge.postMessage) || typeof window.invokeCSharpAction === 'function' || (window.external && typeof window.external.notify === 'function') || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.postAvWebViewMessage); b ? 1 : 0;");
+            _captureLog.AppendLine($"[applink] dispatch={clickResult} markdown-swapped={swapped} hasBridge={bridgeDetected}");
 
             FinishCapture(timeout: false);
         }
