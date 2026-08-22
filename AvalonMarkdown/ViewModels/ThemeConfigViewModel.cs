@@ -137,7 +137,6 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(PreBgHex));
         OnPropertyChanged(nameof(TableBgHex));
         OnPropertyChanged(nameof(MermaidBgHex));
-        OnPropertyChanged(nameof(MermaidThemeDisplay));
         OnPropertyChanged(nameof(PumlBgHex));
         OnPropertyChanged(nameof(BodyFontSize));
         OnPropertyChanged(nameof(CodeFontSize));
@@ -294,23 +293,6 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     // ════════════════════════════════════════════════════════════
 
     #region Mermaid properties
-    private string _mermaidTheme = "dark";
-    public string MermaidTheme
-    {
-        get => _mermaidTheme;
-        set
-        {
-            if (SetProperty(ref _mermaidTheme, value))
-            {
-                OnPropertyChanged(nameof(MermaidThemeDisplay));
-                MarkDirty();
-            }
-        }
-    }
-
-    /// <summary>Display label for the theme value (used in UI).</summary>
-    public string MermaidThemeDisplay => _mermaidTheme;
-
     // Mermaid container background
     private int _mermaidBgR = 30;
     private int _mermaidBgG = 30;
@@ -486,7 +468,6 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         AppendVar(sb, "--table-header-bg", TableHeaderBg);
         AppendVar(sb, "--scrollbar-thumb", ScrollbarThumb);
         AppendVar(sb, "--scrollbar-hover", ScrollbarHover);
-        AppendVar(sb, "--mermaid-theme", MermaidTheme);
         sb.AppendLine("}");
         sb.AppendLine();
 
@@ -501,7 +482,8 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         sb.AppendLine("html.theme-dark h3, html.theme-light h3 {");
         sb.AppendLine("    margin-top: 20px; margin-bottom: 12px;");
         sb.AppendLine("}");
-        sb.AppendLine("html.theme-dark pre, html.theme-light pre {");
+        sb.AppendLine("html.theme-dark pre, html.theme-light pre,");
+        sb.AppendLine("html.theme-dark .code-block-wrapper, html.theme-light .code-block-wrapper {");
         sb.AppendLine($"    border-radius: {BorderRadius}px;");
         sb.AppendLine("}");
         sb.AppendLine("html.theme-dark code, html.theme-light code {");
@@ -515,22 +497,35 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         sb.AppendLine("}");
         sb.AppendLine();
 
-        // ── highlight.js grouped selectors ──
-        AppendHljsGroup(sb, "keyword, .hljs-literal, .hljs-symbol, .hljs-name", HljsKeyword);
-        AppendHljsGroup(sb, "built_in, .hljs-type", HljsBuiltIn);
-        AppendHljsGroup(sb, "class, .hljs-number", HljsClass);
-        AppendHljsGroup(sb, "string, .hljs-meta-string", HljsString);
+        // ── highlight.js token colors (one standalone rule per token) ──
+        AppendHljsSingle(sb, "keyword", HljsKeyword);
+        AppendHljsSingle(sb, "literal", HljsLiteral);
+        AppendHljsSingle(sb, "symbol", HljsSymbol);
+        AppendHljsSingle(sb, "name", HljsName);
+        AppendHljsSingle(sb, "built_in", HljsBuiltIn);
+        AppendHljsSingle(sb, "type", HljsType);
+        AppendHljsSingle(sb, "class", HljsClass);
+        AppendHljsSingle(sb, "number", HljsNumber);
+        AppendHljsSingle(sb, "string", HljsString);
+        AppendHljsSingle(sb, "meta-string", HljsMetaString);
         AppendHljsSingle(sb, "title", HljsTitle);
         AppendHljsGroup(sb, ".hljs-title.class_, .hljs-title.class_.inherited__", HljsTitleClass);
         AppendHljsSingle(sb, ".hljs-title.class_.inherited__", HljsTitleClassInherited);
         AppendHljsSingle(sb, "params", HljsParams);
-        AppendHljsGroup(sb, "comment, .hljs-quote", HljsComment);
+        AppendHljsSingle(sb, "comment", HljsComment);
+        AppendHljsSingle(sb, "quote", HljsQuote);
         AppendHljsSingle(sb, "variable", HljsVariable);
         AppendHljsSingle(sb, "template-variable", HljsTemplateVariable);
-        AppendHljsGroup(sb, "attr, .hljs-attribute", HljsAttr);
+        AppendHljsSingle(sb, "attr", HljsAttr);
+        AppendHljsSingle(sb, "attribute", HljsAttribute);
         AppendHljsSingle(sb, "meta", HljsMeta);
         AppendHljsSingle(sb, "tag", HljsTag);
-        AppendHljsGroup(sb, "bullet, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-selector-pseudo, .hljs-selector-tag", HljsBullet);
+        AppendHljsSingle(sb, "bullet", HljsBullet);
+        AppendHljsSingle(sb, "selector-attr", HljsSelectorAttr);
+        AppendHljsSingle(sb, "selector-class", HljsSelectorClass);
+        AppendHljsSingle(sb, "selector-id", HljsSelectorId);
+        AppendHljsSingle(sb, "selector-pseudo", HljsSelectorPseudo);
+        AppendHljsSingle(sb, "selector-tag", HljsSelectorTag);
         AppendHljsSingle(sb, "section", HljsSection);
         sb.AppendLine("html.theme-dark .hljs-link,");
         sb.AppendLine("html.theme-light .hljs-link {");
@@ -555,20 +550,9 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         sb.AppendLine($"    color: {HljsDeletionColor};");
         sb.AppendLine("}");
         sb.AppendLine();
-        AppendHljsGroup(sb, "regexp, .hljs-template-tag", HljsRegexp);
+        AppendHljsSingle(sb, "regexp", HljsRegexp);
+        AppendHljsSingle(sb, "template-tag", HljsTemplateTag);
         AppendHljsSingle(sb, "doctag", HljsDoctag);
-
-        // ── Symbol and literal (separate to allow different colors) ──
-        sb.AppendLine("html.theme-dark .hljs-symbol,");
-        sb.AppendLine("html.theme-light .hljs-symbol {");
-        sb.AppendLine($"    color: {HljsSymbol};");
-        sb.AppendLine("}");
-        sb.AppendLine();
-        sb.AppendLine("html.theme-dark .hljs-literal,");
-        sb.AppendLine("html.theme-light .hljs-literal {");
-        sb.AppendLine($"    color: {HljsLiteral};");
-        sb.AppendLine("}");
-        sb.AppendLine();
 
         // ════════════════════════════════════════════════════════════
         //  Mermaid Diagrams

@@ -88,6 +88,8 @@ public partial class MainViewModel : ViewModelBase
 
         [Visit GitHub](https://github.com)
 
+        [About this app — in-app navigation](app://about)
+
         ![NuGet Version](https://img.shields.io/nuget/v/AvalonMarkdown?logo=nuget&label=NuGet)
 
         ## 3. Lists
@@ -274,6 +276,34 @@ public partial class MainViewModel : ViewModelBase
         @enduml
         ```
         """;
+
+    /// <summary>
+    /// Returns the markdown content for an in-app route — the demo target of
+    /// <see cref="AvalonMarkdown.Views.MarkdownView.LinkClicked"/>. Links use the
+    /// <c>app://</c> scheme and are intercepted in-app instead of opening the browser.
+    /// </summary>
+    public static string GetInternalPage(string url) => url.Trim().ToLowerInvariant() switch
+    {
+        "app://about" => """
+            # 📖 About — in-app page
+
+            This page was **routed internally** through `MarkdownView.LinkClicked`:
+
+            - The link you clicked used the `app://` scheme.
+            - No system browser was opened.
+            - The demo set `e.Handled = true` to take over navigation.
+
+            [← Back to demo](app://home)
+            """,
+        "app://home" => GetDefaultMarkdown(),
+        _ => $"""
+            # Unknown in-app route
+
+            `{url}` isn't a known route.
+
+            [← Back to demo](app://home)
+            """
+    };
 
     public static string GetSimpleMarkdown() => """
         # Hello

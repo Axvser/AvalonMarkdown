@@ -65,10 +65,11 @@ public partial class MainWindow : Window
 
 ### 事件
 
-| 事件            | 参数                                       | 触发时机                                                                                                             |
-| --------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `OnReady`       | `EventHandler`                             | 控件完全就绪（HTML 加载 + JS CDN 脚本加载完成），可安全调用 `RenderMarkdownAsync`                                     |
-| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>` | 内部可恢复错误（JS 运行时错误 / CDN 加载超时 / 脚本超时 / 链接打开失败等）                                            |
+| 事件              | 参数                                           | 触发时机                                                              |
+| --------------- | -------------------------------------------- | ----------------------------------------------------------------- |
+| `OnReady`       | `EventHandler`                               | 控件完全就绪（HTML 加载 + JS CDN 脚本加载完成），可安全调用 `RenderMarkdownAsync`       |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>`   | 内部可恢复错误（JS 运行时错误 / CDN 加载超时 / 脚本超时 / 链接打开失败等）                     |
+| `LinkClicked`   | `EventHandler<MarkdownLinkClickedEventArgs>` | 预览内每个超链接点击时触发（统一导航管道）；设置 `Handled = true` 可阻止默认的系统浏览器打开，例如用于应用内跳转 |
 
 ### 内置错误面板
 
@@ -118,13 +119,12 @@ public partial class MainWindow : Window
 
 ### Mermaid 图表
 
-| 属性                            | 默认值 | 说明               |
-| ------------------------------- | ------ | ------------------ |
-| 主题 (`MermaidTheme`)           | `dark` | `dark` / `light` / `base` |
-| 容器背景 (`MermaidBgHex`)       | `#1E1E1E` | RGB 三通道滑块     |
-| 容器内边距 (`MermaidContainerPadding`) | 8px  | —                  |
-| 容器外边距 (`MermaidContainerMargin`)  | 16px | —                  |
-| 容器圆角 (`MermaidBorderRadius`)       | 4px  | —                  |
+| 属性                                | 默认值       | 说明        |
+| --------------------------------- | --------- | --------- |
+| 容器背景 (`MermaidBgHex`)             | `#1E1E1E` | RGB 三通道滑块 |
+| 容器内边距 (`MermaidContainerPadding`) | 8px       | —         |
+| 容器外边距 (`MermaidContainerMargin`)  | 16px      | —         |
+| 容器圆角 (`MermaidBorderRadius`)      | 4px       | —         |
 
 ### PlantUML 图表
 
@@ -175,20 +175,21 @@ renderer.js 通过 CDN 加载第三方库，在 WebView 内执行完整渲染管
 - **脚注 / 表格 / 引用 / 删除线**
 - **外部链接** — 自动拦截，通过 C# bridge 触发系统浏览器打开（WASM 环境回退 `window.open`）
 - **预览配置** — 通过 `setPreviewConfig` 动态调整字体大小（`fontSize`）、行高（`lineHeight`）、代码语言标签显示（`showCodeLanguage`）、复制按钮开关（`showCopyButton`）、代码块最大高度（`maxCodeBlockHeight`）
+- **自动滚动** — 内容更新时自动滚动到底部以跟随最新内容（对 Agent 场景友好）。用户操作垂直滚动条（滚轮 / 触摸 / 键盘 / 拖动滑块）期间自动滚动暂停，停止操作后恢复。可用 `setPreviewConfig({ autoScrollOnUpdate: true, autoScrollCooldown: 2000 })` 调节
 - **主题编辑器** — 内置 `MarkdownThemeView` 控件，提供 RGB 滑块实时自定义颜色、排版、Mermaid / PlantUML 样式与代码高亮配色
 
 ### JS 端公开全局函数
 
-| 函数                                  | 说明                                                          |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `window.renderMarkdown(text)`         | 渲染 Markdown 文本到预览区                                    |
-| `window.onMarkdownUpdate(text)`       | `renderMarkdown` 别名                                         |
-| `window.setPreviewConfig(config)`     | 更新预览配置并重新渲染                                        |
-| `window.setTheme(theme)`              | 切换主题（`'light'` / `'dark'`），更新 CSS class + Mermaid 主题 + 重新渲染 |
-| `window.setCustomCss(cssText)`        | 替换 `<style id="custom-theme-css">` 内容以覆盖默认样式        |
-| `window.showPreviewError(detail)`     | 显示 JS 运行时错误覆盖层                                      |
-| `window.dismissErrorOverlay()`        | 关闭 JS 运行时错误覆盖层                                      |
-| `window.escapeHtml(s)`                | HTML 转义工具函数                                             |
+| 函数                                              | 说明                                                          |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| `window.renderMarkdown(text[, followToBottom])` | 渲染 Markdown 文本到预览区；除非用户正在操作滚动条，否则自动滚动到底部（传 `false` 保留滚动位置）  |
+| `window.onMarkdownUpdate(text)`                 | `renderMarkdown` 别名                                         |
+| `window.setPreviewConfig(config)`               | 更新预览配置并重新渲染                                                 |
+| `window.setTheme(theme)`                        | 切换主题（`'light'` / `'dark'`），更新 CSS class + Mermaid 主题 + 重新渲染 |
+| `window.setCustomCss(cssText)`                  | 替换 `<style id="custom-theme-css">` 内容以覆盖默认样式                |
+| `window.showPreviewError(detail)`               | 显示 JS 运行时错误覆盖层                                              |
+| `window.dismissErrorOverlay()`                  | 关闭 JS 运行时错误覆盖层                                              |
+| `window.escapeHtml(s)`                          | HTML 转义工具函数                                                 |
 
 ### WebView 错误处理
 

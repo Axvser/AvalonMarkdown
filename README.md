@@ -65,10 +65,11 @@ public partial class MainWindow : Window
 
 ### Events
 
-| Event           | Parameters                                  | Trigger Condition |
-| --------------- | ------------------------------------------- | ----------------- |
-| `OnReady`       | `EventHandler`                              | Control is fully ready (HTML loaded + JS CDN scripts loaded); safe to call `RenderMarkdownAsync` |
-| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>`  | Internal recoverable errors (JS runtime errors / CDN load timeout / script timeout / link open failures, etc.) |
+| Event           | Parameters                                   | Trigger Condition                                                                                                                                            |
+| --------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OnReady`       | `EventHandler`                               | Control is fully ready (HTML loaded + JS CDN scripts loaded); safe to call `RenderMarkdownAsync`                                                             |
+| `ErrorOccurred` | `EventHandler<MarkdownViewErrorEventArgs>`   | Internal recoverable errors (JS runtime errors / CDN load timeout / script timeout / link open failures, etc.)                                               |
+| `LinkClicked`   | `EventHandler<MarkdownLinkClickedEventArgs>` | Raised for every clicked hyperlink (single navigation pipeline); set `Handled = true` to suppress the default system-browser launch, e.g. for in-app routing |
 
 ### Built-in Error Panel
 
@@ -118,13 +119,12 @@ Collapsed by default; expand the editing panel by clicking the title bar. Suppor
 
 ### Mermaid Diagrams
 
-| Property                         | Default | Description |
-| -------------------------------- | ------- | ----------- |
-| `MermaidTheme`                   | `dark`  | `dark` / `light` / `base` |
-| `MermaidBgHex`                   | `#1E1E1E` | RGB three-channel slider |
-| `MermaidContainerPadding`        | 8px     | — |
-| `MermaidContainerMargin`         | 16px    | — |
-| `MermaidBorderRadius`            | 4px     | — |
+| Property                  | Default   | Description              |
+| ------------------------- | --------- | ------------------------ |
+| `MermaidBgHex`            | `#1E1E1E` | RGB three-channel slider |
+| `MermaidContainerPadding` | 8px       | —                        |
+| `MermaidContainerMargin`  | 16px      | —                        |
+| `MermaidBorderRadius`     | 4px       | —                        |
 
 ### PlantUML Diagrams
 
@@ -175,20 +175,21 @@ renderer.js loads third-party libraries via CDN and executes the full rendering 
 - **Footnotes / Tables / Blockquotes / Strikethrough**
 - **External Links** — Auto-intercepted and opened in the system browser via C# bridge (`window.open` fallback for WASM environments)
 - **Preview Configuration** — Dynamic adjustment via `setPreviewConfig` for font size (`fontSize`), line height (`lineHeight`), code language label display (`showCodeLanguage`), copy button toggle (`showCopyButton`), and code block max height (`maxCodeBlockHeight`)
+- **Auto-scroll** — On content updates the preview follows the newest content to the bottom (agent-friendly). While the user is operating the vertical scrollbar (wheel / touch / keyboard / thumb drag), auto-scroll is suspended and resumes after they stop. Tune with `setPreviewConfig({ autoScrollOnUpdate: true, autoScrollCooldown: 2000 })`
 - **Theme Editor** — Built-in `MarkdownThemeView` control providing RGB sliders for real-time customization of colors, typography, Mermaid/PlantUML styles, and code highlighting colors
 
 ### JS-Exposed Global Functions
 
-| Function                                  | Description |
-| ----------------------------------------- | ----------- |
-| `window.renderMarkdown(text)`             | Renders Markdown text to the preview area |
-| `window.onMarkdownUpdate(text)`           | Alias for `renderMarkdown` |
-| `window.setPreviewConfig(config)`         | Updates preview configuration and re-renders |
-| `window.setTheme(theme)`                  | Switches theme (`'light'` / `'dark'`), updates CSS class + Mermaid theme + re-renders |
-| `window.setCustomCss(cssText)`            | Replaces `<style id="custom-theme-css">` content to override default styles |
-| `window.showPreviewError(detail)`         | Displays a JS runtime error overlay |
-| `window.dismissErrorOverlay()`            | Closes the JS runtime error overlay |
-| `window.escapeHtml(s)`                    | HTML escape utility function |
+| Function                                        | Description                                                                                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `window.renderMarkdown(text[, followToBottom])` | Renders Markdown to the preview area; auto-scrolls to bottom unless the user is operating the scrollbar (pass `false` to preserve scroll position) |
+| `window.onMarkdownUpdate(text)`                 | Alias for `renderMarkdown`                                                                                                                         |
+| `window.setPreviewConfig(config)`               | Updates preview configuration and re-renders                                                                                                       |
+| `window.setTheme(theme)`                        | Switches theme (`'light'` / `'dark'`), updates CSS class + Mermaid theme + re-renders                                                              |
+| `window.setCustomCss(cssText)`                  | Replaces `<style id="custom-theme-css">` content to override default styles                                                                        |
+| `window.showPreviewError(detail)`               | Displays a JS runtime error overlay                                                                                                                |
+| `window.dismissErrorOverlay()`                  | Closes the JS runtime error overlay                                                                                                                |
+| `window.escapeHtml(s)`                          | HTML escape utility function                                                                                                                       |
 
 ### WebView Error Handling
 

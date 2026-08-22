@@ -78,6 +78,15 @@ public partial class MarkdownView : UserControl
     /// <summary>Fires when a recoverable internal error occurs</summary>
     public event EventHandler<MarkdownViewErrorEventArgs>? ErrorOccurred;
 
+    /// <summary>
+    /// Fires when a hyperlink inside the preview is clicked. This is the single
+    /// navigation pipeline for all links — subscribe to intercept and handle links
+    /// yourself (e.g. in-app routing, internal pages, custom schemes). Set
+    /// <see cref="MarkdownLinkClickedEventArgs.Handled"/> to true to suppress the
+    /// default system-browser launch.
+    /// </summary>
+    public event EventHandler<MarkdownLinkClickedEventArgs>? LinkClicked;
+
     // ====================================================================
     // Construction
     // ====================================================================
@@ -369,7 +378,7 @@ public partial class MarkdownView : UserControl
         {
             var url = message[6..].Trim();
             if (!string.IsNullOrEmpty(url))
-                _ = OpenUrlInBrowserAsync(url);
+                _ = HandleLinkClickedAsync(url);
             return;
         }
     }
@@ -597,6 +606,20 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>
+    /// Routes a clicked link through the <see cref="LinkClicked"/> event — the single
+    /// navigation pipeline. If no subscriber marks it handled, falls back to the
+    /// system browser so existing behavior is preserved.
+    /// </summary>
+    private async Task HandleLinkClickedAsync(string url)
+    {
+        var args = new MarkdownLinkClickedEventArgs(url);
+        LinkClicked?.Invoke(this, args);
+        if (args.Handled) return;
+
+        await OpenUrlInBrowserAsync(url);
+    }
+
+    /// <summary>
     /// Opens a URL in the operating system's default browser.
     /// Uses <see cref="TopLevel.Launcher"/> (cross-platform: desktop, Android, iOS).
     /// </summary>
@@ -766,6 +789,29 @@ public class MarkdownViewErrorEventArgs : EventArgs
     {
         Title = title;
         Message = message;
+    }
+}
+
+/// <summary>
+/// Event arguments for <see cref="MarkdownView.LinkClicked"/> — raised for every
+/// hyperlink the user clicks inside the preview. The default (unhandled) behavior
+/// opens the URL in the system browser; set <see cref="Handled"/> to true to take
+/// over navigation (e.g. route to an in-app page).
+/// </summary>
+public class MarkdownLinkClickedEventArgs : EventArgs
+{
+    /// <summary>The target URL of the clicked link (may be relative or a custom scheme).</summary>
+    public string Url { get; }
+
+    /// <summary>
+    /// Set to true inside a handler to indicate the link was handled and suppress
+    /// the default system-browser launch.
+    /// </summary>
+    public bool Handled { get; set; }
+
+    public MarkdownLinkClickedEventArgs(string url)
+    {
+        Url = url;
     }
 }
 

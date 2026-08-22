@@ -68,7 +68,12 @@
         lineHeight: 1.6,
         showCodeLanguage: true,
         showCopyButton: true,
-        maxCodeBlockHeight: 480
+        maxCodeBlockHeight: 480,
+        // autoScrollOnUpdate: when content changes, follow the newest content to the
+        //   bottom (agent-friendly). Disabled while the user is operating the scrollbar.
+        // autoScrollCooldown: ms of scrollbar inactivity before auto-scroll resumes.
+        autoScrollOnUpdate: true,
+        autoScrollCooldown: 2000
     };
 
     window.setPreviewConfig = function(config) {
@@ -77,14 +82,18 @@
         if (config.showCodeLanguage !== undefined) previewConfig.showCodeLanguage = config.showCodeLanguage;
         if (config.showCopyButton !== undefined) previewConfig.showCopyButton = config.showCopyButton;
         if (config.maxCodeBlockHeight !== undefined) previewConfig.maxCodeBlockHeight = config.maxCodeBlockHeight;
+        if (config.autoScrollOnUpdate !== undefined) previewConfig.autoScrollOnUpdate = config.autoScrollOnUpdate;
+        if (config.autoScrollCooldown !== undefined) previewConfig.autoScrollCooldown = config.autoScrollCooldown;
         document.body.style.fontSize = previewConfig.fontSize + 'px';
         document.body.style.lineHeight = previewConfig.lineHeight;
         // Apply code block max height
         applyCodeBlockMaxHeight();
-        // Re-render to apply language label / copy button visibility
+        // Re-render to apply language label / copy button visibility.
+        // Pass followToBottom=false: a config change is not a content update, so it
+        // must not yank the user's scroll position to the bottom.
         var preview = document.getElementById('preview');
         var text = preview.getAttribute('data-source') || '';
-        if (text) window.renderMarkdown(text);
+        if (text) window.renderMarkdown(text, false);
         console.log('[Config] updated', JSON.stringify(previewConfig));
     };
 
@@ -613,8 +622,62 @@
         }
     }
 
+    // ===== Auto-scroll (follow-to-bottom) behavior =====
+    // Content updates scroll the preview to the bottom so the newest content stays
+    // visible (agent-friendly). While the user is actively operating the vertical
+    // scrollbar — wheel, touch, keyboard, or thumb drag — auto-scroll is suspended
+    // until they stop for `autoScrollCooldown` ms.
+    var scrollState = {
+        lastUserActivity: 0,  // 0 = never scrolled → always follow
+        programmatic: false   // guard flag for our own scrollToBottom() calls
+    };
+
+    function markUserScroll() {
+        scrollState.lastUserActivity = Date.now();
+    }
+
+    // A scroll-position change we didn't trigger means the user scrolled
+    // (scrollbar drag / wheel / touch / keyboard). Passive — we never preventDefault.
+    window.addEventListener('scroll', function() {
+        if (scrollState.programmatic) return;
+        markUserScroll();
+    }, { passive: true });
+
+    // Wheel / touch / keyboard gestures are captured explicitly so a gesture that
+    // does not change scrollTop (e.g. wheel while already at the bottom) still
+    // suspends auto-scroll while the user is operating the scrollbar.
+    window.addEventListener('wheel', markUserScroll, { passive: true });
+    window.addEventListener('touchmove', markUserScroll, { passive: true });
+    window.addEventListener('keydown', function(e) {
+        switch (e.key) {
+            case 'PageUp': case 'PageDown':
+            case 'ArrowUp': case 'ArrowDown':
+            case 'Home': case 'End': case ' ':
+                markUserScroll();
+                break;
+        }
+    });
+
+    function shouldAutoScroll() {
+        if (previewConfig.autoScrollOnUpdate === false) return false;
+        return Date.now() - scrollState.lastUserActivity >= previewConfig.autoScrollCooldown;
+    }
+
+    function scrollToBottom() {
+        var scroller = document.scrollingElement || document.documentElement || document.body;
+        scrollState.programmatic = true;
+        scroller.scrollTop = scroller.scrollHeight;
+        // Clear the guard shortly after so genuine user scrolls are detected again.
+        setTimeout(function() { scrollState.programmatic = false; }, 80);
+    }
+
+    function maybeAutoScroll() {
+        if (!shouldAutoScroll()) return;
+        scrollToBottom();
+    }
+
     // === Main render function ===
-    window.renderMarkdown = function(text) {
+    window.renderMarkdown = function(text, followToBottom) {
         console.log('renderMarkdown called, length=' + (text ? text.length : 0));
         var preview = document.getElementById('preview');
         if (!preview) { console.error('preview element not found'); return; }
@@ -655,6 +718,15 @@
                 })(href));
             }
             runMermaidAll(preview);
+            if (followToBottom !== false) {
+                maybeAutoScroll();
+                // Mermaid / KaTeX / image rendering is async — the page height can
+                // settle after the initial scroll, so re-apply the follow-to-bottom
+                // a few times to end up exactly at the newest content.
+                setTimeout(maybeAutoScroll, 150);
+                setTimeout(maybeAutoScroll, 500);
+                setTimeout(maybeAutoScroll, 1200);
+            }
             console.log('✅ Render complete');
         } catch(e) {
             console.error('❌ ' + e.message);

@@ -27,6 +27,11 @@ public partial class MainView : UserControl
             _vm.RecordRendered(1);
         };
 
+        // LinkClicked example: intercept app:// links for in-app navigation.
+        // Everything else (https://, mailto:, …) is left unhandled and still opens
+        // in the system browser via the control's default behavior.
+        _singlePreview.LinkClicked += HandleLinkClicked;
+
         // Preset buttons — setting MarkdownText triggers the Text binding
         SimplePresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown();
         FullPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown();
@@ -42,6 +47,21 @@ public partial class MainView : UserControl
             EditorArrowExpanded.IsVisible = _vm.EditorExpanded;
             EditorArrowCollapsed.IsVisible = !_vm.EditorExpanded;
         };
+    }
+
+    /// <summary>
+    /// Demo of <see cref="MarkdownView.LinkClicked"/>: routes <c>app://</c> links
+    /// internally (swapping the preview to the target in-app page) and suppresses the
+    /// default browser launch. All other links are intentionally left unhandled so
+    /// they keep opening in the system browser.
+    /// </summary>
+    private void HandleLinkClicked(object? sender, MarkdownLinkClickedEventArgs e)
+    {
+        if (e.Url.StartsWith("app://", StringComparison.OrdinalIgnoreCase))
+        {
+            _vm.MarkdownText = MainViewModel.GetInternalPage(e.Url);
+            e.Handled = true; // suppress the default system-browser launch
+        }
     }
 
     // ====================================================================
@@ -91,6 +111,9 @@ public partial class MainView : UserControl
         _multiPv1.OnReady += (_, _) => { _vm.RecordReady(1); _vm.RecordRendered(1); };
         _multiPv2.OnReady += (_, _) => { _vm.RecordReady(2); _vm.RecordRendered(2); };
         _multiPv3.OnReady += (_, _) => { _vm.RecordReady(3); _vm.RecordRendered(3); };
+
+        // Full doc (Preview2) also contains the app:// link — apply the same handler.
+        _multiPv2.LinkClicked += HandleLinkClicked;
     }
 
     protected override void OnDataContextChanged(EventArgs e)

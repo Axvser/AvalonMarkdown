@@ -15,7 +15,6 @@ html.theme-dark {
     --table-header-bg: #2d2d2d;
     --scrollbar-thumb: #424242;
     --scrollbar-hover: #555;
-    --mermaid-theme: dark;
 }
 
 /* ===== highlight.js dark theme (VS style) ===== */
@@ -78,7 +77,6 @@ html.theme-light {
     --table-header-bg: #f0f0f0;
     --scrollbar-thumb: #c1c1c1;
     --scrollbar-hover: #a1a1a1;
-    --mermaid-theme: default;
 }
 
 /* ===== highlight.js light theme (VS style) ===== */
@@ -247,6 +245,10 @@ pre:has(.code-block-wrapper) > code {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+/* Scrollbar corner where horizontal & vertical scrollbars meet — default is an
+   opaque (white) square; make it transparent so the code block's own
+   --pre-bg shows through (matches dark/light theme automatically). */
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ===== Task lists ===== */
 .task-list-item { list-style: none; margin-left: 0; }
