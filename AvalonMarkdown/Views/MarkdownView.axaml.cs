@@ -304,18 +304,23 @@ public partial class MarkdownView : UserControl
         PushThemeToWebView(GetCurrentTheme());
         _ = PushPlaceholderAsync();
 
-        OnReady?.Invoke(this, EventArgs.Empty);
-
+        // Render any content that arrived before the preview was ready FIRST, so
+        // that OnReady subscribers setting new Text (rendered afterwards) win.
         if (_pendingMarkdown != null)
         {
             var md = _pendingMarkdown;
             _pendingMarkdown = null;
             _ = RenderMarkdownAsync(md);
 
-            // Android WebView may silently drop the first evaluateJavascript
-            // call. Schedule a safety retry at the next dispatcher frame.
-            _ = Dispatcher.UIThread.InvokeAsync(() => _ = RenderMarkdownAsync(md));
+            // Android WebView may silently drop the first evaluateJavascript call,
+            // so it gets a safety retry at the next dispatcher frame. Other platforms
+            // render once — a redundant re-render of identical content is wasted work
+            // and triggers the mermaid render race on WASM.
+            if (OperatingSystem.IsAndroid())
+                _ = Dispatcher.UIThread.InvokeAsync(() => _ = RenderMarkdownAsync(md));
         }
+
+        OnReady?.Invoke(this, EventArgs.Empty);
 
         // Browser-side iframe needs multiple layout passes to stabilize initial size
         if (OperatingSystem.IsBrowser())

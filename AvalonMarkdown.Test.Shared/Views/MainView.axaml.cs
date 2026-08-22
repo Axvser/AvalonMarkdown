@@ -197,6 +197,14 @@ public partial class MainView : UserControl
             _captureLog.AppendLine($"[placeholder] set placeholder textContent={phText?.Trim()} (expect 'Type something…')");
             await _singlePreview.ApplyConfigAsync("setPreviewConfig({ placeholder: '' })");
 
+            // Facade video embeds: the Full doc has 3 videos → 3 facades, 0 iframes
+            // (platform players must NOT load until the user clicks).
+            _captureLog.AppendLine("\n=== Phase: video facade (click-to-play) ===");
+            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            var facadeCount = await _singlePreview!.InvokeScriptAsync("document.querySelectorAll('.embed-facade').length");
+            var iframeCount = await _singlePreview.InvokeScriptAsync("document.querySelectorAll('.embed-container iframe').length");
+            _captureLog.AppendLine($"[facade] facades={facadeCount} (expect 3) iframes={iframeCount} (expect 0)");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)

@@ -224,21 +224,44 @@
      * On Browser (WASM), mermaid shares the main thread with Avalonia's UI loop,
      * Desktop WebView2 runs in a separate process and is unaffected.
      */
+    var mermaidGeneration = 0;
+    var mermaidTimer = null;
+
+    /**
+     * Run mermaid on all .mermaid elements in the given container.
+     * Deferred to the next animation frame so that:
+     *  - a back-to-back re-render (Android's safety retry renders the same text twice)
+     *    cancels the pending run and only the latest DOM is processed, avoiding mermaid
+     *    accessing nodes that a re-render removed (getBoundingClientRect null);
+     *  - the container is laid out before mermaid measures it (a zero-size container
+     *    at WASM startup can fail dagre layout).
+     * Errors from a run superseded by a newer render are stale-node artifacts and are
+     * suppressed; real errors still surface as a warning.
+     */
     function runMermaidAll(container) {
         var els = container.querySelectorAll('.mermaid');
         if (els.length === 0) return;
-        var nodes = [];
-        for (var i = 0; i < els.length; i++) nodes.push(els[i]);
-        try {
-            var result = mermaid.run({ nodes: nodes });
-            if (result && typeof result.then === 'function') {
-                result.catch(function(e) {
-                    console.warn('[Mermaid] Render error: ' + e.message);
-                });
+        var gen = ++mermaidGeneration;
+        if (mermaidTimer) cancelAnimationFrame(mermaidTimer);
+        mermaidTimer = requestAnimationFrame(function() {
+            mermaidTimer = null;
+            var live = [];
+            var nodes = container.querySelectorAll('.mermaid');
+            for (var i = 0; i < nodes.length; i++) {
+                if (nodes[i].isConnected) live.push(nodes[i]);
             }
-        } catch(e) {
-            console.warn('[Mermaid] Render error: ' + e.message);
-        }
+            if (live.length === 0) return;
+            try {
+                var result = mermaid.run({ nodes: live });
+                if (result && typeof result.then === 'function') {
+                    result.catch(function(e) {
+                        if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
+                    });
+                }
+            } catch(e) {
+                if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
+            }
+        });
     }
 
     function getMermaidThemeVars(theme) {
@@ -629,34 +652,84 @@
         return origImageRender ? origImageRender(tokens, idx, options, env, self) : '';
     };
 
-    /** Try to convert a URL into a platform embed iframe HTML, or null if not supported. */
+    // Facade (click-to-play) embed: a static tile that does NOT load the third-party
+    // player until the user clicks. This keeps the preview clean on load and across
+    // re-renders — the platform player (and its console noise / fingerprinting / DRM
+    // errors) only loads on explicit interaction.
+    function embedFacade(src, label, thumb) {
+        var style = thumb ? ' style="background-image:url(\'' + thumb.replace(/'/g, "%27") + '\')"' : '';
+        return '<div class="embed-facade" tabindex="0" role="button" aria-label="Play ' + escapeHtml(label) + '" data-src="' + escapeHtml(src) + '" data-title="' + escapeHtml(label) + '"' + style + '>' +
+            '<span class="embed-play" aria-hidden="true"></span>' +
+            '<span class="embed-label">' + escapeHtml(label) + '</span>' +
+            '</div>';
+    }
+
+    // After insertion, fetch and apply a thumbnail for facades that need one
+    // (Vimeo / Bilibili public APIs). Keeps the dark tile on failure.
+    function fetchFacadeThumb(facade, apiUrl, jsonField) {
+        try {
+            fetch(apiUrl).then(function(r) { return r.json(); }).then(function(j) {
+                var u = jsonField.split('.').reduce(function(o, k) { return (o && o[k] !== undefined) ? o[k] : null; }, j);
+                if (u) facade.style.backgroundImage = "url('" + u + "')";
+            }).catch(function() {});
+        } catch (e) { /* keep dark bg */ }
+    }
+
+    // Add a <link rel=preconnect> hint for the video origin so the iframe loads faster.
+    function preconnectVideo(src) {
+        var origin;
+        try { origin = new URL(src, location.href).origin; } catch (e) { return; }
+        var links = document.querySelectorAll('link[rel="preconnect"]');
+        for (var i = 0; i < links.length; i++) if (links[i].href === origin + '/') return;
+        var link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = origin;
+        document.head.appendChild(link);
+    }
+
+    // Load the real platform iframe when a facade is clicked. The click is a user
+    // gesture, so autoplay is allowed; preconnect speeds up the iframe load.
+    window.loadVideoEmbed = function(facade) {
+        var src = facade.getAttribute('data-src');
+        if (!src) return;
+        preconnectVideo(src);
+        src = src.replace('autoplay=0', 'autoplay=1');
+        if (src.indexOf('autoplay=') === -1) src += (src.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1';
+        var iframe = document.createElement('iframe');
+        iframe.setAttribute('src', src);
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('allow', 'accelerometer;autoplay;clipboard-write;encrypted-media;fullscreen;gyroscope;picture-in-picture');
+        iframe.setAttribute('title', facade.getAttribute('data-title') || 'Video');
+        facade.parentNode.replaceChild(iframe, facade);
+    };
+
+    /** Try to convert a URL into a platform embed facade, or null if not supported. */
     function getPlatformEmbed(url, label) {
         // YouTube: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
         var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
         if (ytMatch) {
-            return '<div class="embed-container">' +
-                '<iframe src="https://www.youtube-nocookie.com/embed/' + ytMatch[1] + '" ' +
-                'frameborder="0" allowfullscreen allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" ' +
-                'title="' + escapeHtml(label || 'YouTube Video') + '"></iframe></div>\n';
+            var ytId = ytMatch[1];
+            return '<div class="embed-container">' + embedFacade(
+                'https://www.youtube-nocookie.com/embed/' + ytId,
+                label || 'YouTube Video',
+                'https://img.youtube.com/vi/' + ytId + '/hqdefault.jpg') + '</div>\n';
         }
 
         // Bilibili: bilibili.com/video/BVxxx  or  player.bilibili.com/player.html?bvid=BVxxx
         var bvMatch = url.match(/bilibili\.com\/(?:video\/(BV[a-zA-Z0-9_]+)|[^"' ]*bvid=(BV[a-zA-Z0-9_]+))/);
         var bvid = bvMatch && (bvMatch[1] || bvMatch[2]);
         if (bvid) {
-            return '<div class="embed-container">' +
-                '<iframe src="https://player.bilibili.com/player.html?bvid=' + bvid + '&autoplay=0&high_quality=1" ' +
-                'frameborder="0" allowfullscreen sandbox="allow-scripts allow-same-origin allow-popups" ' +
-                'title="' + escapeHtml(label || 'Bilibili Video') + '"></iframe></div>\n';
+            return '<div class="embed-container" data-thumb-api="https://api.bilibili.com/x/web-interface/view?bvid=' + bvid + '" data-thumb-field="data.pic">' +
+                embedFacade('https://player.bilibili.com/player.html?bvid=' + bvid + '&autoplay=0&high_quality=1',
+                    label || 'Bilibili Video', null) + '</div>\n';
         }
 
         // Vimeo: vimeo.com/ID
         var viMatch = url.match(/vimeo\.com\/(\d+)/);
         if (viMatch) {
-            return '<div class="embed-container">' +
-                '<iframe src="https://player.vimeo.com/video/' + viMatch[1] + '" ' +
-                'frameborder="0" allowfullscreen allow="autoplay;fullscreen;picture-in-picture" ' +
-                'title="' + escapeHtml(label || 'Vimeo Video') + '"></iframe></div>\n';
+            return '<div class="embed-container" data-thumb-api="https://vimeo.com/api/oembed.json?url=' + encodeURIComponent('https://vimeo.com/' + viMatch[1]) + '" data-thumb-field="thumbnail_url">' +
+                embedFacade('https://player.vimeo.com/video/' + viMatch[1],
+                    label || 'Vimeo Video', null) + '</div>\n';
         }
 
         return null;
@@ -837,6 +910,32 @@
                     };
                 })(href));
             }
+
+            // Facade video embeds: wire the click-to-play delegation once, and fetch
+            // thumbnails for facades that need them (Vimeo / Bilibili).
+            if (!preview._facadeClickWired) {
+                preview._facadeClickWired = true;
+                var activateFacade = function(e) {
+                    var facade = e.target && e.target.closest ? e.target.closest('.embed-facade') : null;
+                    if (facade) loadVideoEmbed(facade);
+                };
+                preview.addEventListener('click', activateFacade);
+                preview.addEventListener('keydown', function(e) {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    var facade = e.target && e.target.closest ? e.target.closest('.embed-facade') : null;
+                    if (facade) { e.preventDefault(); loadVideoEmbed(facade); }
+                });
+            }
+            var thumbFacades = preview.querySelectorAll('.embed-container[data-thumb-api] .embed-facade');
+            for (var ti = 0; ti < thumbFacades.length; ti++) {
+                (function(f) {
+                    var c = f.parentNode;
+                    var api = c.getAttribute('data-thumb-api');
+                    var field = c.getAttribute('data-thumb-field');
+                    if (api && field) fetchFacadeThumb(f, api, field);
+                })(thumbFacades[ti]);
+            }
+
             runMermaidAll(preview);
             if (followToBottom !== false) {
                 maybeAutoScroll();
