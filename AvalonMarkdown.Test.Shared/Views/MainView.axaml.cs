@@ -137,6 +137,16 @@ public partial class MainView : UserControl
             var miss = await _singlePreview.NavigateToHeadingAsync("This heading does not exist");
             _captureLog.AppendLine($"[nav] missing-heading found={miss} (expect False)");
 
+            // Verify external-script noise filtering: an injected google.com/extension
+            // error must be dropped, a real preview error must still surface.
+            _captureLog.AppendLine("\n=== Phase: external error filter ===");
+            await _singlePreview.InvokeScriptAsync(
+                "window.onerror('injected-extension-error', 'https://www.google.com/js/th/abc.js', 1, 1, new Error('ext'))");
+            await _singlePreview.InvokeScriptAsync(
+                "window.onerror('real-preview-error', 'https://example.com/app.js', 1, 1, new Error('real'))");
+            await Task.Delay(500);
+            _captureLog.AppendLine("[filter] done — real-preview-error should be present, injected-extension-error absent");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)

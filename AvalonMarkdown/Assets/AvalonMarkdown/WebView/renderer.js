@@ -27,21 +27,32 @@
     };
 
     // === Global error capture — shown within the control instead of silent swallow ===
+    // Browser extensions / ad & translate scripts inject code that throws errors
+    // unrelated to the preview (e.g. Google Translate's www.google.com/js/th/...).
+    // Filter those so the error stream only surfaces errors from the preview itself.
+    var EXTERNAL_NOISE = /google\.com|googleapis\.com|gstatic\.com|doubleclick\.net|googletagmanager\.com|google-analytics\.com|translate\.|chrome-extension:\/\/|moz-extension:\/\/|ms-browser-extension:\/\/|safari-extension:\/\//i;
+    function isExternalNoise(text) {
+        return EXTERNAL_NOISE.test(String(text || ''));
+    }
+
     window.onerror = function(msg, source, line, col, error) {
         // Silently log all errors, no UI overlay.
         // Subscribe to MarkdownView.ErrorOccurred for custom error handling.
+        var detail = msg;
+        if (source) detail += '\n   at ' + source + ':' + line + ':' + col;
+        if (error && error.stack) detail += '\n' + error.stack;
+        if (isExternalNoise(detail)) return true; // ignore injected/extension errors
+
         if (error && !(error instanceof Error)) {
             post('WARN', '[ResourceLoadError] ' + msg);
         } else {
-            var detail = msg;
-            if (source) detail += '\n   at ' + source + ':' + line + ':' + col;
-            if (error && error.stack) detail += '\n' + error.stack;
             post('ERR', detail);
         }
         return true;
     };
     window.addEventListener('unhandledrejection', function(e) {
         var detail = e.reason ? (e.reason.message || e.reason.toString()) : 'Unhandled Promise rejection';
+        if (isExternalNoise(detail)) return; // ignore injected/extension rejections
         post('ERR', '[UnhandledRejection] ' + detail);
     });
 
