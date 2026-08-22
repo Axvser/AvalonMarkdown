@@ -165,6 +165,11 @@ public partial class MarkdownView : UserControl
                 : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0x1e, 0x1e, 0x1e)),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+            // Read-only preview: never take Avalonia focus. When the WebView2 controller
+            // isn't ready, WebView2BaseAdapter.Focus() → ICoreWebView2Controller.MoveFocus
+            // throws E_INVALIDARG (0x80070057) — e.g. focus restoration on window activation.
+            // The native control manages its own focus when clicked.
+            Focusable = false,
             // Keep hidden until first markdown text triggers initialization.
             // This avoids creating the Browser iframe at (0,0) before the
             // control has finished layout with its final size.
