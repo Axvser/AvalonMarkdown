@@ -480,6 +480,53 @@
     md.use(window.markdownitTaskLists);
     try { md.enable(['strikethrough']); } catch(e) {}
 
+    // === Heading anchors (GitHub / VS Code style) ===
+    // Give every rendered heading an auto-generated id so in-document anchor links
+    // — [TOC](#heading-slug) and friends — can jump to it natively. Duplicate
+    // headings keep the first slug and get -1, -2, … appended (same as GitHub).
+    var headingUsedIds = {};
+
+    // Wrap md.render so the per-document id-uniqueness state resets on every render
+    // (the DOM is fully replaced each time, so stale suffixes must not leak across).
+    var baseRender = md.render;
+    md.render = function(src, env) {
+        headingUsedIds = {};
+        return baseRender.call(md, src, env);
+    };
+
+    // Lowercase, drop punctuation, spaces/underscores become '-' (keeps CJK and
+    // other unicode letters so Chinese headings are linkable too).
+    function headingSlugify(text) {
+        return String(text).toLowerCase().trim()
+            .replace(/[^\p{L}\p{N}_\s-]/gu, '')
+            .replace(/[\s_]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+    }
+
+    // Plain text of a heading body (markup stripped, entities decoded) by letting
+    // markdown-it render the inline token then reading the DOM textContent.
+    function headingPlainText(inlineToken) {
+        var html = md.renderInline(inlineToken ? inlineToken.content : '');
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        return (tmp.textContent || '').trim();
+    }
+
+    md.renderer.rules.heading_open = function(tokens, idx, options, env, self) {
+        var token = tokens[idx];
+        var inline = tokens[idx + 1];
+        var text = headingPlainText(inline && inline.type === 'inline' ? inline : null);
+        if (text) {
+            var slug = headingSlugify(text) || 'section';
+            var n = headingUsedIds[slug] | 0;
+            var id = n > 0 ? slug + '-' + n : slug;
+            headingUsedIds[slug] = n + 1;
+            token.attrSet('id', id);
+        }
+        return self.renderToken(tokens, idx, options);
+    };
+
     console.log('markdown-it ✅');
 
     // === Math: VS Code style $...$ / ... ===

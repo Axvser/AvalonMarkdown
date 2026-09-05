@@ -82,6 +82,19 @@ public partial class MainViewModel : ViewModelBase
 
         A feature tour of **AvalonMarkdown** — text formatting, links, lists, tables, math (KaTeX), code highlighting, diagrams (Mermaid / PlantUML), video embeds, footnotes, HTML, and error resilience.
 
+        ## 0. 目录 · 页内跳转（# 锚点试验）
+
+        > 下面都用 `#` 引用**本页**目标（同一文档内跳转），不会发给 C#。
+        > 能否跳转取决于目标元素有没有 `id` —— 渲染器目前**不会自动给标题生成 id**，
+        > 所以“跳标题”的链接应不生效；而指向手写 HTML `id` 目标、以及脚注 `fn1`/`fnref1` 的链接是生效的。
+
+        - [跳到 “1. Text Formatting”](#1-text-formatting)
+        - [跳到 “3. Lists”](#3-lists)
+        - [跳到 “13. HTML Inline”](#13-html-inline)
+        - [跳到 手写 HTML id 目标（应生效）](#inpage-demo-target)
+        - [跳到 脚注定义 fn1（应生效）](#fn1)
+        - [跳回 脚注引用处 fnref1（应生效）](#fnref1)
+
         ## 1. Text Formatting
 
         **Bold** *Italic* ~~Strikethrough~~ `Inline code` <u>Underline (HTML)</u>
@@ -233,6 +246,8 @@ public partial class MainViewModel : ViewModelBase
         ## 12. Horizontal Rule
 
         ---
+
+        <a id="inpage-demo-target"></a>
 
         ## 13. HTML Inline
 
