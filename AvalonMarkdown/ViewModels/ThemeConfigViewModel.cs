@@ -12,7 +12,7 @@ namespace AvalonMarkdown.ViewModels;
 /// Configures all CSS variable values for a single theme (dark or light).
 /// The 6 core colors are exposed as R/G/B integer triplets (0-255) for
 /// slider binding. Derived surface colors (BgSecondary, InlineCodeBg,
-/// PreBg, TableHeaderBg, Scrollbar*) update automatically.
+/// PreBg, TableHeaderBg, …) update automatically.
 /// Call <see cref="GenerateCss"/> to produce complete CSS text.
 /// </summary>
 public class ThemeConfigViewModel : INotifyPropertyChanged
@@ -123,8 +123,6 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(BlockquoteBg));
         OnPropertyChanged(nameof(PreBg));
         OnPropertyChanged(nameof(TableHeaderBg));
-        OnPropertyChanged(nameof(ScrollbarThumb));
-        OnPropertyChanged(nameof(ScrollbarHover));
         OnPropertyChanged(nameof(BgHex));
         OnPropertyChanged(nameof(TextHex));
         OnPropertyChanged(nameof(LinkHex));
@@ -138,9 +136,7 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(TableBgHex));
         OnPropertyChanged(nameof(MermaidBgHex));
         OnPropertyChanged(nameof(PumlBgHex));
-        OnPropertyChanged(nameof(BodyFontSize));
         OnPropertyChanged(nameof(CodeFontSize));
-        OnPropertyChanged(nameof(LineHeight));
         OnPropertyChanged(nameof(BorderRadius));
         MarkDirty();
         return true;
@@ -153,48 +149,66 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private int _bgR = 30;
     private int _bgG = 30;
     private int _bgB = 30;
+    [Description("页面主背景色的红色通道（0-255）")]
     public int BgR { get => _bgR; set => SetProperty(ref _bgR, value); }
+    [Description("页面主背景色的绿色通道（0-255）")]
     public int BgG { get => _bgG; set => SetProperty(ref _bgG, value); }
+    [Description("页面主背景色的蓝色通道（0-255）")]
     public int BgB { get => _bgB; set => SetProperty(ref _bgB, value); }
 
     // Text  #d4d4d4
     private int _textR = 212;
     private int _textG = 212;
     private int _textB = 212;
+    [Description("正文文字色的红色通道（0-255）")]
     public int TextR { get => _textR; set => SetProperty(ref _textR, value); }
+    [Description("正文文字色的绿色通道（0-255）")]
     public int TextG { get => _textG; set => SetProperty(ref _textG, value); }
+    [Description("正文文字色的蓝色通道（0-255）")]
     public int TextB { get => _textB; set => SetProperty(ref _textB, value); }
 
     // Link  #3794ff
     private int _linkR = 55;
     private int _linkG = 148;
     private int _linkB = 255;
+    [Description("链接色的红色通道（0-255）")]
     public int LinkR { get => _linkR; set => SetProperty(ref _linkR, value); }
+    [Description("链接色的绿色通道（0-255）")]
     public int LinkG { get => _linkG; set => SetProperty(ref _linkG, value); }
+    [Description("链接色的蓝色通道（0-255）")]
     public int LinkB { get => _linkB; set => SetProperty(ref _linkB, value); }
 
     // Heading  #569cd6
     private int _headingR = 86;
     private int _headingG = 156;
     private int _headingB = 214;
+    [Description("标题文字色的红色通道（0-255）")]
     public int HeadingR { get => _headingR; set => SetProperty(ref _headingR, value); }
+    [Description("标题文字色的绿色通道（0-255）")]
     public int HeadingG { get => _headingG; set => SetProperty(ref _headingG, value); }
+    [Description("标题文字色的蓝色通道（0-255）")]
     public int HeadingB { get => _headingB; set => SetProperty(ref _headingB, value); }
 
     // Inline code  #ce9178
     private int _codeR = 206;
     private int _codeG = 145;
     private int _codeB = 120;
+    [Description("行内代码文字色的红色通道（0-255）")]
     public int CodeR { get => _codeR; set => SetProperty(ref _codeR, value); }
+    [Description("行内代码文字色的绿色通道（0-255）")]
     public int CodeG { get => _codeG; set => SetProperty(ref _codeG, value); }
+    [Description("行内代码文字色的蓝色通道（0-255）")]
     public int CodeB { get => _codeB; set => SetProperty(ref _codeB, value); }
 
     // Border  #3c3c3c
     private int _borderR = 60;
     private int _borderG = 60;
     private int _borderB = 60;
+    [Description("边框色的红色通道（0-255）")]
     public int BorderR { get => _borderR; set => SetProperty(ref _borderR, value); }
+    [Description("边框色的绿色通道（0-255）")]
     public int BorderG { get => _borderG; set => SetProperty(ref _borderG, value); }
+    [Description("边框色的蓝色通道（0-255）")]
     public int BorderB { get => _borderB; set => SetProperty(ref _borderB, value); }
     #endregion
 
@@ -205,86 +219,121 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private int _bgSecR = 37;
     private int _bgSecG = 37;
     private int _bgSecB = 38;
+    [Description("次级背景色的红色通道（0-255）")]
     public int BgSecR { get => _bgSecR; set => SetProperty(ref _bgSecR, value); }
+    [Description("次级背景色的绿色通道（0-255）")]
     public int BgSecG { get => _bgSecG; set => SetProperty(ref _bgSecG, value); }
+    [Description("次级背景色的蓝色通道（0-255）")]
     public int BgSecB { get => _bgSecB; set => SetProperty(ref _bgSecB, value); }
 
     // TextSecondary  #cccccc
     private int _textSecR = 204;
     private int _textSecG = 204;
     private int _textSecB = 204;
+    [Description("次级文字色的红色通道（0-255）")]
     public int TextSecR { get => _textSecR; set => SetProperty(ref _textSecR, value); }
+    [Description("次级文字色的绿色通道（0-255）")]
     public int TextSecG { get => _textSecG; set => SetProperty(ref _textSecG, value); }
+    [Description("次级文字色的蓝色通道（0-255）")]
     public int TextSecB { get => _textSecB; set => SetProperty(ref _textSecB, value); }
 
     // InlineCodeBg  #2d2d2d
     private int _codeBgR = 45;
     private int _codeBgG = 45;
     private int _codeBgB = 45;
+    [Description("行内代码背景色的红色通道（0-255）")]
     public int CodeBgR { get => _codeBgR; set => SetProperty(ref _codeBgR, value); }
+    [Description("行内代码背景色的绿色通道（0-255）")]
     public int CodeBgG { get => _codeBgG; set => SetProperty(ref _codeBgG, value); }
+    [Description("行内代码背景色的蓝色通道（0-255）")]
     public int CodeBgB { get => _codeBgB; set => SetProperty(ref _codeBgB, value); }
 
     // PreBg  #1e1e1e
     private int _preBgR = 30;
     private int _preBgG = 30;
     private int _preBgB = 30;
+    [Description("代码块背景色的红色通道（0-255）")]
     public int PreBgR { get => _preBgR; set => SetProperty(ref _preBgR, value); }
+    [Description("代码块背景色的绿色通道（0-255）")]
     public int PreBgG { get => _preBgG; set => SetProperty(ref _preBgG, value); }
+    [Description("代码块背景色的蓝色通道（0-255）")]
     public int PreBgB { get => _preBgB; set => SetProperty(ref _preBgB, value); }
 
     // TableHeaderBg  #2d2d2d
     private int _tableBgR = 45;
     private int _tableBgG = 45;
     private int _tableBgB = 45;
+    [Description("表头背景色的红色通道（0-255）")]
     public int TableBgR { get => _tableBgR; set => SetProperty(ref _tableBgR, value); }
+    [Description("表头背景色的绿色通道（0-255）")]
     public int TableBgG { get => _tableBgG; set => SetProperty(ref _tableBgG, value); }
+    [Description("表头背景色的蓝色通道（0-255）")]
     public int TableBgB { get => _tableBgB; set => SetProperty(ref _tableBgB, value); }
     #endregion
 
     // ─── Typography / layout ───
 
     #region Typography properties
-    private double _bodyFontSize = 14;
     private double _codeFontSize = 13;
-    private double _lineHeight = 1.6;
     private int _borderRadius = 4;
 
-    public double BodyFontSize  { get => _bodyFontSize; set => SetProperty(ref _bodyFontSize, value); }
+    [Description("代码字体大小（px）")]
     public double CodeFontSize  { get => _codeFontSize; set => SetProperty(ref _codeFontSize, value); }
-    public double LineHeight    { get => _lineHeight;   set => SetProperty(ref _lineHeight,   value); }
+    [Description("代码块/pre 圆角半径（px）")]
     public int    BorderRadius  { get => _borderRadius; set => SetProperty(ref _borderRadius, value); }
     #endregion
 
     // ─── Derived computed properties ───
 
+    [Description("派生：页面主背景色（只读）")]
     public string BgPrimary => $"#{BgR:X2}{BgG:X2}{BgB:X2}";
+    [Description("派生：次级背景色（只读）")]
     public string BgSecondary => $"#{BgSecR:X2}{BgSecG:X2}{BgSecB:X2}";
+    [Description("派生：正文文字色（只读）")]
     public string TextPrimary => $"#{TextR:X2}{TextG:X2}{TextB:X2}";
+    [Description("派生：次级文字色（只读）")]
     public string TextSecondary => $"#{TextSecR:X2}{TextSecG:X2}{TextSecB:X2}";
+    [Description("派生：链接色（只读）")]
     public string LinkColor => $"#{LinkR:X2}{LinkG:X2}{LinkB:X2}";
+    [Description("派生：标题文字色（只读）")]
     public string HeadingColor => $"#{HeadingR:X2}{HeadingG:X2}{HeadingB:X2}";
+    [Description("派生：行内代码文字色（只读）")]
     public string InlineCodeColor => $"#{CodeR:X2}{CodeG:X2}{CodeB:X2}";
+    [Description("派生：边框色（只读）")]
     public string BorderColor => $"#{BorderR:X2}{BorderG:X2}{BorderB:X2}";
+    [Description("派生：行内代码背景色（只读）")]
     public string InlineCodeBg => $"#{CodeBgR:X2}{CodeBgG:X2}{CodeBgB:X2}";
+    [Description("派生：引用块边框色（=链接色，只读）")]
     public string BlockquoteBorder => LinkColor;
+    [Description("派生：引用块背景色（只读）")]
     public string BlockquoteBg => $"rgba({BgR},{BgG},{BgB},0.2)";
+    [Description("派生：代码块背景色（只读）")]
     public string PreBg => $"#{PreBgR:X2}{PreBgG:X2}{PreBgB:X2}";
+    [Description("派生：表头背景色（只读）")]
     public string TableHeaderBg => $"#{TableBgR:X2}{TableBgG:X2}{TableBgB:X2}";
-    public string ScrollbarThumb => $"#{Scale(BorderR, 1.0):X2}{Scale(BorderG, 1.0):X2}{Scale(BorderB, 1.0):X2}";
-    public string ScrollbarHover => $"#{Scale(BorderR, 1.2):X2}{Scale(BorderG, 1.2):X2}{Scale(BorderB, 1.2):X2}";
 
     // ─── Hex preview properties for UI binding ───
+    [Description("主背景色 HEX 预览（只读）")]
     public string BgHex      => $"#{BgR:X2}{BgG:X2}{BgB:X2}";
+    [Description("正文文字色 HEX 预览（只读）")]
     public string TextHex    => $"#{TextR:X2}{TextG:X2}{TextB:X2}";
+    [Description("链接色 HEX 预览（只读）")]
     public string LinkHex    => $"#{LinkR:X2}{LinkG:X2}{LinkB:X2}";
+    [Description("标题文字色 HEX 预览（只读）")]
     public string HeadingHex => $"#{HeadingR:X2}{HeadingG:X2}{HeadingB:X2}";
+    [Description("行内代码文字色 HEX 预览（只读）")]
     public string CodeHex    => $"#{CodeR:X2}{CodeG:X2}{CodeB:X2}";
+    [Description("边框色 HEX 预览（只读）")]
     public string BorderHex  => $"#{BorderR:X2}{BorderG:X2}{BorderB:X2}";
+    [Description("次级背景色 HEX 预览（只读）")]
     public string BgSecHex   => $"#{BgSecR:X2}{BgSecG:X2}{BgSecB:X2}";
+    [Description("次级文字色 HEX 预览（只读）")]
     public string TextSecHex => $"#{TextSecR:X2}{TextSecG:X2}{TextSecB:X2}";
+    [Description("行内代码背景色 HEX 预览（只读）")]
     public string CodeBgHex  => $"#{CodeBgR:X2}{CodeBgG:X2}{CodeBgB:X2}";
+    [Description("代码块背景色 HEX 预览（只读）")]
     public string PreBgHex   => $"#{PreBgR:X2}{PreBgG:X2}{PreBgB:X2}";
+    [Description("表头背景色 HEX 预览（只读）")]
     public string TableBgHex => $"#{TableBgR:X2}{TableBgG:X2}{TableBgB:X2}";
     // ──────────────────────────────────────────────────
 
@@ -297,17 +346,24 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private int _mermaidBgR = 30;
     private int _mermaidBgG = 30;
     private int _mermaidBgB = 30;
+    [Description("Mermaid 容器背景色的红色通道（0-255）")]
     public int MermaidBgR { get => _mermaidBgR; set => SetProperty(ref _mermaidBgR, value); }
+    [Description("Mermaid 容器背景色的绿色通道（0-255）")]
     public int MermaidBgG { get => _mermaidBgG; set => SetProperty(ref _mermaidBgG, value); }
+    [Description("Mermaid 容器背景色的蓝色通道（0-255）")]
     public int MermaidBgB { get => _mermaidBgB; set => SetProperty(ref _mermaidBgB, value); }
+    [Description("Mermaid 容器背景色 HEX 预览（只读）")]
     public string MermaidBgHex => $"#{MermaidBgR:X2}{MermaidBgG:X2}{MermaidBgB:X2}";
 
     private double _mermaidContainerPadding = 8;
     private double _mermaidContainerMargin = 16;
     private int _mermaidBorderRadius = 4;
 
+    [Description("Mermaid 容器内边距（px）")]
     public double MermaidContainerPadding { get => _mermaidContainerPadding; set => SetProperty(ref _mermaidContainerPadding, value); }
+    [Description("Mermaid 容器上下外边距（px）")]
     public double MermaidContainerMargin  { get => _mermaidContainerMargin;  set => SetProperty(ref _mermaidContainerMargin,  value); }
+    [Description("Mermaid 容器圆角（px）")]
     public int    MermaidBorderRadius     { get => _mermaidBorderRadius;     set => SetProperty(ref _mermaidBorderRadius,     value); }
     #endregion
 
@@ -320,9 +376,13 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private int _pumlBgR = 30;
     private int _pumlBgG = 30;
     private int _pumlBgB = 30;
+    [Description("PlantUML 容器背景色的红色通道（0-255）")]
     public int PumlBgR { get => _pumlBgR; set => SetProperty(ref _pumlBgR, value); }
+    [Description("PlantUML 容器背景色的绿色通道（0-255）")]
     public int PumlBgG { get => _pumlBgG; set => SetProperty(ref _pumlBgG, value); }
+    [Description("PlantUML 容器背景色的蓝色通道（0-255）")]
     public int PumlBgB { get => _pumlBgB; set => SetProperty(ref _pumlBgB, value); }
+    [Description("PlantUML 容器背景色 HEX 预览（只读）")]
     public string PumlBgHex => $"#{PumlBgR:X2}{PumlBgG:X2}{PumlBgB:X2}";
 
     private double _pumlContainerPadding = 12;
@@ -330,9 +390,13 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private int _pumlBorderRadius = 6;
     private double _pumlDarkInvert = 0.882;
 
+    [Description("PlantUML 容器内边距（px）")]
     public double PumlContainerPadding { get => _pumlContainerPadding; set => SetProperty(ref _pumlContainerPadding, value); }
+    [Description("PlantUML 容器上下外边距（px）")]
     public double PumlContainerMargin  { get => _pumlContainerMargin;  set => SetProperty(ref _pumlContainerMargin,  value); }
+    [Description("PlantUML 容器圆角（px）")]
     public int    PumlBorderRadius     { get => _pumlBorderRadius;     set => SetProperty(ref _pumlBorderRadius,     value); }
+    [Description("暗色下 PlantUML 反色强度（0-1）")]
     public double PumlDarkInvert       { get => _pumlDarkInvert;       set => SetProperty(ref _pumlDarkInvert,       value); }
     #endregion
 
@@ -340,104 +404,143 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     //  highlight.js — keyword / literal / symbol / name
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 关键字")]
     public string HljsKeyword { get; set; } = "#569cd6";
+    [Description("highlight.js 字面量")]
     public string HljsLiteral { get; set; } = "#569cd6";
+    [Description("highlight.js 符号")]
     public string HljsSymbol { get; set; } = "#569cd6";
+    [Description("highlight.js 名称")]
     public string HljsName { get; set; } = "#569cd6";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — built-in / type
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 内置函数")]
     public string HljsBuiltIn { get; set; } = "#4ec9b0";
+    [Description("highlight.js 类型")]
     public string HljsType { get; set; } = "#4ec9b0";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — class / number
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 类名")]
     public string HljsClass { get; set; } = "#b5cea8";
+    [Description("highlight.js 数字")]
     public string HljsNumber { get; set; } = "#b5cea8";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — string / meta-string
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 字符串")]
     public string HljsString { get; set; } = "#d69d85";
+    [Description("highlight.js 元字符串")]
     public string HljsMetaString { get; set; } = "#d69d85";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — title
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 标题（定义名）")]
     public string HljsTitle { get; set; } = "#DCDCAA";
+    [Description("highlight.js 类定义标题")]
     public string HljsTitleClass { get; set; } = "#4EC9B0";
+    [Description("highlight.js 继承类定义标题")]
     public string HljsTitleClassInherited { get; set; } = "#4EC9B0";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — params / variable / template-variable
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 形参")]
     public string HljsParams { get; set; } = "#9CDCFE";
+    [Description("highlight.js 变量")]
     public string HljsVariable { get; set; } = "#9CDCFE";
+    [Description("highlight.js 模板变量")]
     public string HljsTemplateVariable { get; set; } = "#bd63c5";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — comment / quote
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 注释")]
     public string HljsComment { get; set; } = "#6a9955";
+    [Description("highlight.js 引用文本")]
     public string HljsQuote { get; set; } = "#6a9955";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — attr / attribute / meta / tag
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 属性名")]
     public string HljsAttr { get; set; } = "#9cdcfe";
+    [Description("highlight.js 属性")]
     public string HljsAttribute { get; set; } = "#9cdcfe";
+    [Description("highlight.js 元信息")]
     public string HljsMeta { get; set; } = "#9b9b9b";
+    [Description("highlight.js 标签")]
     public string HljsTag { get; set; } = "#569cd6";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — selector-*
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 属性选择器")]
     public string HljsSelectorAttr { get; set; } = "#d7ba7d";
+    [Description("highlight.js 类选择器")]
     public string HljsSelectorClass { get; set; } = "#d7ba7d";
+    [Description("highlight.js ID 选择器")]
     public string HljsSelectorId { get; set; } = "#d7ba7d";
+    [Description("highlight.js 伪类选择器")]
     public string HljsSelectorPseudo { get; set; } = "#d7ba7d";
+    [Description("highlight.js 标签选择器")]
     public string HljsSelectorTag { get; set; } = "#d7ba7d";
+    [Description("highlight.js 列表符号")]
     public string HljsBullet { get; set; } = "#d7ba7d";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — section / link / emphasis / strong
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 章节标题")]
     public string HljsSection { get; set; } = "gold";
+    [Description("highlight.js 链接文字")]
     public string HljsLink { get; set; } = "#569cd6";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — addition / deletion
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 增补(diff)背景")]
     public string HljsAdditionBg { get; set; } = "rgba(155,185,85,0.15)";
+    [Description("highlight.js 增补(diff)文字")]
     public string HljsAdditionColor { get; set; } = "#b5cea8";
+    [Description("highlight.js 删除(diff)背景")]
     public string HljsDeletionBg { get; set; } = "rgba(192,0,0,0.1)";
+    [Description("highlight.js 删除(diff)文字")]
     public string HljsDeletionColor { get; set; } = "#ce9178";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — regexp / template-tag / doctag
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 正则表达式")]
     public string HljsRegexp { get; set; } = "#9a5334";
+    [Description("highlight.js 模板标签")]
     public string HljsTemplateTag { get; set; } = "#9a5334";
+    [Description("highlight.js 文档标签")]
     public string HljsDoctag { get; set; } = "#608b4e";
 
     // ──────────────────────────────────────────────────
     //  highlight.js — background / foreground
     // ──────────────────────────────────────────────────
 
+    [Description("highlight.js 代码块背景")]
     public string HljsBackground { get; set; } = "#1e1e1e";
+    [Description("highlight.js 代码块前景文字")]
     public string HljsForeground { get; set; } = "#dcdcdc";
 
     /// <summary>
@@ -466,17 +569,11 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         AppendVar(sb, "--heading-color", HeadingColor);
         AppendVar(sb, "--pre-bg", PreBg);
         AppendVar(sb, "--table-header-bg", TableHeaderBg);
-        AppendVar(sb, "--scrollbar-thumb", ScrollbarThumb);
-        AppendVar(sb, "--scrollbar-hover", ScrollbarHover);
         sb.AppendLine("}");
         sb.AppendLine();
 
         // ── Typography / layout overrides ──
         sb.AppendLine("/* === Typography overrides === */");
-        sb.AppendLine("html.theme-dark body, html.theme-light body {");
-        sb.AppendLine($"    font-size: {BodyFontSize}px;");
-        sb.AppendLine($"    line-height: {LineHeight};");
-        sb.AppendLine("}");
         sb.AppendLine("html.theme-dark h1, html.theme-light h1,");
         sb.AppendLine("html.theme-dark h2, html.theme-light h2,");
         sb.AppendLine("html.theme-dark h3, html.theme-light h3 {");
@@ -583,12 +680,6 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
         sb.AppendLine("}");
 
         return sb.ToString();
-    }
-
-    private static int Scale(int channel, double factor)
-    {
-        var val = (int)(channel * factor);
-        return Math.Clamp(val, 0, 255);
     }
 
     private static void AppendVar(StringBuilder sb, string name, string value)
