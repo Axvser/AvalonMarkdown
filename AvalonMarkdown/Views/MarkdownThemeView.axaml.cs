@@ -16,12 +16,12 @@ namespace AvalonMarkdown.Views;
 /// </summary>
 public partial class MarkdownThemeView : UserControl
 {
-    private readonly ThemeConfigViewModel _themeConfig;
+    private readonly MarkdownThemeViewModel _themeConfig;
 
     /// <summary>
-    /// The ThemeConfigViewModel driving this editor.
+    /// The MarkdownThemeViewModel driving this editor.
     /// </summary>
-    public ThemeConfigViewModel ThemeConfig => _themeConfig;
+    public MarkdownThemeViewModel ThemeConfig => _themeConfig;
 
     /// <summary>
     /// Gets or sets the MarkdownView this editor is controlling.
@@ -43,7 +43,7 @@ public partial class MarkdownThemeView : UserControl
 
     public MarkdownThemeView()
     {
-        _themeConfig = new ThemeConfigViewModel();
+        _themeConfig = new MarkdownThemeViewModel();
         DataContext = _themeConfig;
         InitializeComponent();
 

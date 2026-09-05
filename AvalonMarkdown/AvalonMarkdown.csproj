@@ -6,7 +6,7 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>AvalonMarkdown</PackageId>
-    <Version>8.1.0</Version>
+    <Version>9.0.0</Version>
     <Title>AvalonMarkdown</Title>
     <Authors>Axvser</Authors>
     <Description>NativeWebView based Markdown preview control for AvaloniaUI.</Description>

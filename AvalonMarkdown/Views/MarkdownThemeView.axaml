@@ -2,7 +2,7 @@
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:vm="clr-namespace:AvalonMarkdown.ViewModels"
 			 x:Class="AvalonMarkdown.Views.MarkdownThemeView"
-			 x:DataType="vm:ThemeConfigViewModel">
+			 x:DataType="vm:MarkdownThemeViewModel">
   <UserControl.Styles>
       <!-- Card surface (adaptive: subtle light overlay + hairline border) -->
       <Style Selector="Border.card">

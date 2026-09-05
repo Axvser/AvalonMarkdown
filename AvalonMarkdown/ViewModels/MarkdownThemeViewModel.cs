@@ -15,7 +15,7 @@ namespace AvalonMarkdown.ViewModels;
 /// PreBg, TableHeaderBg, …) update automatically.
 /// Call <see cref="GenerateCss"/> to produce complete CSS text.
 /// </summary>
-public class ThemeConfigViewModel : INotifyPropertyChanged
+public class MarkdownThemeViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -98,7 +98,7 @@ public class ThemeConfigViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string name = "")
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-    public ThemeConfigViewModel()
+    public MarkdownThemeViewModel()
     {
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _timer.Tick += OnTimerTick;

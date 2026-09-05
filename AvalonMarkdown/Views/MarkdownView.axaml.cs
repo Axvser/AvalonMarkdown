@@ -677,7 +677,7 @@ public partial class MarkdownView : UserControl
 
     /// <summary>
     /// Replace the renderer's built-in CSS with a custom stylesheet generated
-    /// by <c>ThemeConfigViewModel.GenerateCss()</c>. The CSS text is injected
+    /// by <c>MarkdownThemeViewModel.GenerateCss()</c>. The CSS text is injected
     /// into a <c>&lt;style id="custom-theme-css"&gt;</c> element in the WebView's
     /// document head, overriding the default theme rules.
     /// </summary>

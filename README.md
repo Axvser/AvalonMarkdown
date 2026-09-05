@@ -13,7 +13,7 @@ dotnet add package AvalonMarkdown
 Everything you need lives on two types:
 
 - **`MarkdownView`** — show a Markdown document and react to the user (links, scroll, headings).
-- **`ThemeConfigViewModel`** — style how that document looks.
+- **`MarkdownThemeViewModel`** — style how that document looks.
 
 ---
 
@@ -117,7 +117,7 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 
 ---
 
-## ThemeConfigViewModel — styling
+## MarkdownThemeViewModel — styling
 
 Configures how the document looks: colors, typography, code highlighting, and diagram styling. Every property carries a `[Description]` (hover it in IntelliSense to see what it controls).
 
@@ -134,10 +134,10 @@ The panel is collapsed by default — click its header to expand it.
 
 ### Option B — drive it programmatically
 
-Create a `ThemeConfigViewModel`, change the properties you care about, and let it push changes to one or more previews:
+Create a `MarkdownThemeViewModel`, change the properties you care about, and let it push changes to one or more previews:
 
 ```csharp
-var theme = new ThemeConfigViewModel
+var theme = new MarkdownThemeViewModel
 {
     BgR = 30, BgG = 30, BgB = 30,   // page background
     TextR = 212, TextG = 212, TextB = 212, // body text

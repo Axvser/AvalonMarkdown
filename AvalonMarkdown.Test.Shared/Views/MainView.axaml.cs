@@ -279,7 +279,7 @@ public partial class MainView : UserControl
 
     /// <summary>
     /// Knobs whose CSS is known to be ineffective (regression allowlist). Currently empty:
-    /// BodyFontSize/LineHeight were removed from ThemeConfigViewModel because their body
+    /// BodyFontSize/LineHeight were removed from MarkdownThemeViewModel because their body
     /// font/line CSS is shadowed by the renderer.js inline body style. Any new dead knob
     /// fails the gate.
     /// </summary>
@@ -315,7 +315,7 @@ public partial class MainView : UserControl
         try
         {
             // Apply the default ThemeConfig-generated CSS so the probe has a custom-theme-css.
-            var css = new AvalonMarkdown.ViewModels.ThemeConfigViewModel().GenerateCss();
+            var css = new AvalonMarkdown.ViewModels.MarkdownThemeViewModel().GenerateCss();
             await _singlePreview!.ApplyCustomCssAsync(css);
             await Task.Delay(700);
 
@@ -363,13 +363,13 @@ public partial class MainView : UserControl
     }
 
     /// <summary>
-    /// Reflects every writable property of <see cref="AvalonMarkdown.ViewModels.ThemeConfigViewModel"/>
+    /// Reflects every writable property of <see cref="AvalonMarkdown.ViewModels.MarkdownThemeViewModel"/>
     /// and checks whether changing it actually alters <see cref="GenerateCss"/> output.
     /// A property that does not change the CSS is dead/dangling and fails the gate.
     /// </summary>
     private static List<string> PropertyAuditLines()
     {
-        var vm = new AvalonMarkdown.ViewModels.ThemeConfigViewModel();
+        var vm = new AvalonMarkdown.ViewModels.MarkdownThemeViewModel();
         var baseCss = vm.GenerateCss();
         var lines = new List<string>();
 
@@ -451,7 +451,7 @@ public partial class MainView : UserControl
         }
         _auditLog.AppendLine($"summary: rows={rows.Count} eff={eff} virt={virt} hard={hard} deadUnexpected={deadUnexpected.Count}");
 
-        // Property-level gate: every writable ThemeConfigViewModel property must influence
+        // Property-level gate: every writable MarkdownThemeViewModel property must influence
         // GenerateCss() (else it is a dangling/never-wired knob).
         var propLines = PropertyAuditLines();
         var unusedProps = new List<string>();

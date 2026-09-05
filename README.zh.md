@@ -13,7 +13,7 @@ dotnet add package AvalonMarkdown
 你只需要认识两个类型：
 
 - **`MarkdownView`** —— 展示 Markdown 文档并响应交互（链接、滚动、标题）。
-- **`ThemeConfigViewModel`** —— 控制文档长什么样。
+- **`MarkdownThemeViewModel`** —— 控制文档长什么样。
 
 ---
 
@@ -117,7 +117,7 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 
 ---
 
-## ThemeConfigViewModel —— 样式
+## MarkdownThemeViewModel —— 样式
 
 配置文档外观：颜色、排版、代码高亮、图表样式。每个属性都带 `[Description]`，在 IntelliSense 里悬停即可看到它控制什么。
 
@@ -134,10 +134,10 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 
 ### 方案 B：代码驱动
 
-创建 `ThemeConfigViewModel`，改你需要动的属性，再让它把变更推给一个或多个预览：
+创建 `MarkdownThemeViewModel`，改你需要动的属性，再让它把变更推给一个或多个预览：
 
 ```csharp
-var theme = new ThemeConfigViewModel
+var theme = new MarkdownThemeViewModel
 {
     BgR = 30, BgG = 30, BgB = 30,        // 页面背景
     TextR = 212, TextG = 212, TextB = 212, // 正文文字
