@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -22,6 +23,11 @@ public partial class MainView : UserControl
     private bool _captureDone;
     private bool _captureStarted;
 
+    // ── Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1) ──
+    private readonly StringBuilder _auditLog = new();
+    private readonly List<string> _auditRows = new();
+    private bool _auditDone;
+
     public MainView()
     {
         InitializeComponent();
@@ -40,6 +46,10 @@ public partial class MainView : UserControl
         // When AVALON_CAPTURE_ERRORS=1, run the automated error-capture test and exit.
         if (Environment.GetEnvironmentVariable("AVALON_CAPTURE_ERRORS") == "1")
             StartCaptureTest();
+
+        // When AVALON_THEME_AUDIT=1, run the repeatable theme-CSS audit and exit.
+        if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1")
+            StartThemeAudit();
 
         // LinkClicked example: intercept app:// links for in-app navigation.
         // Everything else (https://, mailto:, …) is left unhandled and still opens
@@ -261,6 +271,218 @@ public partial class MainView : UserControl
             Console.WriteLine($"[capture] failed to write log: {ex.Message}");
         }
         Environment.Exit(timeout ? 1 : 0);
+    }
+
+    // ====================================================================
+    // Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1)
+    // ====================================================================
+
+    /// <summary>
+    /// Knobs whose CSS is known to be ineffective (regression allowlist). Currently empty:
+    /// BodyFontSize/LineHeight were removed from ThemeConfigViewModel because their body
+    /// font/line CSS is shadowed by the renderer.js inline body style. Any new dead knob
+    /// fails the gate.
+    /// </summary>
+    private static readonly HashSet<string> KnownDeadKnobs = new(StringComparer.Ordinal);
+
+    private void StartThemeAudit()
+    {
+        _auditLog.AppendLine("=== AvalonMarkdown theme-CSS audit ===");
+
+        // Capture JS console messages emitted by the audit probe ([TAUDIT] lines).
+        _singlePreview!.ConsoleMessage += (_, e) =>
+        {
+            if (e.Level == "LOG" && e.Message.Contains("[TAUDIT]"))
+                _auditRows.Add(e.Message);
+        };
+        _singlePreview.ErrorOccurred += (_, e) =>
+            _auditLog.AppendLine($"[C#-Event] ErrorOccurred: {e.Title} — {e.Message}");
+
+        _singlePreview.OnReady += (_, _) => _ = RunThemeAuditAsync();
+
+        // With AVALON_THEME_AUDIT_KEEP=1 the audit writes its log but does NOT exit, so
+        // the window stays open and you can keep dragging sliders while the probe panel
+        // updates live. Without it, finish() exits with the gate result (CI mode).
+        if (!AuditKeepOpen)
+            _ = Task.Delay(TimeSpan.FromSeconds(40)).ContinueWith(_ => FinishThemeAudit(timeout: true));
+    }
+
+    private static bool AuditKeepOpen =>
+        Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT_KEEP") == "1";
+
+    private async Task RunThemeAuditAsync()
+    {
+        try
+        {
+            // Apply the default ThemeConfig-generated CSS so the probe has a custom-theme-css.
+            var css = new AvalonMarkdown.ViewModels.ThemeConfigViewModel().GenerateCss();
+            await _singlePreview!.ApplyCustomCssAsync(css);
+            await Task.Delay(700);
+
+            var js = ReadThemeAuditJs();
+            if (string.IsNullOrEmpty(js))
+            {
+                _auditLog.AppendLine("[FATAL] cannot load ThemeAudit.js asset");
+                FinishThemeAudit(false);
+                return;
+            }
+            await _singlePreview.InvokeScriptAsync(js);
+
+            // The probe logs its [TAUDIT] rows shortly after boot; give it time to finish.
+            await Task.Delay(3000);
+            FinishThemeAudit(false);
+        }
+        catch (Exception ex)
+        {
+            _auditLog.AppendLine($"[FATAL][C#] theme audit driver: {ex}");
+            FinishThemeAudit(false);
+        }
+    }
+
+    private static string? ReadThemeAuditJs()
+    {
+        try
+        {
+            using var s = Avalonia.Platform.AssetLoader.Open(
+                new Uri("avares://AvalonMarkdown.Test.Shared/Assets/ThemeAudit.js"));
+            using var r = new StreamReader(s);
+            return r.ReadToEnd();
+        }
+        catch
+        {
+            // Fallback: manifest resource in case the avares key differs.
+            var asm = typeof(MainView).Assembly;
+            var name = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("ThemeAudit.js", StringComparison.OrdinalIgnoreCase));
+            if (name is null) return null;
+            using var s = asm.GetManifestResourceStream(name);
+            if (s is null) return null;
+            using var r = new StreamReader(s);
+            return r.ReadToEnd();
+        }
+    }
+
+    /// <summary>
+    /// Reflects every writable property of <see cref="AvalonMarkdown.ViewModels.ThemeConfigViewModel"/>
+    /// and checks whether changing it actually alters <see cref="GenerateCss"/> output.
+    /// A property that does not change the CSS is dead/dangling and fails the gate.
+    /// </summary>
+    private static List<string> PropertyAuditLines()
+    {
+        var vm = new AvalonMarkdown.ViewModels.ThemeConfigViewModel();
+        var baseCss = vm.GenerateCss();
+        var lines = new List<string>();
+
+        var props = vm.GetType().GetProperties()
+            .Where(p => p.CanWrite && p.GetIndexParameters().Length == 0)
+            .OrderBy(p => p.Name);
+        foreach (var p in props)
+        {
+            var old = p.GetValue(vm);
+            object? sentinel = old switch
+            {
+                double d => d + 37.0,
+                int i => i + 37,
+                string s => s + "zz",
+                bool b => !b,
+                _ => null,
+            };
+            if (sentinel is null)
+            {
+                lines.Add($"[PROP] {p.Name}|{p.PropertyType.Name}|SKIPPED");
+                continue;
+            }
+            p.SetValue(vm, sentinel);
+            var changed = vm.GenerateCss() != baseCss;
+            p.SetValue(vm, old);
+            lines.Add($"[PROP] {p.Name}|{p.PropertyType.Name}|{(changed ? "used" : "UNUSED")}");
+        }
+        return lines;
+    }
+
+    private void FinishThemeAudit(bool timeout)
+    {
+        if (_auditDone) return;
+        _auditDone = true;
+
+        _auditLog.AppendLine(timeout ? "\n[WARN] watchdog timeout — probe may not have finished" : "");
+        var start = _auditRows.FirstOrDefault(l => l.Contains("[TAUDIT] START", StringComparison.Ordinal)) ?? "";
+        _auditLog.AppendLine("start: " + start);
+
+        var rows = _auditRows
+            .Where(l => l.Contains("[TAUDIT] ", StringComparison.Ordinal) &&
+                        !l.Contains("[TAUDIT] START", StringComparison.Ordinal) &&
+                        !l.Contains("[TAUDIT] DONE", StringComparison.Ordinal))
+            .ToList();
+
+        var deadUnexpected = new List<string>();
+        foreach (var l in rows)
+        {
+            var body = l[(l.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var parts = body.Split('|');
+            if (parts.Length < 4) continue;
+            var status = parts[0];
+            var label = parts[1];
+            var kind = parts[2];
+            var reason = parts.Length > 4 ? parts[4] : "";
+            if (status == "dead" && kind == "knob")
+            {
+                if (KnownDeadKnobs.Contains(label))
+                    _auditLog.AppendLine("[KNOWN-DEAD] " + label + " — " + reason);
+                else
+                    deadUnexpected.Add(label + " — " + reason);
+            }
+            else if (status == "dead")
+            {
+                _auditLog.AppendLine("[dead] " + label + " (" + kind + ") — " + reason);
+            }
+        }
+        foreach (var d in deadUnexpected)
+            _auditLog.AppendLine("[regression?] dead knob: " + d);
+
+        int eff = 0, virt = 0, hard = 0;
+        foreach (var l in rows)
+        {
+            var b = l[(l.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var p = b.Split('|');
+            if (p.Length < 3) continue;
+            if (p[0] == "eff") { eff++; if (p[2] == "hard") hard++; }
+            if (p[0] == "virt") virt++;
+        }
+        _auditLog.AppendLine($"summary: rows={rows.Count} eff={eff} virt={virt} hard={hard} deadUnexpected={deadUnexpected.Count}");
+
+        // Property-level gate: every writable ThemeConfigViewModel property must influence
+        // GenerateCss() (else it is a dangling/never-wired knob).
+        var propLines = PropertyAuditLines();
+        var unusedProps = new List<string>();
+        foreach (var pl in propLines)
+        {
+            _auditLog.AppendLine(pl);
+            if (pl.Contains("|UNUSED|", StringComparison.Ordinal)) unusedProps.Add(pl);
+        }
+        _auditLog.AppendLine($"summaryProps: writable={propLines.Count} unused={unusedProps.Count}");
+
+        var ok = !timeout && deadUnexpected.Count == 0 && unusedProps.Count == 0;
+        _auditLog.AppendLine(ok ? "\nRESULT: PASS" : "\nRESULT: FAIL");
+
+        try
+        {
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "theme-audit.log");
+            File.WriteAllText(path, _auditLog.ToString());
+            Console.WriteLine(ok ? $"[theme-audit] PASS — {path}" : $"[theme-audit] FAIL — {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[theme-audit] failed to write log: {ex.Message}");
+        }
+
+        if (AuditKeepOpen)
+        {
+            // Interactive run: keep the window + probe panel open (no exit).
+            Console.WriteLine("[theme-audit] keeping window open for live inspection");
+            return;
+        }
+        Environment.Exit(ok ? 0 : 1);
     }
 
     /// <summary>
