@@ -136,6 +136,7 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(TableBgHex));
         OnPropertyChanged(nameof(MermaidBgHex));
         OnPropertyChanged(nameof(PumlBgHex));
+        OnPropertyChanged(nameof(PlotBgHex));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(BorderRadius));
         MarkDirty();
@@ -398,6 +399,39 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     public int    PumlBorderRadius     { get => _pumlBorderRadius;     set => SetProperty(ref _pumlBorderRadius,     value); }
     [Description("暗色下 PlantUML 反色强度（0-1）")]
     public double PumlDarkInvert       { get => _pumlDarkInvert;       set => SetProperty(ref _pumlDarkInvert,       value); }
+    #endregion
+
+    // ════════════════════════════════════════════════════════════
+    //  Function Plot section
+    // ════════════════════════════════════════════════════════════
+
+    #region Function plot properties
+    // Function plot container background
+    private int _plotBgR = 30;
+    private int _plotBgG = 30;
+    private int _plotBgB = 30;
+    [Description("函数图像容器背景色的红色通道（0-255）")]
+    public int PlotBgR { get => _plotBgR; set => SetProperty(ref _plotBgR, value); }
+    [Description("函数图像容器背景色的绿色通道（0-255）")]
+    public int PlotBgG { get => _plotBgG; set => SetProperty(ref _plotBgG, value); }
+    [Description("函数图像容器背景色的蓝色通道（0-255）")]
+    public int PlotBgB { get => _plotBgB; set => SetProperty(ref _plotBgB, value); }
+    [Description("函数图像容器背景色 HEX 预览（只读）")]
+    public string PlotBgHex => $"#{PlotBgR:X2}{PlotBgG:X2}{PlotBgB:X2}";
+
+    private double _plotContainerPadding = 8;
+    private double _plotContainerMargin = 16;
+    private int _plotBorderRadius = 4;
+    private string _plotAxisColor = "#cccccc";
+
+    [Description("函数图像容器内边距（px）")]
+    public double PlotContainerPadding { get => _plotContainerPadding; set => SetProperty(ref _plotContainerPadding, value); }
+    [Description("函数图像容器上下外边距（px）")]
+    public double PlotContainerMargin  { get => _plotContainerMargin;  set => SetProperty(ref _plotContainerMargin,  value); }
+    [Description("函数图像容器圆角（px）")]
+    public int    PlotBorderRadius     { get => _plotBorderRadius;     set => SetProperty(ref _plotBorderRadius,     value); }
+    [Description("函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色值）")]
+    public string PlotAxisColor        { get => _plotAxisColor;        set => SetProperty(ref _plotAxisColor,        value); }
     #endregion
 
     // ──────────────────────────────────────────────────
@@ -677,6 +711,23 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine(".puml-dark img {");
         sb.AppendLine($"    filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
         sb.AppendLine($"    -webkit-filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  Function plots
+        // ════════════════════════════════════════════════════════════
+        // `color` drives the whole coordinate frame: renderer.css overrides the
+        // library's hard-coded black strokes with currentColor and sets
+        // fill: currentColor on the svg, so one value colours the grid, the axes,
+        // the tick labels and the title.
+        sb.AppendLine("/* === Function plot overrides === */");
+        sb.AppendLine($".plot-container {{");
+        sb.AppendLine($"    background: {PlotBgHex};");
+        sb.AppendLine($"    padding: {PlotContainerPadding}px;");
+        sb.AppendLine($"    margin: {PlotContainerMargin}px 0;");
+        sb.AppendLine($"    border-radius: {PlotBorderRadius}px;");
+        sb.AppendLine($"    color: {PlotAxisColor};");
         sb.AppendLine("}");
 
         return sb.ToString();

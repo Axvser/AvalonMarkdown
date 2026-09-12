@@ -115,7 +115,11 @@
         autoScrollOnUpdate: true,
         autoScrollCooldown: 2000,
         // placeholder: text shown when the preview has no content; empty = blank.
-        placeholder: ""
+        placeholder: "",
+        // contextMenuEnabled: right-clicking a mermaid / plot / PlantUML member
+        // offers "Save as SVG / PNG". Only those three are intercepted; the
+        // platform's own menu keeps working everywhere else.
+        contextMenuEnabled: true
     };
 
     window.setPreviewConfig = function(config) {
@@ -127,6 +131,10 @@
         if (config.autoScrollOnUpdate !== undefined) previewConfig.autoScrollOnUpdate = config.autoScrollOnUpdate;
         if (config.autoScrollCooldown !== undefined) previewConfig.autoScrollCooldown = config.autoScrollCooldown;
         if (config.placeholder !== undefined) previewConfig.placeholder = config.placeholder;
+        if (config.contextMenuEnabled !== undefined) {
+            previewConfig.contextMenuEnabled = config.contextMenuEnabled;
+            if (config.contextMenuEnabled === false) ctxHide();
+        }
         document.body.style.fontSize = previewConfig.fontSize + 'px';
         document.body.style.lineHeight = previewConfig.lineHeight;
         // Apply code block max height
@@ -386,6 +394,966 @@
         };
     }
 
+    // ===== Function plots (function-plot) =====
+    // A ```plot fence carries a raw function-plot options object as JSON; hydratePlots()
+    // turns it into an SVG once the element is in the document. Structurally modelled on
+    // runMermaidAll — generation counter, rAF deferral, liveness re-query — because the
+    // same two hazards apply: Android's safety retry renders the same text twice, and a
+    // pass superseded by a newer render must not touch nodes that render removed.
+    var plotGeneration = 0;
+    var plotTimer = null;
+
+    // Curve colours, drawn from the renderer.css hljs token palette so plots read as part
+    // of the same design system. These live in JS rather than GenerateCss because the
+    // library has no top-level `color` option (colour is per-datum only), and because a
+    // CSS variable with no var() consumer would be reported as a dead knob by the theme
+    // audit gate.
+    var PLOT_PALETTE_DARK = ['#569cd6', '#4ec9b0', '#d69d85', '#b5cea8',
+                             '#dcdcaa', '#c586c0', '#9cdcfe', '#ce9178'];
+    var PLOT_PALETTE_LIGHT = ['#005fb8', '#2b91af', '#b35c00', '#4b7a2b',
+                              '#8a6d00', '#8b2f8b', '#0d6ea8', '#a04a1f'];
+
+    // The library compiles expressions to JavaScript source and runs them through
+    // new Function, so a fence body is an execution vector inside the preview. This
+    // excludes every character that could break out of an expression — quotes,
+    // backticks, semicolons, braces, brackets, backslash, $, # — while keeping the
+    // full expression grammar: comparison and ternary operators are what make
+    // piecewise definitions possible (`x > 0 ? x : -x`), and `%` is modulo.
+    var PLOT_FN_WHITELIST = /^[0-9A-Za-z_+\-*/^().,\s%?:<>=!]*$/;
+
+    function shallowCopy(o) {
+        var out = {};
+        for (var k in o) {
+            if (Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k];
+        }
+        return out;
+    }
+
+    // Pick the palette by the brightness of whatever is actually behind the graph, not by
+    // the app theme: GenerateCss emits one theme-agnostic container background for both
+    // themes, and the Plot* sliders can move it anywhere.
+    function plotPaletteFor(el, theme) {
+        try {
+            var bg = window.getComputedStyle(el).backgroundColor || '';
+            var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+            if (m) {
+                var lum = (0.2126 * parseInt(m[1], 10) +
+                           0.7152 * parseInt(m[2], 10) +
+                           0.0722 * parseInt(m[3], 10)) / 255;
+                return lum > 0.5 ? PLOT_PALETTE_LIGHT : PLOT_PALETTE_DARK;
+            }
+        } catch (e) { /* fall through to the app theme */ }
+        return (theme || currentTheme) === 'light' ? PLOT_PALETTE_LIGHT : PLOT_PALETTE_DARK;
+    }
+
+    function getFunctionPlotTheme(theme, el) {
+        return { palette: plotPaletteFor(el, theme) };
+    }
+
+    // Reject anything the whitelist does not cover, before it reaches the evaluator.
+    function plotExpressionError(data) {
+        if (Object.prototype.toString.call(data) !== '[object Array]') return null;
+        var keys = ['fn', 'x', 'y', 'r'];
+        for (var i = 0; i < data.length; i++) {
+            var d = data[i];
+            if (!d || typeof d !== 'object') continue;
+            for (var j = 0; j < keys.length; j++) {
+                var v = d[keys[j]];
+                if (typeof v === 'string' && !PLOT_FN_WHITELIST.test(v)) {
+                    return 'rejected expression in data[' + i + '].' + keys[j] + ': ' + v +
+                        ' (only numbers, operators and named functions are allowed)';
+                }
+            }
+        }
+        return null;
+    }
+
+    // The width a plot should draw at when the author gave none. Shared by hydration
+    // and by the reflow pass so both always agree.
+    //
+    // The floor matters: a chart drawn narrower than the pane is fine, one drawn
+    // wider is clipped or scrolled. 240 keeps a 320px-wide phone pane (minus
+    // padding) inside the viewport while still leaving the axis text legible.
+    function plotWidthFor(el) {
+        var pad = 0;
+        try {
+            var cs = window.getComputedStyle(el);
+            pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        } catch (e) { /* fall back to the default below */ }
+        var avail = el.clientWidth ? el.clientWidth - pad : 550;
+        // Rounded to whole pixels: that, rather than a dead zone, is what keeps
+        // sub-pixel noise from causing redraw churn.
+        return Math.round(Math.max(240, Math.min(760, avail > 0 ? avail : 550)));
+    }
+
+    // Merge order: the user's JSON always wins. Only two things are ever defaulted —
+    // a missing width, and a missing disableZoom.
+    function buildPlotOptions(parsed, el) {
+        var opts = shallowCopy(parsed);
+
+        // A user-supplied id would key the library's static Chart.cache, so two blocks
+        // sharing one id would collide and the second would reuse the first's chart.
+        delete opts.id;
+
+        // The library's 550 default yields ~9.8px axis text, unreadable next to 14px body
+        // text, so fit the container when the user gave no explicit width. Note width and
+        // height are the whole SVG including margins (l 40 / r 20 / t 20 or 40 / b 20).
+        if (opts.width === undefined || opts.width === null) {
+            opts.width = plotWidthFor(el);
+        }
+
+        // Apply the theme palette by datum index, unless the user set an explicit colour.
+        var src = parsed.data;
+        if (Object.prototype.toString.call(src) === '[object Array]') {
+            var palette = getFunctionPlotTheme(currentTheme, el).palette;
+            opts.data = [];
+            for (var i = 0; i < src.length; i++) {
+                var d = src[i];
+                // Text annotations have no stroke to colour.
+                if (d && typeof d === 'object' && !d.color && d.graphType !== 'text') {
+                    d = shallowCopy(d);
+                    d.color = palette[i % palette.length];
+                }
+                opts.data.push(d);
+            }
+        }
+
+        // Default to a static graph; see installPlotWheelGate for why the wheel has to be
+        // intercepted separately anyway.
+        if (!Object.prototype.hasOwnProperty.call(parsed, 'disableZoom')) {
+            opts.disableZoom = true;
+        }
+
+        // target as an element, not a selector: drawGraphWrapper() runs
+        // select(target).selectAll("svg"), and d3's string overload with no match yields
+        // an unusable [[null]] group.
+        opts.target = el;
+        return opts;
+    }
+
+    // function-plot's d3-zoom binding preventDefaults and stopImmediatePropagation's every
+    // wheel event over the graph, before its own disableZoom guard runs — so the page
+    // cannot scroll while the cursor is over a plot, and the page-level wheel listener
+    // never fires either. A capture-phase listener stops the event before it reaches the
+    // .zoom-and-drag rect, letting the browser's default (page scroll) proceed. Installed
+    // unless the JSON explicitly opts into zoom.
+    function installPlotWheelGate(el, parsed) {
+        if (parsed.disableZoom === false) return;
+        el.addEventListener('wheel', function (e) {
+            // The window-level wheel listener that suspends auto-scroll is bubble-phase,
+            // so stopping propagation here skips it — register the activity here instead
+            // of regressing that behaviour. passive:true only forbids preventDefault; we
+            // want the browser's native scroll, so stopPropagation is the whole job.
+            markUserScroll();
+            e.stopPropagation();
+        }, { capture: true, passive: true });
+    }
+
+    // Chart.cache is a static map the library never evicts, and each entry pins a whole
+    // SVG subtree plus scale/zoom state. renderMarkdown rebuilds #preview.innerHTML on
+    // every content update, so without this every render leaks one Chart per plot.
+    // functionPlot.Chart is not exported (webpack libraryExport:'default'), so reach the
+    // class through the returned instance.
+    function prunePlotCache(chart) {
+        try {
+            var C = chart && chart.constructor;
+            var cache = C && C.cache;
+            if (!cache) return;
+            for (var k in cache) {
+                if (!Object.prototype.hasOwnProperty.call(cache, k)) continue;
+                var c = cache[k];
+                var node = c && c.root && c.root.node ? c.root.node() : null;
+                if (!node || !node.isConnected) delete cache[k];
+            }
+        } catch (e) { /* pruning is best-effort */ }
+    }
+
+    // Built with DOM APIs rather than string concatenation, so the raw fence body can
+    // never be interpreted as markup.
+    function showPlotError(el, message, raw) {
+        var pre = document.createElement('pre');
+        pre.style.cssText = 'color:#f14c4c;border:1px solid #f14c4c;padding:8px;' +
+            'white-space:pre-wrap;text-align:left;';
+        pre.textContent = '⚠ Plot render error: ' + message + '\n\n' +
+            (raw == null ? '' : String(raw));
+        el.textContent = '';
+        el.removeAttribute('data-plot');
+        el.appendChild(pre);
+    }
+
+    function hydratePlots(container, gen) {
+        var nodes = container.querySelectorAll('.plot-container[data-plot]');
+        for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i];
+            var raw = el.getAttribute('data-plot');
+            el.removeAttribute('data-plot');   // read exactly once
+
+            if (gen !== plotGeneration) return;   // superseded mid-pass
+
+            var parsed = null;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                showPlotError(el, 'invalid JSON — ' + e.message, raw);
+                continue;
+            }
+            if (!parsed || typeof parsed !== 'object' ||
+                Object.prototype.toString.call(parsed) === '[object Array]') {
+                showPlotError(el,
+                    'the plot body must be a single JSON object, e.g. { "data": [{ "fn": "x^2" }] }',
+                    raw);
+                continue;
+            }
+            if (typeof window.functionPlot !== 'function') {
+                showPlotError(el, 'function-plot is not loaded (CDN blocked?)', raw);
+                continue;
+            }
+            var exprError = plotExpressionError(parsed.data);
+            if (exprError) {
+                console.warn('[Plot] ' + exprError);
+                showPlotError(el, exprError, raw);
+                continue;
+            }
+
+            try {
+                var chart = window.functionPlot(buildPlotOptions(parsed, el));
+                prunePlotCache(chart);
+                installPlotWheelGate(el, parsed);
+                // Remembered so the reflow pass can redraw at a new width. The chart
+                // is laid out once, from whatever the container measured at this
+                // moment — which is not necessarily its final width.
+                el._plotOpts = parsed;
+                el._plotWidth = plotWidthFor(el);
+                ensurePlotResizeObserver();
+            } catch (e2) {
+                if (gen !== plotGeneration) continue;   // stale-node artefact — stay quiet
+                console.warn('[Plot] Render error: ' + e2.message);
+                showPlotError(el, e2.message, raw);
+            }
+        }
+    }
+
+    // ===== Responsive reflow =====
+    // function-plot lays a chart out once, from the width it is handed, and the
+    // result is a fixed-size <svg>. Nothing re-runs when the pane changes size, so a
+    // plot drawn while the pane was still settling (or at its old width) stays wrong:
+    // too wide and it is clipped or scrolled, too narrow and it leaves a gap.
+    var plotResizeObserver = null;
+    // Throttle, not debounce: a debounce only fires once the drag STOPS, which
+    // reads as "the chart doesn't follow the pane". This fires immediately on the
+    // first change, then keeps up at a bounded rate while the pane keeps moving,
+    // with a trailing call so the final width is always the one drawn.
+    var PLOT_REFLOW_MIN_MS = 60;
+    var plotReflowLast = 0;
+    var plotReflowTimer = null;
+
+    function reflowPlots() {
+        var preview = document.getElementById('preview');
+        if (!preview || typeof window.functionPlot !== 'function') return;
+        var nodes = preview.querySelectorAll('.plot-container');
+        for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i];
+            if (!el._plotOpts || !el.isConnected) continue;
+            var w = plotWidthFor(el);
+            // Exact comparison. plotWidthFor rounds to whole pixels, so nothing
+            // here has to tolerate a dead zone.
+            if (w === el._plotWidth) continue;
+            try {
+                var chart = window.functionPlot(buildPlotOptions(el._plotOpts, el));
+                prunePlotCache(chart);
+                el._plotWidth = w;
+            } catch (e) {
+                console.warn('[Plot] reflow error: ' + e.message);
+            }
+        }
+    }
+
+    function schedulePlotReflow() {
+        var since = Date.now() - plotReflowLast;
+        if (since >= PLOT_REFLOW_MIN_MS) {
+            plotReflowLast = Date.now();
+            reflowPlots();
+            return;
+        }
+        if (plotReflowTimer) return;   // a trailing call is already queued
+        plotReflowTimer = setTimeout(function () {
+            plotReflowTimer = null;
+            plotReflowLast = Date.now();
+            reflowPlots();
+        }, PLOT_REFLOW_MIN_MS - since);
+    }
+
+    function ensurePlotResizeObserver() {
+        if (plotResizeObserver || typeof window.ResizeObserver !== 'function') return;
+        // Observing #preview rather than each container: the containers are recreated
+        // by every render, so per-container observers would need constant re-wiring.
+        var preview = document.getElementById('preview');
+        if (!preview) return;
+        plotResizeObserver = new window.ResizeObserver(schedulePlotReflow);
+        plotResizeObserver.observe(preview);
+    }
+
+    // Deferred to the next animation frame so a back-to-back re-render cancels the
+    // pending pass and only the latest DOM is hydrated, and so the container is laid out
+    // before clientWidth is read.
+    function runFunctionPlotAll(container, followToBottom) {
+        if (container.querySelectorAll('.plot-container[data-plot]').length === 0) return;
+        var gen = ++plotGeneration;
+        if (plotTimer) cancelAnimationFrame(plotTimer);
+        plotTimer = requestAnimationFrame(function() {
+            plotTimer = null;
+            var live = 0;
+            var nodes = container.querySelectorAll('.plot-container[data-plot]');
+            for (var i = 0; i < nodes.length; i++) {
+                if (nodes[i].isConnected) live++;
+            }
+            if (live === 0) return;
+            hydratePlots(container, gen);
+            if (followToBottom !== false) maybeAutoScroll();
+        });
+    }
+
+    // ===== Export a diagram / plot / PlantUML image =====
+    // Right-clicking one of the three SVG-ish members offers "Save as SVG / PNG".
+    // Math is deliberately absent: KaTeX emits positioned HTML spans, not SVG, so
+    // there is no vector artefact to hand out.
+    //
+    // Everything here is ES5, like the rest of this file.
+    var EXPORT_SCALE = 2;
+
+    // iOS/WebKit refuse canvases above roughly 16M pixels, and the failure mode is
+    // a SILENTLY BLANK image -- no exception, a perfectly valid PNG data URL.
+    var EXPORT_MAX_PX = 16 * 1024 * 1024;
+
+    // Android delivers JS->C# through addJavascriptInterface, which crosses Binder
+    // with a ~1MB per-transaction ceiling. Staying under it means a big PNG is
+    // reported as too large instead of vanishing into a TransactionTooLargeException.
+    var EXPORT_MAX_B64 = 700 * 1024;
+
+    // Only the properties the plot stylesheet actually moves. Each read forces a
+    // style resolution, so the list stays tight.
+    var EXPORT_INLINE_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-opacity',
+                               'stroke-width', 'opacity'];
+
+    var EXPORT_SVG_NS = 'http://www.w3.org/2000/svg';
+    var EXPORT_XLINK_NS = 'http://www.w3.org/1999/xlink';
+
+    function exportKindOf(el) {
+        if (!el || el.nodeType !== 1 || !el.classList) return null;
+        if (el.classList.contains('mermaid-container')) return 'mermaid';
+        if (el.classList.contains('plot-container')) return 'plot';
+        if (el.classList.contains('puml-container')) return 'puml';
+        return null;
+    }
+
+    // Walk up from the event target to the member container it belongs to.
+    function findExportContainer(node) {
+        var el = node;
+        while (el && el.nodeType === 1 && el !== document.body) {
+            var kind = exportKindOf(el);
+            if (kind) return { el: el, kind: kind };
+            el = el.parentNode;
+        }
+        return null;
+    }
+
+    // A member that failed to render has no artefact worth exporting -- the plot
+    // replaces its SVG with a <pre>, mermaid injects an error diagram, and a
+    // PlantUML image that never loaded is a blank box.
+    function exportSvgOf(container, kind) {
+        if (kind === 'plot') return container.querySelector('svg.function-plot');
+        if (kind === 'mermaid') return container.querySelector('svg');
+        return null;
+    }
+
+    function exportPumlImg(container) {
+        var img = container.querySelector('img');
+        return (img && img.complete && img.naturalWidth > 0) ? img : null;
+    }
+
+    function exportIsAvailable(container, kind) {
+        if (kind === 'puml') return !!exportPumlImg(container);
+        return !!exportSvgOf(container, kind);
+    }
+
+    // {type}-{ordinal}[-{heading slug}], so a Downloads folder full of these is
+    // still navigable.
+    function exportName(container, kind, ext) {
+        var sel = kind === 'mermaid' ? '.mermaid-container'
+                : kind === 'plot' ? '.plot-container' : '.puml-container';
+        var all = document.querySelectorAll('#preview ' + sel);
+        var idx = 1;
+        for (var i = 0; i < all.length; i++) {
+            if (all[i] === container) { idx = i + 1; break; }
+        }
+        var slug = '';
+        var hs = document.querySelectorAll('#preview h1,#preview h2,#preview h3,' +
+            '#preview h4,#preview h5,#preview h6');
+        for (var j = 0; j < hs.length; j++) {
+            // DOCUMENT_POSITION_PRECEDING: the heading comes before the container.
+            if (container.compareDocumentPosition(hs[j]) & 2) {
+                slug = hs[j].getAttribute('id') || '';
+            }
+        }
+        return kind + '-' + idx + (slug ? '-' + slug : '') + '.' + ext;
+    }
+
+    // The first ancestor with an opaque background. .mermaid-container and
+    // .plot-container have none of their own -- they inherit the page background --
+    // so a dark-theme export would otherwise be dark ink on transparency, which
+    // disappears the moment it lands on a white page.
+    function exportBackdrop(el) {
+        var node = el;
+        while (node && node.nodeType === 1) {
+            var bg = '';
+            try { bg = window.getComputedStyle(node).backgroundColor || ''; } catch (e) { bg = ''; }
+            if (bg && bg !== 'transparent' && !/^rgba\(0,\s*0,\s*0,\s*0\)$/.test(bg)) return bg;
+            node = node.parentNode;
+        }
+        return '#ffffff';
+    }
+
+    // Copy the computed presentation values onto the clone, in parallel with the
+    // original.
+    //
+    // Two rules that are easy to get wrong:
+    //  * read from the ORIGINAL -- getComputedStyle on a detached node returns
+    //    empty strings, so a clone cannot style itself;
+    //  * the two trees must stay the same shape, so this runs BEFORE anything is
+    //    deleted from the clone.
+    //
+    // Needed because the plot's colours come from author CSS in renderer.css
+    // (stroke: currentColor and friends), which exists precisely to override
+    // function-plot's hard-coded black. Serialise without inlining and the axis
+    // reverts to black-on-transparent: invisible on the dark theme.
+    function exportInlineStyles(origRoot, cloneRoot) {
+        var o = [origRoot], c = [cloneRoot], i;
+        var oa = origRoot.querySelectorAll('*'), ca = cloneRoot.querySelectorAll('*');
+        for (i = 0; i < oa.length; i++) o.push(oa[i]);
+        for (i = 0; i < ca.length; i++) c.push(ca[i]);
+        if (o.length !== c.length) return;   // shapes diverged; do not guess
+
+        for (i = 0; i < o.length; i++) {
+            var cs;
+            try { cs = window.getComputedStyle(o[i]); } catch (e) { continue; }
+            var color = null;
+            for (var p = 0; p < EXPORT_INLINE_PROPS.length; p++) {
+                var prop = EXPORT_INLINE_PROPS[p];
+                var v = cs.getPropertyValue(prop);
+                if (!v) continue;
+                if (v === 'currentColor') {
+                    if (color === null) color = cs.getPropertyValue('color') || '';
+                    v = color;
+                }
+                if (!v || v === 'inherit') continue;
+                c[i].setAttribute(prop, v);
+            }
+        }
+    }
+
+    // Give the root an explicit size and a viewBox.
+    // Both are required: width/height give the <img> an intrinsic size (without
+    // one it draws at the 300x150 CSS default), and a viewBox makes the vector
+    // RE-RENDER at the target resolution instead of being upscaled.
+    function exportNormaliseSize(clone) {
+        var w = 0, h = 0;
+        var vb = clone.getAttribute('viewBox');
+        if (vb) {
+            var p = vb.replace(/,/g, ' ').split(/\s+/);
+            w = parseFloat(p[2]);
+            h = parseFloat(p[3]);
+        }
+        if (!(w > 0 && h > 0)) {
+            w = parseFloat(clone.getAttribute('width'));
+            h = parseFloat(clone.getAttribute('height'));
+            if (!(w > 0 && h > 0)) return null;
+            clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        }
+        if (!(w > 0 && h > 0)) return null;
+        // Drops mermaid's max-width:100%, PlantUML's baked background, and any
+        // other root-level sizing hack; both are re-stated explicitly below.
+        clone.removeAttribute('style');
+        return { w: w, h: h };
+    }
+
+    function exportApplyScale(clone, size, scale) {
+        var s = scale;
+        if (size.w * size.h * s * s > EXPORT_MAX_PX) {
+            s = Math.max(1, Math.sqrt(EXPORT_MAX_PX / (size.w * size.h)));
+        }
+        clone.setAttribute('width', Math.round(size.w * s));
+        clone.setAttribute('height', Math.round(size.h * s));
+        return { w: size.w, h: size.h, scale: s };
+    }
+
+    // Strip everything that belongs to the live page rather than to the picture.
+    function exportCleanClone(clone) {
+        var junk = clone.querySelectorAll('.tip-x-line,.tip-y-line,.zoom-and-drag,.inner-tip');
+        for (var i = junk.length - 1; i >= 0; i--) {
+            junk[i].parentNode.removeChild(junk[i]);
+        }
+        var els = clone.querySelectorAll('*');
+        var list = [clone];
+        for (var j = 0; j < els.length; j++) list.push(els[j]);
+        for (var k = 0; k < list.length; k++) {
+            var el = list[k];
+            for (var a = el.attributes.length - 1; a >= 0; a--) {
+                var name = el.attributes[a].name;
+                // A standalone .svg is a live document -- never ship handlers out of
+                // a preview, and never ship the renderer's own bookkeeping.
+                if (name.indexOf('on') === 0 || name.indexOf('data-') === 0) {
+                    el.removeAttribute(name);
+                }
+            }
+        }
+    }
+
+    function exportSetTitle(clone, title) {
+        var first = clone.firstElementChild;
+        if (first && first.tagName && first.tagName.toLowerCase() === 'title') return; // already has one
+        var t = document.createElementNS(EXPORT_SVG_NS, 'title');
+        t.textContent = title;
+        clone.insertBefore(t, clone.firstChild);
+    }
+
+    function exportSerialize(clone, title) {
+        if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', EXPORT_SVG_NS);
+        exportSetTitle(clone, title);
+        var xml = new XMLSerializer().serializeToString(clone);
+        // xlink: must be declared if used, or the whole file fails to parse -- and a
+        // failed parse is a blank PNG, not an error. Checked after serialising
+        // because the attribute name needs escaping in a selector.
+        if (xml.indexOf('xlink:') >= 0 && !clone.getAttribute('xmlns:xlink')) {
+            clone.setAttribute('xmlns:xlink', EXPORT_XLINK_NS);
+            xml = new XMLSerializer().serializeToString(clone);
+        }
+        // Labels are routinely CJK; the prolog makes the encoding unambiguous for
+        // older consumers. C# writes this out as BOM-less UTF-8, which agrees.
+        return '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + xml;
+    }
+
+    function exportRasterise(svgText, pxW, pxH, bg, cb) {
+        // A data: URL does NOT taint the canvas; a blob: URL has engine-specific
+        // behaviour and an http(s): URL always taints. Stay on data:.
+        // btoa throws on any code point above 0xFF, so CJK labels must be UTF-8
+        // encoded first -- mermaid diagrams with Chinese labels are the norm here.
+        var url = 'data:image/svg+xml;base64,' +
+            window.btoa(unescape(encodeURIComponent(svgText)));
+        var img = new Image();
+        img.onload = function () {
+            try {
+                var canvas = document.createElement('canvas');
+                canvas.width = pxW;
+                canvas.height = pxH;
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, pxW, pxH);
+                ctx.drawImage(img, 0, 0, pxW, pxH);
+                var out;
+                try {
+                    out = canvas.toDataURL('image/png');
+                } catch (e) {
+                    cb('the image could not be rasterised (' + e.name + ')');
+                    return;
+                }
+                // A zero-sized canvas returns 'data:,' WITHOUT throwing, so the
+                // exception handler alone is not a sufficient guard.
+                if (!out || out.indexOf('data:image/png') !== 0) {
+                    cb('the raster came back empty (canvas too large?)');
+                    return;
+                }
+                // Opt-in only: this reads back every pixel, which the render-check
+                // probe needs and a normal export does not. It is the only way to
+                // catch a silently blank canvas -- toDataURL throws for neither an
+                // over-area canvas nor an SVG that drew nothing.
+                var ink = -1;
+                if (window.__exportInkProbe) {
+                    try {
+                        var px = ctx.getImageData(0, 0, pxW, pxH).data;
+                        var bgR = px[0], bgG = px[1], bgB = px[2];
+                        var marked = 0;
+                        for (var k = 0; k < px.length; k += 4) {
+                            if (Math.abs(px[k] - bgR) > 10 || Math.abs(px[k + 1] - bgG) > 10 ||
+                                Math.abs(px[k + 2] - bgB) > 10) marked++;
+                        }
+                        ink = marked / (px.length / 4);
+                    } catch (e3) { ink = -2; }
+                }
+                cb(null, out.substring(out.indexOf(',') + 1), ink);
+            } catch (e2) {
+                cb(e2.message);
+            }
+        };
+        img.onerror = function () { cb('the serialised SVG could not be parsed'); };
+        img.src = url;
+    }
+
+    // Build a standalone SVG string for an inline <svg> member.
+    function exportInlineSvg(sourceSvg, kind, title) {
+        var clone = sourceSvg.cloneNode(true);
+        if (kind === 'plot') exportInlineStyles(sourceSvg, clone);
+        exportCleanClone(clone);
+        var size = exportNormaliseSize(clone);
+        if (!size) return null;
+        var scaled = exportApplyScale(clone, size, EXPORT_SCALE);
+        return { xml: exportSerialize(clone, title), size: scaled };
+    }
+
+    // PlantUML is the odd one out twice over.
+    //  * Its artefact is a remote <img>, so the SVG is fetched rather than
+    //    serialised locally -- plantuml.com sends Access-Control-Allow-Origin: *,
+    //    so this works from the preview's origin.
+    //  * It is black-on-white ARTWORK. The .puml-dark invert filter is a display
+    //    hack, so the export is deliberately the unfiltered original -- and it must
+    //    keep its own white background. Applying the container's dark backdrop
+    //    here would produce black ink on near-black: an invisible picture.
+    function exportPuml(img, cb) {
+        var src = img.getAttribute('src') || '';
+        if (!src) { cb('the image has no source'); return; }
+
+        // plantuml.com is a third party and does drop requests. Retrying once turns
+        // most transient failures into a working export -- and the export is the one
+        // path where the user is actively waiting for a result, so a silent failure
+        // is worse here than anywhere else.
+        var attempt = 0;
+        function go() {
+            attempt++;
+            fetch(src).then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            }).then(function (text) {
+                if (text.indexOf('<svg') < 0) throw new Error('the server did not return SVG');
+                // A processing instruction some strict SVG consumers reject.
+                text = text.replace(/<\?plantuml[^>]*\?>/g, '');
+                var host = document.createElement('div');
+                host.innerHTML = text;   // detached: nothing here is executed
+                var svg = host.querySelector('svg');
+                if (!svg) throw new Error('the server response had no <svg>');
+                exportCleanClone(svg);
+                var size = exportNormaliseSize(svg);
+                if (!size) throw new Error('could not determine the image size');
+                var scaled = exportApplyScale(svg, size, EXPORT_SCALE);
+                cb(null, { xml: exportSerialize(svg, 'PlantUML diagram'), size: scaled });
+            }).catch(function (e) {
+                if (attempt < 2) { setTimeout(go, 400); return; }
+                cb('could not fetch the PlantUML SVG: ' +
+                   (e && e.message ? e.message : e));
+            });
+        }
+        go();
+    }
+
+    /**
+     * Produce the bytes for one member.
+     * cb(err, { name, source, encoding, data, pxW, pxH })  data is text or base64.
+     */
+    function exportMember(container, kind, format, cb) {
+        var title = kind + ' diagram';
+        if (kind === 'puml') {
+            var img = exportPumlImg(container);
+            if (!img) { cb('the PlantUML image never loaded'); return; }
+            exportPuml(img, function (err, built) {
+                if (err) { cb(err); return; }
+                finishExport(container, kind, format, built, title, '#ffffff', cb);
+            });
+            return;
+        }
+
+        var svg = exportSvgOf(container, kind);
+        if (!svg) { cb('this ' + kind + ' did not render'); return; }
+        var built = exportInlineSvg(svg, kind, title);
+        if (!built) { cb('could not determine the image size'); return; }
+        finishExport(container, kind, format, built, title, exportBackdrop(container), cb);
+    }
+
+    function finishExport(container, kind, format, built, title, bg, cb) {
+        if (format === 'svg') {
+            cb(null, {
+                name: exportName(container, kind, 'svg'),
+                source: kind,
+                encoding: 'utf8',
+                data: built.xml
+            });
+            return;
+        }
+
+        var pxW = Math.round(built.size.w * built.size.scale);
+        var pxH = Math.round(built.size.h * built.size.scale);
+        exportRasterise(built.xml, pxW, pxH, bg, function (err, b64, ink) {
+            if (err) { cb(err); return; }
+            if (b64.length > EXPORT_MAX_B64 && built.size.scale > 1) {
+                // Retry at 1x rather than failing: halving each dimension quarters
+                // the bytes, which clears the Binder ceiling in almost every case.
+                var w2 = Math.round(built.size.w);
+                var h2 = Math.round(built.size.h);
+                exportRasterise(built.xml, w2, h2, bg, function (err2, b64b, ink2) {
+                    if (err2) { cb(err2); return; }
+                    if (b64b.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
+                    cb(null, { name: exportName(container, kind, 'png'),
+                        source: kind, encoding: 'base64', data: b64b, ink: ink2 });
+                });
+                return;
+            }
+            if (b64.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
+            cb(null, { name: exportName(container, kind, 'png'),
+                source: kind, encoding: 'base64', data: b64, ink: ink });
+        });
+    }
+
+    var TOO_LARGE = 'this image is too large to save as PNG — try SVG instead';
+
+    /** Whether this member produced an artefact worth exporting at all. */
+    window.exportAvailable = function (container, kind) {
+        return exportIsAvailable(container, kind);
+    };
+
+    /** Dismiss the menu; used by the render-check probe after its synthetic event. */
+    window.hideExportMenu = ctxHide;
+
+    /**
+     * Callback API used by the render-check probe. Reports a summary rather than
+     * the payload, so a multi-hundred-KB PNG never enters the report.
+     */
+    window.exportMemberAsync = function (container, kind, format, cb) {
+        exportMember(container, kind, format, function (err, res) {
+            if (err) { cb({ ok: false, error: String(err) }); return; }
+            var out = {
+                ok: true,
+                name: res.name,
+                encoding: res.encoding,
+                bytes: res.encoding === 'base64'
+                    ? Math.floor(res.data.length * 0.75)
+                    : res.data.length
+            };
+            // Cheap shape assertions, so the checker does not have to ship the
+            // bytes back to C# to prove they are a real image.
+            if (res.encoding === 'base64') {
+                out.pngMagic = res.data.indexOf('iVBORw0KGgo') === 0;
+                if (typeof res.ink === 'number') out.ink = Math.round(res.ink * 10000) / 10000;
+            } else {
+                out.svgDoc = res.data.indexOf('<svg') >= 0;
+                out.svgProlog = res.data.indexOf('<?xml') === 0;
+                // Ink coverage cannot tell a correctly-coloured axis from a black
+                // one. Sample the stroke values that actually landed in the file:
+                // the plot's colours come from author CSS, and if the computed-style
+                // pass did not run they revert to function-plot's hard-coded black.
+                var seen = {}, samples = [];
+                var re = /stroke="([^"]+)"/g, m;
+                while ((m = re.exec(res.data)) && samples.length < 6) {
+                    if (!seen[m[1]]) { seen[m[1]] = 1; samples.push(m[1]); }
+                }
+                out.strokeSamples = samples;
+            }
+            cb(out);
+        });
+    };
+
+    // ===== Export context menu =====
+    var ctxMenu = null;
+    var ctxContainer = null;
+    var ctxKind = null;
+    var ctxBusy = false;
+    // Opening the menu is part of a gesture that also generates other events -- on
+    // Android a long press fires the touch timer AND a synthetic mousedown/touch
+    // sequence whose target is the diagram, not the menu. Without this guard the
+    // dismissal handlers treat that as "clicked outside" and the menu flashes open
+    // and vanishes.
+    var ctxOpenedAt = 0;
+    var ctxTouchTimer = null;
+    var ctxTouchX = 0, ctxTouchY = 0;
+
+    function ctxHide() {
+        if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
+        ctxMenu = null;
+        ctxContainer = null;
+        ctxKind = null;
+    }
+
+    function ctxItem(label, format) {
+        var b = document.createElement('button');
+        b.className = 'md-ctx-item';
+        b.type = 'button';
+        b.textContent = label;
+        b.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            ctxRun(format);
+        });
+        return b;
+    }
+
+    function ctxBuild() {
+        var menu = document.createElement('div');
+        menu.className = 'md-ctx-menu';
+        menu.setAttribute('role', 'menu');
+        menu.appendChild(ctxItem('Save as SVG', 'svg'));
+        menu.appendChild(ctxItem('Save as PNG', 'png'));
+        return menu;
+    }
+
+    function ctxRun(format) {
+        if (!ctxContainer || !ctxKind || ctxBusy) return;
+        var container = ctxContainer, kind = ctxKind;
+        // The preview is rebuilt on every render; the container we captured may
+        // already be detached.
+        if (!container.isConnected) { ctxHide(); return; }
+        ctxBusy = true;
+        var menu = ctxMenu;
+        if (menu) {
+            var items = menu.querySelectorAll('.md-ctx-item');
+            for (var i = 0; i < items.length; i++) items[i].disabled = true;
+        }
+        exportMember(container, kind, format, function (err, res) {
+            ctxBusy = false;
+            if (err) {
+                console.warn('[Export] ' + kind + '/' + format + ': ' + err);
+                // The user asked for something that did not work; say so in the
+                // preview rather than only in the console.
+                showExportToast(err);
+                ctxHide();
+                return;
+            }
+            post('EXPORT', JSON.stringify({
+                v: 1,
+                source: res.source,
+                kind: format,
+                encoding: res.encoding,
+                name: res.name,
+                data: res.data
+            }));
+            ctxHide();
+        });
+    }
+
+    // A failed export has nowhere else to show: the console channel is not visible
+    // to the user, and this is not a document defect worth a red block.
+    function showExportToast(message) {
+        ctxHide();
+        var t = document.createElement('div');
+        t.className = 'md-export-toast';
+        t.textContent = message;
+        document.body.appendChild(t);
+        setTimeout(function () {
+            if (t.parentNode) t.parentNode.removeChild(t);
+        }, 4000);
+    }
+
+    // Keeps the menu inside the viewport.
+    function ctxPosition(x, y) {
+        var w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        if (x + w > vw - 4) x = Math.max(4, vw - w - 4);
+        if (y + h > vh - 4) y = Math.max(4, vh - h - 4);
+        ctxMenu.style.left = x + 'px';
+        ctxMenu.style.top = y + 'px';
+    }
+
+    function ctxShow(x, y, container, kind) {
+        if (ctxMenu && ctxContainer === container) {
+            // Already up for this member. Android reaches here twice for one gesture
+            // (long-press timer and synthetic contextmenu); repositioning instead of
+            // rebuilding keeps that from flickering.
+            ctxPosition(x, y);
+            return;
+        }
+        ctxHide();
+        ctxContainer = container;
+        ctxKind = kind;
+        ctxMenu = ctxBuild();
+        document.body.appendChild(ctxMenu);
+        ctxPosition(x, y);
+        ctxOpenedAt = Date.now();
+    }
+
+    function ctxEnabled() {
+        return previewConfig.contextMenuEnabled !== false;
+    }
+
+    function ctxCancelTouch() {
+        if (ctxTouchTimer) { clearTimeout(ctxTouchTimer); ctxTouchTimer = null; }
+    }
+
+    // Only intercept over the three exportable members; everywhere else the
+    // platform's own menu keeps working.
+    function ctxHandleContextMenu(e) {
+        // Chromium fires contextmenu on long press, which is the same gesture the
+        // touch timer below is waiting for. Whichever arrives first wins; the other
+        // must stand down or the menu is opened twice per press.
+        ctxCancelTouch();
+        if (!ctxEnabled()) return;
+        var hit = findExportContainer(e.target);
+        if (!hit || !exportIsAvailable(hit.el, hit.kind)) { ctxHide(); return; }
+        e.preventDefault();
+        ctxShow(e.clientX, e.clientY, hit.el, hit.kind);
+    }
+
+    // iOS WKWebView does not synthesise a contextmenu event on long press, so touch
+    // needs its own timer.
+    function ctxWireTouch() {
+        document.addEventListener('touchstart', function (e) {
+            if (!ctxEnabled() || e.touches.length !== 1) { ctxCancelTouch(); return; }
+            var t = e.touches[0];
+            ctxTouchX = t.clientX;
+            ctxTouchY = t.clientY;
+            ctxCancelTouch();
+            ctxTouchTimer = setTimeout(function () {
+                ctxTouchTimer = null;
+                var hit = findExportContainer(e.target);
+                if (!hit || !exportIsAvailable(hit.el, hit.kind)) return;
+                ctxShow(ctxTouchX, ctxTouchY, hit.el, hit.kind);
+            }, 500);
+        }, { passive: true });   // never preventDefault here: it would kill scrolling
+
+        document.addEventListener('touchmove', function (e) {
+            if (!ctxTouchTimer) return;
+            var t = e.touches[0];
+            if (!t) { ctxCancelTouch(); return; }
+            if (Math.abs(t.clientX - ctxTouchX) > 10 ||
+                Math.abs(t.clientY - ctxTouchY) > 10) ctxCancelTouch();
+        }, { passive: true });
+        document.addEventListener('touchend', ctxCancelTouch, { passive: true });
+        document.addEventListener('touchcancel', ctxCancelTouch, { passive: true });
+    }
+
+    // True while the gesture that opened the menu is still producing events.
+    function ctxJustOpened() {
+        return Date.now() - ctxOpenedAt < 600;
+    }
+
+    function ctxWireOnce() {
+        if (window._ctxWired) return;
+        window._ctxWired = true;
+
+        document.addEventListener('contextmenu', ctxHandleContextMenu);
+        ctxWireTouch();
+
+        // Dismissal. The wheel listener MUST be capture-phase on window: over a
+        // plot, installPlotWheelGate() already registers a capture-phase
+        // stopPropagation on the container, so a bubble-phase listener here would
+        // never fire and the menu would sit open while the page scrolled.
+        window.addEventListener('wheel', function () { ctxHide(); },
+            { capture: true, passive: true });
+        document.addEventListener('mousedown', function (e) {
+            if (!ctxMenu) return;
+            if (ctxJustOpened()) return;   // still the gesture that opened it
+            if (!ctxMenu.contains(e.target)) ctxHide();
+        }, true);
+        // Touch dismissal, because the synthesised mouse events are unreliable on
+        // mobile: starting any new touch outside the menu closes it.
+        document.addEventListener('touchstart', function (e) {
+            if (!ctxMenu || ctxJustOpened()) return;
+            if (!ctxMenu.contains(e.target)) ctxHide();
+        }, true);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && ctxMenu) ctxHide();
+        });
+        window.addEventListener('blur', function () {
+            if (ctxJustOpened()) return;
+            ctxHide();
+        });
+        window.addEventListener('resize', ctxHide);
+    }
+
     function setTheme(theme) {
         if (theme !== 'dark' && theme !== 'light') theme = 'dark';
         currentTheme = theme;
@@ -410,8 +1378,12 @@
         var source = preview.getAttribute('data-source');
         if (!source) return;
         try {
+            ctxHide();   // the container the menu points at is about to be destroyed
             preview.innerHTML = md.render(source);
             runMermaidAll(preview);
+            // followToBottom=false: a theme/config re-render is not a content update, so
+            // it must not yank the user's scroll position to the bottom.
+            runFunctionPlotAll(preview, false);
         } catch(e) {
             console.error('❌ ' + e.message);
         }
@@ -660,6 +1632,14 @@
                     '⚠ PlantUML render error: ' + escapeHtml(e.message) + '\n\n' +
                     escapeHtml(token.content) + '</pre>\n';
             }
+        }
+        if (info === 'plot') {
+            // The fence body is the raw function-plot options object (JSON). It is carried
+            // on the element and hydrated after insertion: function-plot needs a laid-out
+            // target and returns a live Chart instance, neither of which a synchronous
+            // renderer rule can provide. escapeHtml's set (& < > ") is exactly the one
+            // needed for a double-quoted attribute, and round-trips losslessly.
+            return '<div class="plot-container" data-plot="' + escapeHtml(token.content) + '"></div>\n';
         }
         if (info === 'video') {
             var videoSrc = token.content.trim();
@@ -925,6 +1905,7 @@
             return;
         }
         preview.setAttribute('data-source', text);
+        ctxHide();   // the container the menu points at is about to be destroyed
         try {
             preview.innerHTML = md.render(text);
             // Intercept external links:
@@ -984,6 +1965,7 @@
             }
 
             runMermaidAll(preview);
+            runFunctionPlotAll(preview, followToBottom);
             if (followToBottom !== false) {
                 maybeAutoScroll();
                 // Mermaid / KaTeX / image rendering is async — the page height can
@@ -1003,6 +1985,7 @@
     window.onMarkdownUpdate = function(text) { window.renderMarkdown(text); };
     window.md = md;
     window.escapeHtml = escapeHtml;
+    ctxWireOnce();
     console.log('✅ Initialization complete');
 
     // Poll until all CDN libraries are loaded (or timeout), then notify C# side.
@@ -1015,6 +1998,7 @@
         // Check optional libraries (may be blocked by browser tracking prevention)
         var mermaidReady = typeof window.mermaid === 'object';
         var plantumlReady = typeof window.plantumlEncoder === 'object';
+        var plotReady = typeof window.functionPlot === 'function';
 
         if (criticalReady) {
             // Always signal once markdown-it is available.
@@ -1023,6 +2007,7 @@
             post('READY', '');
             if (!mermaidReady) console.warn('[Ready] mermaid blocked or unavailable');
             if (!plantumlReady) console.warn('[Ready] plantuml-encoder blocked or unavailable');
+            if (!plotReady) console.warn('[Ready] function-plot blocked or unavailable');
             console.log('✅ Markdown Preview ready');
         } else {
             setTimeout(checkReady, 100);

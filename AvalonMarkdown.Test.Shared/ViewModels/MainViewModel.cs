@@ -80,17 +80,18 @@ public partial class MainViewModel : ViewModelBase
     public static string GetDefaultMarkdown() => """
         # Markdown Rendering Test Suite 🎯
 
-        A feature tour of **AvalonMarkdown** — text formatting, links, lists, tables, math (KaTeX), code highlighting, diagrams (Mermaid / PlantUML), video embeds, footnotes, HTML, and error resilience.
+        A feature tour of **AvalonMarkdown** — text formatting, links, lists, tables, math (KaTeX), code highlighting, diagrams (Mermaid / PlantUML), function plots, video embeds, footnotes, HTML, and error resilience.
 
         ## 0. 目录 · 页内跳转（# 锚点试验）
 
         > 下面都用 `#` 引用**本页**目标（同一文档内跳转），不会发给 C#。
-        > 能否跳转取决于目标元素有没有 `id` —— 渲染器目前**不会自动给标题生成 id**，
-        > 所以“跳标题”的链接应不生效；而指向手写 HTML `id` 目标、以及脚注 `fn1`/`fnref1` 的链接是生效的。
+        > 渲染器会给每个标题自动生成 slug `id`（同名标题追加 `-1`/`-2`…），
+        > 所以“跳标题”的链接生效；指向手写 HTML `id` 目标、以及脚注 `fn1`/`fnref1` 的链接同样生效。
 
         - [跳到 “1. Text Formatting”](#1-text-formatting)
         - [跳到 “3. Lists”](#3-lists)
-        - [跳到 “13. HTML Inline”](#13-html-inline)
+        - [跳到 “10. Function Plots”](#10-function-plots)
+        - [跳到 “14. HTML Inline”](#14-html-inline)
         - [跳到 手写 HTML id 目标（应生效）](#inpage-demo-target)
         - [跳到 脚注定义 fn1（应生效）](#fn1)
         - [跳回 脚注引用处 fnref1（应生效）](#fnref1)
@@ -222,7 +223,68 @@ public partial class MainViewModel : ViewModelBase
         @enduml
         ```
 
-        ## 10. Video Embeds
+        ## 10. Function Plots
+
+        > `plot` 围栏的内容是 function-plot 的 options 对象（**原始 JSON**）。
+        > 未写 `color` 时曲线颜色按数据序号取自主题调色板。
+        > 默认**静态**（滚轮留给页面滚动）；写 `"disableZoom": false` 才可缩放平移。
+
+        ```plot
+        {
+          "title": "sin(x)/x and its envelope",
+          "grid": true,
+          "xAxis": { "domain": [-12, 12] },
+          "yAxis": { "domain": [-0.4, 1.1] },
+          "data": [
+            { "fn": "sin(x)/x" },
+            { "fn": "1/x", "skipTip": true },
+            { "fn": "-1/x", "skipTip": true }
+          ]
+        }
+        ```
+
+        Explicit colours, axis labels, a tangent line, and zoom opt-in:
+
+        ```plot
+        {
+          "title": "x^2/8 - 2 with tangent at x0 = 3",
+          "grid": true,
+          "disableZoom": false,
+          "xAxis": { "domain": [-6, 6], "label": "x" },
+          "yAxis": { "domain": [-3, 4], "label": "y" },
+          "data": [
+            { "fn": "x^2/8 - 2", "color": "#e06c75",
+              "derivative": { "fn": "x/4", "x0": 3 } },
+            { "fn": "sin(x)", "color": "#98c379" }
+          ]
+        }
+        ```
+
+        Deliberately malformed — exercises the error path (a trailing comma is invalid JSON):
+
+        ```plot
+        { "data": [ { "fn": "x^2" }, ] }
+        ```
+
+        The `plot` interception matches the info string exactly, so an ordinary `json` fence is
+        untouched. This is **the same object as the first block above**, rendered as a highlighted
+        code block instead of a chart:
+
+        ```json
+        {
+          "title": "sin(x)/x and its envelope",
+          "grid": true,
+          "xAxis": { "domain": [-12, 12] },
+          "yAxis": { "domain": [-0.4, 1.1] },
+          "data": [
+            { "fn": "sin(x)/x" },
+            { "fn": "1/x", "skipTip": true },
+            { "fn": "-1/x", "skipTip": true }
+          ]
+        }
+        ```
+
+        ## 11. Video Embeds
 
         > Bilibili Video
 
@@ -236,20 +298,20 @@ public partial class MainViewModel : ViewModelBase
 
         ![Test](https://vimeo.com/76979871)
 
-        ## 11. Footnotes
+        ## 12. Footnotes
 
         Here is a footnote reference[^1] and another[^2].
 
         [^1]: This is the first footnote.
         [^2]: This is the second footnote with more details.
 
-        ## 12. Horizontal Rule
+        ## 13. Horizontal Rule
 
         ---
 
         <a id="inpage-demo-target"></a>
 
-        ## 13. HTML Inline
+        ## 14. HTML Inline
 
         <span style="color:orange">Orange text via HTML</span>
 
@@ -258,7 +320,7 @@ public partial class MainViewModel : ViewModelBase
         Hidden content here.
         </details>
 
-        ## 14. Emojis
+        ## 15. Emojis
 
         🚀 ✅ ❤️ ⭐ 🎉 🔥 🎯
         """;

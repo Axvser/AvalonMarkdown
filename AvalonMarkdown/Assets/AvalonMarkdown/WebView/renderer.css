@@ -319,6 +319,111 @@ blockquote {
     -webkit-filter: invert(0.882) hue-rotate(180deg);
 }
 
+/* ===== Function plots (function-plot) ===== */
+/* Suppress the platform's own long-press sheet (iOS "Save Image", Android's image
+   menu) over the three exportable members -- ours replaces it. Scoped to these
+   classes so the platform menu still works everywhere else in the document. */
+.mermaid-container,
+.plot-container,
+.puml-container {
+    -webkit-touch-callout: none;
+}
+
+.plot-container {
+    text-align: center;
+    margin: 16px 0;
+    /* function-plot sizes its <svg> from the JSON width/height, which may exceed a
+       narrow pane — scroll inside the container rather than clipping or overflowing. */
+    overflow-x: auto;
+}
+.plot-container svg.function-plot {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    /* SVG's initial fill is black and function-plot only sets fill on tick text,
+       so the title and axis labels would be invisible on the dark theme. Setting it
+       here also lets a single `color` on .plot-container drive the whole frame. */
+    fill: currentColor;
+}
+/* function-plot's updateAxes() hard-codes stroke:black @ opacity .1 on every
+   .axis path/line, overriding d3-axis's currentColor — and with grid:true those
+   tick lines ARE the grid. Presentation attributes, so author CSS wins. */
+.plot-container svg .axis path,
+.plot-container svg .axis line {
+    stroke: currentColor;
+    opacity: 0.3;
+}
+.plot-container svg .axis .domain {
+    opacity: 0.6;
+}
+/* Origin lines (hard-coded black @ .2) */
+.plot-container svg path.x.origin,
+.plot-container svg path.y.origin {
+    stroke: currentColor;
+    opacity: 0.35;
+}
+/* Tip crosshair (hard-coded grey) and annotations (hard-coded #eee) */
+.plot-container svg .tip-x-line,
+.plot-container svg .tip-y-line {
+    stroke: currentColor;
+}
+.plot-container svg .annotations path {
+    stroke: currentColor;
+}
+
+/* ===== Export context menu ===== */
+/* Deliberately here and not in the generated custom-theme-css: the theme audit
+   only walks <style id="custom-theme-css"> and would classify every rule below as
+   a dead knob, because its fixture has no menu element. Built from the existing
+   variables so it themes without introducing any new ones. */
+.md-ctx-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 160px;
+    padding: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    user-select: none;
+}
+.md-ctx-item {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.md-ctx-item:hover:not([disabled]) {
+    background: var(--bg-primary);
+}
+.md-ctx-item[disabled] {
+    opacity: 0.5;
+    cursor: default;
+}
+.md-export-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 10000;
+    max-width: 80%;
+    padding: 8px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid #f14c4c;
+    border-radius: 6px;
+    color: #f14c4c;
+    font-size: 13px;
+}
+
 /* ===== Responsive video / platform embed containers ===== */
 .embed-container {
     position: relative;

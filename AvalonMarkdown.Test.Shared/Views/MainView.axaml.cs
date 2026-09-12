@@ -22,6 +22,9 @@ public partial class MainView : UserControl
     private readonly StringBuilder _captureLog = new();
     private bool _captureDone;
     private bool _captureStarted;
+    // Fence-dispatch check: unlike the other capture expectations (which are logged for a
+    // human to read), this one gates the exit code — see the fence-dispatch phase.
+    private bool _fenceDispatchOk = true;
 
     // ── Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1) ──
     private readonly StringBuilder _auditLog = new();
@@ -30,6 +33,25 @@ public partial class MainView : UserControl
 
     public MainView()
     {
+        // Driver arbitration. Each capture driver owns the single shared Preview control
+        // and terminates the process with Environment.Exit, so at most one may run; two
+        // at once means the first to finish kills the other mid-run. Checked before
+        // InitializeComponent so a misconfiguration costs ~0s instead of a full
+        // WebView2 + CDN startup. (AVALON_THEME_AUDIT_KEEP is a modifier, not a driver.)
+        var drivers = new List<string>();
+        if (Environment.GetEnvironmentVariable("AVALON_CAPTURE_ERRORS") == "1") drivers.Add("AVALON_CAPTURE_ERRORS");
+        if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1") drivers.Add("AVALON_THEME_AUDIT");
+        if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1") drivers.Add("AVALON_RENDER_CHECK");
+        if (drivers.Count > 1)
+        {
+            Console.Error.WriteLine(
+                $"[drivers] {drivers.Count} capture drivers enabled at once: {string.Join(", ", drivers)}. " +
+                "They share one preview control and each exits the process - enable exactly one.");
+            Console.Out.Flush();
+            Console.Error.Flush();
+            Environment.Exit(2);
+        }
+
         InitializeComponent();
 
         _vm = new MainViewModel();
@@ -50,6 +72,11 @@ public partial class MainView : UserControl
         // When AVALON_THEME_AUDIT=1, run the repeatable theme-CSS audit and exit.
         if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1")
             StartThemeAudit();
+
+        // When AVALON_RENDER_CHECK=1, render one markdown file and report every
+        // failure surface, then exit. Driven by skills/avalonmarkdown-syntax.
+        if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1")
+            StartRenderCheck();
 
         // LinkClicked example: intercept app:// links for in-app navigation.
         // Everything else (https://, mailto:, …) is left unhandled and still opens
@@ -115,7 +142,11 @@ public partial class MainView : UserControl
             // Each phase waits for the JS "✅ Render complete" signal (via ConsoleMessage),
             // then a grace delay lets async mermaid/plantuml errors land.
             await RunPhaseAsync("Simple", () => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown());
-            await RunPhaseAsync("Full (incl. intentionally-broken mermaid/plantuml)",
+            // The label used to claim "intentionally-broken mermaid/plantuml"; it was never
+            // true — those four fences are all valid, and the only deliberate break is the
+            // plot JSON. Diagram failure surfaces are covered by the render-check driver's
+            // fixtures (skills/avalonmarkdown-syntax/fixtures), which assert on them.
+            await RunPhaseAsync("Full (incl. an intentionally-broken plot)",
                 () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
             await RunPhaseAsync("BigDoc", () => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown());
 
@@ -215,6 +246,60 @@ public partial class MainView : UserControl
             var iframeCount = await _singlePreview.InvokeScriptAsync("document.querySelectorAll('.embed-container iframe').length");
             _captureLog.AppendLine($"[facade] facades={facadeCount} (expect 3) iframes={iframeCount} (expect 0)");
 
+            // Fence dispatch: the ```plot branch must match the info string exactly, so a
+            // plain ```json fence — carrying the same object as the first plot block — has
+            // to stay a highlighted code block rather than being swallowed as a chart.
+            _captureLog.AppendLine("\n=== Phase: fence dispatch (plot vs json) ===");
+            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            // Plot hydration is deferred to a requestAnimationFrame, so give it a beat
+            // after the render-complete signal before sampling the DOM.
+            await Task.Delay(600);
+            var fenceProbe = await _singlePreview!.InvokeScriptAsync("""
+                (function(){
+                  var pv = document.getElementById('preview');
+                  var pcs = pv.querySelectorAll('.plot-container');
+                  var charts = 0, errs = 0;
+                  for (var i = 0; i < pcs.length; i++) {
+                    if (pcs[i].querySelector('svg.function-plot')) charts++;
+                    if (pcs[i].querySelector('pre[style]')) errs++;
+                  }
+                  var cbs = pv.querySelectorAll('.code-block-wrapper');
+                  var json = 0, inPlot = 0, spans = 0, lang = '';
+                  for (var j = 0; j < cbs.length; j++) {
+                    if ((cbs[j].textContent || '').indexOf('sin(x)/x and its envelope') >= 0) {
+                      json = 1;
+                      spans = cbs[j].querySelectorAll('span[class^=hljs-]').length;
+                      inPlot = cbs[j].closest('.plot-container') ? 1 : 0;
+                      var lg = cbs[j].querySelector('.code-lang');
+                      lang = lg ? (lg.textContent || '') : '';
+                    }
+                  }
+                  return pcs.length + ',' + charts + ',' + errs + ',' + cbs.length + ','
+                       + json + ',' + spans + ',' + inPlot + ',' + lang;
+                })()
+                """);
+            // InvokeScriptAsync JSON-serialises a string return, so it arrives quoted —
+            // numbers (as used by the facade probe above) do not. The payload is digits,
+            // commas and 'json', so trimming the quotes is safe.
+            var f = (fenceProbe ?? "").Trim('"').Split(',');
+            string FAt(int i) => i < f.Length ? f[i] : "?";
+            // Expect: 3 plot fences (2 charts + 1 error block), 4 code fences, and the
+            // json fence present as a highlighted block outside any plot container.
+            var jsonIsCode = FAt(4) == "1" && FAt(6) == "0" && FAt(7) == "json" &&
+                             int.TryParse(FAt(5), out var jsonSpans) && jsonSpans > 0;
+            _fenceDispatchOk = FAt(0) == "3" && FAt(1) == "2" && FAt(2) == "1" &&
+                               FAt(3) == "4" && jsonIsCode;
+            _captureLog.AppendLine(
+                $"[fence] plots={FAt(0)} charts={FAt(1)} errBlocks={FAt(2)} codeBlocks={FAt(3)} " +
+                $"jsonBlock={FAt(4)} jsonSpans={FAt(5)} jsonInPlot={FAt(6)} jsonLang={FAt(7)}");
+            _captureLog.AppendLine(
+                "[fence] expect plots=3 charts=2 errBlocks=1 codeBlocks=4 " +
+                "jsonBlock=1 jsonSpans>0 jsonInPlot=0 jsonLang=json");
+            _captureLog.AppendLine(_fenceDispatchOk
+                ? "[fence] RESULT: PASS"
+                : "[fence] RESULT: FAIL — a json fence was intercepted by the plot branch, " +
+                  "or the plot fences did not render");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)
@@ -260,6 +345,9 @@ public partial class MainView : UserControl
         if (timeout)
             _captureLog.AppendLine("\n[FATAL] watchdog timeout — preview never became ready");
 
+        if (!_fenceDispatchOk)
+            _captureLog.AppendLine("\n[FATAL] fence-dispatch check failed");
+
         try
         {
             var path = Path.Combine(Directory.GetCurrentDirectory(), "error-capture.log");
@@ -270,7 +358,9 @@ public partial class MainView : UserControl
         {
             Console.WriteLine($"[capture] failed to write log: {ex.Message}");
         }
-        Environment.Exit(timeout ? 1 : 0);
+        var ok = !timeout && _fenceDispatchOk;
+        Console.WriteLine(ok ? "[capture] PASS" : "[capture] FAIL");
+        Environment.Exit(ok ? 0 : 1);
     }
 
     // ====================================================================
@@ -319,7 +409,7 @@ public partial class MainView : UserControl
             await _singlePreview!.ApplyCustomCssAsync(css);
             await Task.Delay(700);
 
-            var js = ReadThemeAuditJs();
+            var js = ReadAssetJs("ThemeAudit.js");
             if (string.IsNullOrEmpty(js))
             {
                 _auditLog.AppendLine("[FATAL] cannot load ThemeAudit.js asset");
@@ -339,12 +429,16 @@ public partial class MainView : UserControl
         }
     }
 
-    private static string? ReadThemeAuditJs()
+    /// <summary>
+    /// Load an embedded JS asset from AvalonMarkdown.Test.Shared by file name.
+    /// Shared by the theme audit and render-check drivers.
+    /// </summary>
+    private static string? ReadAssetJs(string fileName)
     {
         try
         {
             using var s = Avalonia.Platform.AssetLoader.Open(
-                new Uri("avares://AvalonMarkdown.Test.Shared/Assets/ThemeAudit.js"));
+                new Uri($"avares://AvalonMarkdown.Test.Shared/Assets/{fileName}"));
             using var r = new StreamReader(s);
             return r.ReadToEnd();
         }
@@ -353,7 +447,7 @@ public partial class MainView : UserControl
             // Fallback: manifest resource in case the avares key differs.
             var asm = typeof(MainView).Assembly;
             var name = asm.GetManifestResourceNames()
-                .FirstOrDefault(n => n.EndsWith("ThemeAudit.js", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(n => n.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
             if (name is null) return null;
             using var s = asm.GetManifestResourceStream(name);
             if (s is null) return null;

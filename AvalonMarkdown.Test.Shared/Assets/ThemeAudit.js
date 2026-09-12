@@ -53,6 +53,7 @@
             '<div class="embed-container"><div class="embed-facade"><span class="embed-play"></span><span class="embed-label">l</span></div></div>' +
             '<div class="mermaid-container"><svg></svg></div>' +
             '<div class="puml-container puml-dark"><img alt=""/></div>' +
+            '<div class="plot-container"><svg class="function-plot"></svg></div>' +
             '<pre class="hljs"><code class="hljs">' +
             '<span class="hljs-keyword">kw</span><span class="hljs-literal">lit</span>' +
             '<span class="hljs-symbol">sy</span><span class="hljs-name">nm</span>' +
@@ -305,6 +306,7 @@
                     if (ch.indexOf('.hljs-')===0 && (dp==='color'||dp==='background')) tunable=true;
                     if (ch.indexOf('.mermaid-container')===0) tunable=true;
                     if (ch.indexOf('.puml-container')===0) tunable=true;
+                    if (ch.indexOf('.plot-container')===0) tunable=true;
                     if (ch==='.puml-dark img' && dp==='filter') tunable=true;
                 }
                 var label=(ck.chunks[0]||'rule')+' · '+dp;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -44,6 +45,7 @@ public partial class MarkdownView : UserControl
     {
         TextProperty.Changed.AddClassHandler<MarkdownView>(OnTextChanged);
         PlaceholderProperty.Changed.AddClassHandler<MarkdownView>(OnPlaceholderChanged);
+        EnableContextMenuProperty.Changed.AddClassHandler<MarkdownView>(OnEnableContextMenuChanged);
     }
 
     /// <summary>Gets or sets the Markdown text to render.</summary>
@@ -70,6 +72,41 @@ public partial class MarkdownView : UserControl
     {
         get => GetValue(PlaceholderProperty);
         set => SetValue(PlaceholderProperty, value);
+    }
+
+    /// <summary>
+    /// Whether right-clicking a Mermaid diagram, a function plot or a PlantUML image
+    /// offers "Save as SVG / PNG" (and, on touch, a long press). Only those three
+    /// members are intercepted — the platform's own context menu keeps working
+    /// everywhere else. Defaults to enabled; set false to give the platform menu
+    /// back across the whole preview.
+    /// </summary>
+    public static readonly StyledProperty<bool> EnableContextMenuProperty =
+        AvaloniaProperty.Register<MarkdownView, bool>(nameof(EnableContextMenu), defaultValue: true);
+
+    public bool EnableContextMenu
+    {
+        get => GetValue(EnableContextMenuProperty);
+        set => SetValue(EnableContextMenuProperty, value);
+    }
+
+    private static void OnEnableContextMenuChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        _ = sender.PushContextMenuAsync();
+    }
+
+    private async Task PushContextMenuAsync()
+    {
+        if (!_ready) return;   // SetReady() pushes it once the preview is live
+        try
+        {
+            var flag = EnableContextMenu ? "true" : "false";
+            await ApplyConfigAsync($"setPreviewConfig({{ contextMenuEnabled: {flag} }})");
+        }
+        catch (Exception ex)
+        {
+            ShowError("Context Menu", ex.Message);
+        }
     }
 
     private static void OnPlaceholderChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
@@ -303,6 +340,7 @@ public partial class MarkdownView : UserControl
         // synchronously in that context to be reliably delivered.
         PushThemeToWebView(GetCurrentTheme());
         _ = PushPlaceholderAsync();
+        _ = PushContextMenuAsync();
 
         // Render any content that arrived before the preview was ready FIRST, so
         // that OnReady subscribers setting new Text (rendered afterwards) win.
@@ -437,6 +475,109 @@ public partial class MarkdownView : UserControl
                 _ = HandleLinkClickedAsync(url);
             return;
         }
+
+        if (message.StartsWith("[EXPORT]", StringComparison.OrdinalIgnoreCase))
+        {
+            var json = message[8..].Trim();
+            if (!string.IsNullOrEmpty(json))
+                _ = HandleExportAsync(json);
+            return;
+        }
+    }
+
+    // ====================================================================
+    // Image export (right-click a diagram / plot / PlantUML image)
+    // ====================================================================
+
+    /// <summary>Payload the preview posts for a save. See renderer.js's ctxRun().</summary>
+    private sealed class ExportPayload
+    {
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "png";
+        [JsonPropertyName("encoding")] public string Encoding { get; set; } = "utf8";
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("source")] public string? Source { get; set; }
+        [JsonPropertyName("data")] public string? Data { get; set; }
+    }
+
+    /// <summary>
+    /// Write an image the preview prepared. <c>encoding</c> drives ONE branch on
+    /// purpose — "utf8" for SVG markup, "base64" for PNG bytes — because two
+    /// separate field names would eventually be mismatched.
+    /// </summary>
+    private async Task HandleExportAsync(string json)
+    {
+        ExportPayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<ExportPayload>(json);
+        }
+        catch (JsonException ex)
+        {
+            ShowError("Save Image", $"Malformed export payload: {ex.Message}");
+            return;
+        }
+
+        if (payload?.Data is null || string.IsNullOrEmpty(payload.Name))
+        {
+            ShowError("Save Image", "The export payload was empty.");
+            return;
+        }
+
+        try
+        {
+            var storage = TopLevel.GetTopLevel(this)?.StorageProvider;
+            if (storage is null)
+            {
+                ShowError("Save Image", "No storage provider is available on this platform.");
+                return;
+            }
+
+            var isPng = string.Equals(payload.Kind, "png", StringComparison.OrdinalIgnoreCase);
+            var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save image",
+                SuggestedFileName = SanitizeFileName(payload.Name),
+                DefaultExtension = isPng ? "png" : "svg",
+                FileTypeChoices = new[]
+                {
+                    isPng
+                        ? new FilePickerFileType("PNG image") { Patterns = new[] { "*.png" } }
+                        : new FilePickerFileType("SVG image") { Patterns = new[] { "*.svg" } }
+                }
+            });
+            if (file is null) return;   // the user cancelled
+
+            await using var stream = await file.OpenWriteAsync();
+            if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase))
+            {
+                await stream.WriteAsync(Convert.FromBase64String(payload.Data));
+            }
+            else
+            {
+                // BOM-less UTF-8, to agree with the XML prolog the SVG carries.
+                await stream.WriteAsync(new UTF8Encoding(false).GetBytes(payload.Data));
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError("Save Image", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// The name comes from the document, so it is untrusted: strip anything that
+    /// could escape the chosen folder or is illegal in a file name.
+    /// </summary>
+    private static string SanitizeFileName(string name)
+    {
+        var sb = new StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            sb.Append(char.IsLetterOrDigit(c) || c is '.' or '-' or '_' ? c : '_');
+        }
+        var clean = sb.ToString().Trim('.', '_');
+        if (clean.Length == 0) clean = "image";
+        return clean.Length > 100 ? clean[..100] : clean;
     }
 
     // ====================================================================

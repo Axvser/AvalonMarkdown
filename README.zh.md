@@ -1,6 +1,6 @@
 # AvalonMarkdown
 
-面向 **AvaloniaUI** 的 Markdown 预览控件——支持数学公式（KaTeX）、语法高亮（highlight.js）、图表（Mermaid / PlantUML）与视频嵌入。
+面向 **AvaloniaUI** 的 Markdown 预览控件——支持数学公式（KaTeX）、语法高亮（highlight.js）、图表（Mermaid / PlantUML）、函数图像与视频嵌入。
 
 > 🌏 [English Documentation](README.md)
 
@@ -51,6 +51,41 @@ Preview.OnReady += async (_, _) =>
 <md:MarkdownView Text="{Binding MarkdownContent}" Placeholder="Type something…" />
 ```
 
+### 函数图像
+
+`plot` 围栏用于绘制 `y = f(x)`。围栏体是 [function-plot](https://mauriciopoppe.github.io/function-plot/) 的 options 对象**原始 JSON**，该库支持的选项都可直接透传：
+
+````markdown
+```plot
+{
+  "title": "sin(x)/x",
+  "grid": true,
+  "xAxis": { "domain": [-12, 12] },
+  "yAxis": { "domain": [-0.4, 1.1] },
+  "data": [
+    { "fn": "sin(x)/x" },
+    { "fn": "1/x", "color": "#e06c75" }
+  ]
+}
+```
+````
+
+只有两项会被填默认值，且**你的 JSON 永远优先**：
+
+- **`color`** —— 未指定时按数据序号取自主题调色板。曲线颜色是逐条数据的选项（`color` 只在 datum 上），因此无法由 CSS 提供。
+- **`disableZoom`** —— 默认为 `true`，即图像静态、滚轮照常滚动页面。写 `"disableZoom": false` 才在该块上启用滚轮缩放与平移。这个默认值是有意为之：该库的缩放绑定会吞掉图上方的所有滚轮事件，在阅读场景里等于把滚轮卡住。
+
+`width` 与 `height` 是**含边距的整个 SVG 尺寸**（左 40 / 右 20 / 下 20、上 20 —— 有 `title` 时为 40），所以 `"height": 350` 实际绘图区只有 310px。省略 `width` 时会自适应容器宽度。
+
+JSON 写错时会在原位渲染一个错误块，不会影响预览的其余部分。围栏按 info 字符串精确匹配，因此普通代码围栏（包括 `json`）完全不受影响。
+
+表达式字符串在交给库的求值器（它会把表达式编译成 JavaScript）之前会过一遍字符白名单。比较、三元与取模运算符都在白名单内，因此**分段函数可用** —— `"fn": "x > 0 ? x : -x"`；但引号、分号、大括号、方括号与反斜杠会被拒绝。
+
+表达式语法有两点需要注意，两者都来自该库本身：
+
+- **常量是大写的** —— 是 `PI` 和 `E`，不是 `pi` / `e`。小写形式未定义，该条曲线会静默画不出来。
+- 可用函数包括 `sin` `cos` `tan` `asin` `acos` `atan` `sqrt` `abs` `exp` `log` `ln` `max` `min`；此外的名称（如 `floor`、`sign`）均未定义。
+
 ### 处理链接点击
 
 每次点击超链接都会触发 `LinkClicked`。设置 `Handled = true` 即可自己接管导航；否则默认在系统浏览器中打开。
@@ -86,6 +121,31 @@ double? progress = await Preview.GetScrollProgressAsync(); // 0–100
 await Preview.ScrollToProgressAsync(50);
 ```
 
+### 将图表导出为图片
+
+右键 Mermaid 图表、函数图像或 PlantUML 图（触摸端长按），选择 **另存为 SVG** 或
+**另存为 PNG**，文件通过平台自带的保存对话框写出。
+
+只有这三类成员会被拦截，文档其他位置的右键仍然是平台原生菜单。把
+`EnableContextMenu` 设为 `False` 可整体关闭，所有位置都回到原生菜单：
+
+```xml
+<md:MarkdownView Text="{Binding MarkdownContent}" EnableContextMenu="False" />
+```
+
+公式**有意不支持导出**：KaTeX 渲染的是定位过的 HTML 而非 SVG，没有矢量产物可交付，
+出图只能靠给 DOM 截图。
+
+三点需要知道：
+
+- **导出的 PlantUML 图是白底黑图**，即使在深色主题下。这是 PlantUML 自身的输出，
+  有意不做滤镜 —— 你在屏幕上看到的暗色反相只是显示期的视觉效果。它打印和粘贴都正确，
+  但会和深色主题导出的 Mermaid 图看起来不一致。
+- **导出的 Mermaid 与函数图像带不透明背景**（取自页面），所以深色主题的图贴到白底上
+  依然清晰。
+- **过大的图可能拒绝另存为 PNG**（会在预览里提示）—— JS→C# 桥在 Android 上走 Binder，
+  约 1MB 上限。SVG 没有这个限制，改用 SVG 或把图缩小即可。
+
 ### 行为配置与诊断
 
 内容更新时默认自动滚动跟随最新内容，操作滚动条期间暂停；可用 `ApplyConfigAsync` 调节：
@@ -102,6 +162,7 @@ await Preview.ApplyConfigAsync("setPreviewConfig({ autoScrollOnUpdate: true, aut
 | --- | --- | --- |
 | `Text` | `string?` | Markdown 内容（双向绑定） |
 | `Placeholder` | `string?` | 内容为空时显示的提示文字 |
+| `EnableContextMenu` | `bool` | 右键 / 长按图片可另存为（默认 `true`） |
 | `OnReady` | `event` | 预览就绪、可以渲染时触发 |
 | `LinkClicked` | `event` | 点击超链接时触发；`Handled = true` 接管导航 |
 | `ErrorOccurred` | `event` | 内部可恢复错误时触发 |
@@ -166,6 +227,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | 排版 | 代码字号；代码块 / pre 圆角 |
 | 代码高亮 | 每种语法 token 的颜色（关键字、字符串、数字、注释……） |
 | 图表 | Mermaid 与 PlantUML 容器背景 / 内边距 / 外边距 / 圆角；PlantUML 暗色反色强度 |
+| 函数图像 | 容器背景 / 内边距 / 外边距 / 圆角；坐标轴、网格与标题颜色 |
 
 ### 支持的样式属性
 
@@ -196,14 +258,41 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PumlBgR` `PumlBgG` `PumlBgB` | PlantUML 容器背景（0–255） |
 | `PumlContainerPadding` · `PumlContainerMargin` · `PumlBorderRadius` | PlantUML 容器内边距 / 外边距 / 圆角 |
 | `PumlDarkInvert` | PlantUML 暗色反色强度（0–1） |
+| `PlotBgR` `PlotBgG` `PlotBgB` | 函数图像容器背景（0–255） |
+| `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | 函数图像容器内边距 / 外边距 / 圆角 |
+| `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`，仅代码设置） |
 
 **代码高亮** —— highlight.js 各 token 的颜色（`string`，如 `"#569cd6"`）：
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` —— 以及 diff 标记 `HljsAdditionBg`/`HljsAdditionColor` 与 `HljsDeletionBg`/`HljsDeletionColor`。
 
-> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表；代码高亮 token 通过上述 `Hljs*` 属性在代码里配置（或在自己 UI 中绑定）。
+> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表；代码高亮 token（`Hljs*`）与 `PlotAxisColor` 需在代码中配置（或在自己 UI 中绑定）。
 
 ---
+
+## 书写规范与校验器
+
+[`skills/avalonmarkdown-syntax/`](skills/avalonmarkdown-syntax/) 记录了这个控件渲染的
+Markdown 方言 —— 每个语法成员都配有正反案例，包括数学公式的定界符规则和函数图像的
+表达式文法。
+
+它还带了一个校验器，回答预览本身回答不了的问题：**这段写得出来吗？** 这里的失败大多
+是静默的 —— KaTeX 自己画一个错误 span 且不 log；未闭合的 `$$` 块会删掉文档余下全部；
+PlantUML 语法错误返回的是一张**能正常显示的报错图**，尺寸正常，看起来像画好了。
+
+```bash
+python skills/avalonmarkdown-syntax/scripts/render_check.py doc.md
+```
+
+两层。静态层离线即时地复刻渲染器自己的分派规则；存在构建产物时，它还会把文件送进真实
+WebView 管线渲染并检查 DOM —— 这是唯一能确认公式编译通过、图表解析成功的方式。
+
+```bash
+python skills/avalonmarkdown-syntax/scripts/render_check.py --self-test
+```
+
+`--self-test` 会用 `skills/avalonmarkdown-syntax/fixtures/` 里的已知错误样本断言每一条
+检查都真的触发 —— 没有已知错误样本的校验器不可信，所以样本与断言本身就是交付物的一部分。
 
 ## 演示
 

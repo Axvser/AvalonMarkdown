@@ -452,3 +452,15 @@ $RECYCLE.BIN/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+##
+## Claude Code — local tooling, never part of the library
+##
+.claude/
+
+##
+## render_check.py per-run reports
+##
+.render-check/
+__pycache__/
+*.pyc
