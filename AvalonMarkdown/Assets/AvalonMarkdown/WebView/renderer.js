@@ -246,6 +246,50 @@
      * Errors from a run superseded by a newer render are stale-node artifacts and are
      * suppressed; real errors still surface as a warning.
      */
+    // mermaid.run() takes its whole node list in one go, and the layout work is
+    // synchronous: 16 diagrams measured 396ms inside a single callback. Feed it one
+    // node at a time and yield a frame between nodes, so no single block grows with
+    // the number of diagrams on the page. Per-node runs also isolate failures — a
+    // batch rejects as a whole, so one bad diagram used to suppress the rest.
+    function runMermaidChunked(nodes, gen, index) {
+        var started = nowMs();
+
+        function warn(e) {
+            if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
+        }
+
+
+        function pump() {
+            if (gen !== mermaidGeneration || index >= nodes.length) return;
+            if (nowMs() - started >= PLOT_FRAME_BUDGET_MS) {
+                mermaidTimer = requestAnimationFrame(function () {
+                    mermaidTimer = null;
+                    started = nowMs();
+                    pump();
+                });
+                return;
+            }
+            var node = nodes[index++];
+            if (!node.isConnected) { pump(); return; }
+
+            var result;
+            try {
+                result = mermaid.run({ nodes: [node] });
+            } catch (e) {
+                warn(e);
+                pump();
+                return;
+            }
+            if (result && typeof result.then === 'function') {
+                result.then(pump, function (e) { warn(e); pump(); });
+            } else {
+                pump();
+            }
+        }
+
+        pump();
+    }
+
     function runMermaidAll(container) {
         var els = container.querySelectorAll('.mermaid');
         if (els.length === 0) return;
@@ -259,16 +303,7 @@
                 if (nodes[i].isConnected) live.push(nodes[i]);
             }
             if (live.length === 0) return;
-            try {
-                var result = mermaid.run({ nodes: live });
-                if (result && typeof result.then === 'function') {
-                    result.catch(function(e) {
-                        if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
-                    });
-                }
-            } catch(e) {
-                if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
-            }
+            runMermaidChunked(live, gen, 0);
         });
     }
 
@@ -395,7 +430,7 @@
     }
 
     // ===== Function plots (function-plot) =====
-    // A ```plot fence carries a raw function-plot options object as JSON; hydratePlots()
+    // A ```plot fence carries a raw function-plot options object as JSON; hydrateOne()
     // turns it into an SVG once the element is in the document. Structurally modelled on
     // runMermaidAll — generation counter, rAF deferral, liveness re-query — because the
     // same two hazards apply: Android's safety retry renders the same text twice, and a
@@ -581,56 +616,129 @@
         el.appendChild(pre);
     }
 
-    function hydratePlots(container, gen) {
-        var nodes = container.querySelectorAll('.plot-container[data-plot]');
-        for (var i = 0; i < nodes.length; i++) {
-            var el = nodes[i];
-            var raw = el.getAttribute('data-plot');
-            el.removeAttribute('data-plot');   // read exactly once
+    // ── Frame-budgeted work ─────────────────────────────────────────────────
+    // Hydrating and re-laying-out a page of plots are both synchronous jobs. A page
+    // of 27 charts took ~594ms in a single requestAnimationFrame callback, which is a
+    // frozen UI — and on the Browser/WASM head the JS thread *is* the Avalonia UI
+    // thread, so the whole app stalls, not just the preview. Splitting the work
+    // across frames caps any single block; progress stays visible and the page stays
+    // interactive.
+    var PLOT_FRAME_BUDGET_MS = 40;
+    var plotHydrateSlot = { timer: null };
+    var plotReflowSlot = { timer: null };
 
-            if (gen !== plotGeneration) return;   // superseded mid-pass
+    function nowMs() {
+        return (window.performance && window.performance.now)
+            ? window.performance.now() : Date.now();
+    }
 
-            var parsed = null;
-            try {
-                parsed = JSON.parse(raw);
-            } catch (e) {
-                showPlotError(el, 'invalid JSON — ' + e.message, raw);
-                continue;
-            }
-            if (!parsed || typeof parsed !== 'object' ||
-                Object.prototype.toString.call(parsed) === '[object Array]') {
-                showPlotError(el,
-                    'the plot body must be a single JSON object, e.g. { "data": [{ "fn": "x^2" }] }',
-                    raw);
-                continue;
-            }
-            if (typeof window.functionPlot !== 'function') {
-                showPlotError(el, 'function-plot is not loaded (CDN blocked?)', raw);
-                continue;
-            }
-            var exprError = plotExpressionError(parsed.data);
-            if (exprError) {
-                console.warn('[Plot] ' + exprError);
-                showPlotError(el, exprError, raw);
-                continue;
-            }
+    /**
+     * Run worker(item) over the items, stopping each frame once the budget is spent.
+     * Completes at least one item per frame, so it always makes progress.
+     *
+     * getItems is called inside the first frame rather than up front: a back-to-back
+     * re-render may have replaced the DOM in between. isStale() lets a superseded pass
+     * abandon the rest. onDone receives the accumulated *busy* time, which — unlike
+     * wall time — is what the adaptive reflow throttle needs.
+     */
+    function runInFrames(slot, getItems, worker, isStale, onDone) {
+        if (slot.timer) cancelAnimationFrame(slot.timer);
+        var items = null, index = 0, busy = 0;
 
-            try {
-                var chart = window.functionPlot(buildPlotOptions(parsed, el));
-                prunePlotCache(chart);
-                installPlotWheelGate(el, parsed);
-                // Remembered so the reflow pass can redraw at a new width. The chart
-                // is laid out once, from whatever the container measured at this
-                // moment — which is not necessarily its final width.
-                el._plotOpts = parsed;
-                el._plotWidth = plotWidthFor(el);
-                ensurePlotResizeObserver();
-            } catch (e2) {
-                if (gen !== plotGeneration) continue;   // stale-node artefact — stay quiet
-                console.warn('[Plot] Render error: ' + e2.message);
-                showPlotError(el, e2.message, raw);
+        function step() {
+            slot.timer = null;
+            if (isStale && isStale()) return;
+            if (!items) {
+                items = getItems() || [];
+                if (!items.length) { if (onDone) onDone(0); return; }
             }
+            var started = nowMs();
+            while (index < items.length) {
+                if (isStale && isStale()) return;
+                worker(items[index]);
+                index++;
+                if (nowMs() - started >= PLOT_FRAME_BUDGET_MS) break;
+            }
+            busy += nowMs() - started;
+            if (index < items.length) {
+                slot.timer = requestAnimationFrame(step);
+                return;
+            }
+            if (onDone) onDone(busy);
         }
+
+        slot.timer = requestAnimationFrame(step);
+    }
+
+    function hydrateOne(el, gen) {
+        var raw = el.getAttribute('data-plot');
+        el.removeAttribute('data-plot');   // read exactly once
+
+        var parsed = null;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            showPlotError(el, 'invalid JSON — ' + e.message, raw);
+            return;
+        }
+        if (!parsed || typeof parsed !== 'object' ||
+            Object.prototype.toString.call(parsed) === '[object Array]') {
+            showPlotError(el,
+                'the plot body must be a single JSON object, e.g. { "data": [{ "fn": "x^2" }] }',
+                raw);
+            return;
+        }
+        if (typeof window.functionPlot !== 'function') {
+            showPlotError(el, 'function-plot is not loaded (CDN blocked?)', raw);
+            return;
+        }
+        var exprError = plotExpressionError(parsed.data);
+        if (exprError) {
+            console.warn('[Plot] ' + exprError);
+            showPlotError(el, exprError, raw);
+            return;
+        }
+
+        try {
+            var chart = window.functionPlot(buildPlotOptions(parsed, el));
+            prunePlotCache(chart);
+            installPlotWheelGate(el, parsed);
+            // Remembered so the reflow pass can redraw at a new width. The chart is
+            // laid out once, from whatever the container measured at this moment —
+            // which is not necessarily its final width.
+            el._plotOpts = parsed;
+            el._plotWidth = plotWidthFor(el);
+            ensurePlotResizeObserver();
+        } catch (e2) {
+            if (gen !== plotGeneration) return;   // stale-node artefact — stay quiet
+            console.warn('[Plot] Render error: ' + e2.message);
+            showPlotError(el, e2.message, raw);
+        }
+    }
+
+    // ===== Hydration, budgeted across frames =====
+    // Deferred to an animation frame so a back-to-back re-render cancels the pending
+    // pass and only the latest DOM is hydrated, and so the container is laid out
+    // before clientWidth is read.
+    function runFunctionPlotAll(container, followToBottom) {
+        if (container.querySelectorAll('.plot-container[data-plot]').length === 0) return;
+        var gen = ++plotGeneration;
+        if (plotTimer) cancelAnimationFrame(plotTimer);
+
+        runInFrames(plotHydrateSlot,
+            function () {
+                var out = [];
+                var nodes = container.querySelectorAll('.plot-container[data-plot]');
+                for (var i = 0; i < nodes.length; i++) {
+                    if (nodes[i].isConnected) out.push(nodes[i]);
+                }
+                return out;
+            },
+            function (el) { hydrateOne(el, gen); },
+            function () { return gen !== plotGeneration; },
+            function () {
+                if (followToBottom !== false) maybeAutoScroll();
+            });
     }
 
     // ===== Responsive reflow =====
@@ -639,48 +747,84 @@
     // plot drawn while the pane was still settling (or at its old width) stays wrong:
     // too wide and it is clipped or scrolled, too narrow and it leaves a gap.
     var plotResizeObserver = null;
-    // Throttle, not debounce: a debounce only fires once the drag STOPS, which
-    // reads as "the chart doesn't follow the pane". This fires immediately on the
-    // first change, then keeps up at a bounded rate while the pane keeps moving,
-    // with a trailing call so the final width is always the one drawn.
+
+    // Throttle, not debounce: a debounce only fires once the drag STOPS, which reads
+    // as "the chart doesn't follow the pane". Fire immediately on the first change,
+    // then keep up at a bounded rate while the pane keeps moving, with a trailing
+    // call so the final width is always the one drawn.
+    //
+    // The floor adapts to how expensive the last pass actually was. A full re-layout
+    // measured 347-580ms for 27 charts, which is many times the 60ms base interval —
+    // queueing passes at the base rate would saturate the thread. On a page with one
+    // or two charts a pass costs ~20ms and the floor never leaves 60ms.
     var PLOT_REFLOW_MIN_MS = 60;
     var plotReflowLast = 0;
+    var plotReflowLastBusyMs = 0;
     var plotReflowTimer = null;
+    var plotReflowBusy = false;
+    var plotReflowQueued = false;
 
     function reflowPlots() {
         var preview = document.getElementById('preview');
         if (!preview || typeof window.functionPlot !== 'function') return;
-        var nodes = preview.querySelectorAll('.plot-container');
-        for (var i = 0; i < nodes.length; i++) {
-            var el = nodes[i];
-            if (!el._plotOpts || !el.isConnected) continue;
-            var w = plotWidthFor(el);
-            // Exact comparison. plotWidthFor rounds to whole pixels, so nothing
-            // here has to tolerate a dead zone.
-            if (w === el._plotWidth) continue;
-            try {
-                var chart = window.functionPlot(buildPlotOptions(el._plotOpts, el));
-                prunePlotCache(chart);
-                el._plotWidth = w;
-            } catch (e) {
-                console.warn('[Plot] reflow error: ' + e.message);
-            }
-        }
+        plotReflowBusy = true;
+
+        runInFrames(plotReflowSlot,
+            function () {
+                var out = [];
+                var nodes = preview.querySelectorAll('.plot-container');
+                for (var i = 0; i < nodes.length; i++) {
+                    var el = nodes[i];
+                    if (!el._plotOpts || !el.isConnected) continue;
+                    if (plotWidthFor(el) === el._plotWidth) continue;
+                    out.push(el);
+                }
+                return out;
+            },
+            function (el) {
+                // Width is sampled per item, not up front: while the pass runs the
+                // pane may still be moving, and each chart should land on the width
+                // the pane has when that chart is drawn.
+                var w = plotWidthFor(el);
+                if (w === el._plotWidth) return;
+                try {
+                    var chart = window.functionPlot(buildPlotOptions(el._plotOpts, el));
+                    prunePlotCache(chart);
+                    el._plotWidth = w;
+                } catch (e) {
+                    console.warn('[Plot] reflow error: ' + e.message);
+                }
+            },
+            null,
+            function (busyMs) {
+                plotReflowBusy = false;
+                plotReflowLastBusyMs = busyMs;
+                if (plotReflowQueued) {
+                    // A change arrived mid-pass. Run once more rather than cancelling:
+                    // a restart would redo the charts already drawn and never reach the
+                    // ones at the end.
+                    plotReflowQueued = false;
+                    plotReflowLast = nowMs();
+                    reflowPlots();
+                }
+            });
     }
 
     function schedulePlotReflow() {
-        var since = Date.now() - plotReflowLast;
-        if (since >= PLOT_REFLOW_MIN_MS) {
-            plotReflowLast = Date.now();
+        if (plotReflowBusy) { plotReflowQueued = true; return; }
+        var min = Math.max(PLOT_REFLOW_MIN_MS, plotReflowLastBusyMs);
+        var since = nowMs() - plotReflowLast;
+        if (since >= min) {
+            plotReflowLast = nowMs();
             reflowPlots();
             return;
         }
         if (plotReflowTimer) return;   // a trailing call is already queued
         plotReflowTimer = setTimeout(function () {
             plotReflowTimer = null;
-            plotReflowLast = Date.now();
+            plotReflowLast = nowMs();
             reflowPlots();
-        }, PLOT_REFLOW_MIN_MS - since);
+        }, min - since);
     }
 
     function ensurePlotResizeObserver() {
@@ -691,26 +835,6 @@
         if (!preview) return;
         plotResizeObserver = new window.ResizeObserver(schedulePlotReflow);
         plotResizeObserver.observe(preview);
-    }
-
-    // Deferred to the next animation frame so a back-to-back re-render cancels the
-    // pending pass and only the latest DOM is hydrated, and so the container is laid out
-    // before clientWidth is read.
-    function runFunctionPlotAll(container, followToBottom) {
-        if (container.querySelectorAll('.plot-container[data-plot]').length === 0) return;
-        var gen = ++plotGeneration;
-        if (plotTimer) cancelAnimationFrame(plotTimer);
-        plotTimer = requestAnimationFrame(function() {
-            plotTimer = null;
-            var live = 0;
-            var nodes = container.querySelectorAll('.plot-container[data-plot]');
-            for (var i = 0; i < nodes.length; i++) {
-                if (nodes[i].isConnected) live++;
-            }
-            if (live === 0) return;
-            hydratePlots(container, gen);
-            if (followToBottom !== false) maybeAutoScroll();
-        });
     }
 
     // ===== Export a diagram / plot / PlantUML image =====

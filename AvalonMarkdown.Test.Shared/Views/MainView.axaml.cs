@@ -27,6 +27,8 @@ public partial class MainView : UserControl
     private bool _fenceDispatchOk = true;
     // Showcase presets must load from their embedded assets; see the showcase phase.
     private bool _showcaseOk = true;
+    // Last document a phase rendered, so an identical one can be forced; see RunPhaseAsync.
+    private string? _lastPhaseText;
 
     // ── Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1) ──
     private readonly StringBuilder _auditLog = new();
@@ -150,14 +152,14 @@ public partial class MainView : UserControl
         {
             // Each phase waits for the JS "✅ Render complete" signal (via ConsoleMessage),
             // then a grace delay lets async mermaid/plantuml errors land.
-            await RunPhaseAsync("Simple", () => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown());
+            await RunPhaseAsync("Simple", MainViewModel.GetSimpleMarkdown());
             // The label used to claim "intentionally-broken mermaid/plantuml"; it was never
             // true — those four fences are all valid, and the only deliberate break is the
             // plot JSON. Diagram failure surfaces are covered by the render-check driver's
             // fixtures (skills/avalonmarkdown-syntax/fixtures), which assert on them.
             await RunPhaseAsync("Full (incl. an intentionally-broken plot)",
-                () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
-            await RunPhaseAsync("BigDoc", () => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown());
+                MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("BigDoc", MainViewModel.GetBigDocumentMarkdown());
 
             // Verify the native scroll-progress API round-trips through the WebView.
             _captureLog.AppendLine("\n=== Phase: ScrollToProgressAsync round-trip ===");
@@ -224,7 +226,7 @@ public partial class MainView : UserControl
             // Verify the app:// link pipeline end-to-end: click dispatch → post('LINK')
             // → C# LinkClicked → demo swaps content (this is what Android hit).
             _captureLog.AppendLine("\n=== Phase: app:// link interception ===");
-            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
             var clickResult = await _singlePreview.InvokeScriptAsync(
                 "var a = document.querySelector('a[data-href=\"app://about\"]'); a ? (a.click(), 1) : 0;");
             await Task.Delay(500);
@@ -250,7 +252,7 @@ public partial class MainView : UserControl
             // Facade video embeds: the Full doc has 3 videos → 3 facades, 0 iframes
             // (platform players must NOT load until the user clicks).
             _captureLog.AppendLine("\n=== Phase: video facade (click-to-play) ===");
-            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
             var facadeCount = await _singlePreview!.InvokeScriptAsync("document.querySelectorAll('.embed-facade').length");
             var iframeCount = await _singlePreview.InvokeScriptAsync("document.querySelectorAll('.embed-container iframe').length");
             _captureLog.AppendLine($"[facade] facades={facadeCount} (expect 3) iframes={iframeCount} (expect 0)");
@@ -259,7 +261,7 @@ public partial class MainView : UserControl
             // plain ```json fence — carrying the same object as the first plot block — has
             // to stay a highlighted code block rather than being swallowed as a chart.
             _captureLog.AppendLine("\n=== Phase: fence dispatch (plot vs json) ===");
-            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
             // Plot hydration is deferred to a requestAnimationFrame, so give it a beat
             // after the render-complete signal before sampling the DOM.
             await Task.Delay(600);
@@ -323,7 +325,7 @@ public partial class MainView : UserControl
             var showcaseBad = new List<string>();
             foreach (var (name, load) in showcases)
             {
-                await RunPhaseAsync($"Showcase: {name}", () => _vm.MarkdownText = load());
+                await RunPhaseAsync($"Showcase: {name}", load());
                 var h = await _singlePreview!.InvokeScriptAsync(
                     "document.querySelectorAll('#preview h1,#preview h2,#preview h3').length");
                 // Match the fallback's own text. A shape-based heuristic ("one h1 and
@@ -354,10 +356,19 @@ public partial class MainView : UserControl
         }
     }
 
-    private async Task RunPhaseAsync(string name, Action load)
+    /// <summary>
+    /// Render <paramref name="markdown"/> and wait for the JS "Render complete" line.
+    ///
+    /// Takes the text rather than a setter so it can tell whether this phase re-uses
+    /// the previous document. The Text binding short-circuits on identical content
+    /// (<c>MyersDiff.AreEqual</c> in MarkdownView), which produces **no render and no
+    /// completion signal at all** — the phase would then burn its full 12s timeout and
+    /// sample whatever the previous phase happened to leave in the DOM. That made the
+    /// fence-dispatch phase read the wrong document, intermittently.
+    /// </summary>
+    private async Task RunPhaseAsync(string name, string markdown)
     {
         _captureLog.AppendLine($"\n=== Phase: {name} ===");
-        load();
 
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<MarkdownConsoleMessageEventArgs>? watcher = null;
@@ -365,9 +376,21 @@ public partial class MainView : UserControl
         {
             if (e.Level == "LOG" && e.Message.Contains("Render complete")) completed.TrySetResult(true);
         };
+        // Attach before rendering: a fast render's message can otherwise arrive first.
         _singlePreview!.ConsoleMessage += watcher;
         try
         {
+            var repeated = _lastPhaseText == markdown;
+            _vm.MarkdownText = markdown;   // keep the editor in sync
+            if (repeated)
+            {
+                // The binding will not re-render identical content, so drive the
+                // control directly. Without this the phase waits 12s for a signal
+                // that is never coming.
+                await _singlePreview.RenderMarkdownAsync(markdown);
+            }
+            _lastPhaseText = markdown;
+
             if (await Task.WhenAny(completed.Task, Task.Delay(TimeSpan.FromSeconds(12))) == completed.Task)
                 _captureLog.AppendLine($"[phase] '{name}' render completed");
             else
