@@ -308,6 +308,24 @@ cannot be trusted, so the fixtures and the assertions are part of the deliverabl
 
 The repository contains runnable sample apps (`AvalonMarkdown.Test.Desktop` and Android/iOS/Browser variants) that exercise both levels.
 
+Its toolbar carries three **special-member showcases** alongside the general tour —
+`Tables`, `Diagrams` and `Plots`. Each isolates one kind of element and runs a large
+set of cases at it, so a regression in that member is obvious rather than buried:
+
+- **Tables** — alignment, escaped pipes inside code spans, math and footnotes in
+  cells, CJK and emoji, an eight-column layout, plus three shapes that must *not*
+  become tables.
+- **Diagrams** — 15 Mermaid types and 11 PlantUML types, with CJK and HTML labels,
+  alongside a deliberately broken diagram of each kind so the failure appearance is
+  documented next to the successes.
+- **Plots** — the full Penner/easings.net set (sine through bounce, `in`/`out`/`inOut`)
+  plus non-`y = f(x)` graph types: parametric, polar, implicit, scatter, vectors.
+
+They live as real `.md` files under `AvalonMarkdown.Test.Shared/Assets/Showcase/`
+rather than C# string literals, so the validator checks the exact file the demo
+renders. The capture driver asserts all three load, since a wrong asset key fails
+silently into a fallback error block.
+
 ## License
 
 [MIT](LICENSE.txt)

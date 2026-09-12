@@ -165,6 +165,30 @@ intercepted — in particular a `json` fence stays a highlighted code block.
 `puml-dark` adds `filter: invert(0.882) hue-rotate(180deg)` to the image so a
 white-background diagram matches the dark theme.
 
+**Graph types that need `"sampler": "builtIn"`.** `plot` defaults to the `interval`
+sampler, which only understands plain `y = f(x)`. These throw
+`X is not supported in the 'interval' sampler` unless the sampler is switched:
+
+| Datum | Needs |
+| --- | --- |
+| `fnType: "points"` | `"sampler": "builtIn"` |
+| `fnType: "parametric"` | `"sampler": "builtIn"` |
+| `fnType: "polar"` | `"sampler": "builtIn"` |
+| `fnType: "vector"` | `"sampler": "builtIn"` |
+| `graphType: "scatter"` | `"sampler": "builtIn"` |
+
+**The parameter name differs per graph type** — a genuine trap, since a wrong name
+reports only `symbol "…" is undefined`:
+
+| `fnType` | Parameter | Example |
+| --- | --- | --- |
+| linear (default) | `x` | `"fn": "sin(x)"` |
+| `parametric` | `t` | `"x": "sin(3*t)", "y": "sin(4*t)"` |
+| `polar` | **`theta`** | `"r": "1 - cos(theta)"` |
+
+`polar` is the odd one out: its evaluator scope is `{theta: <angle>}` — verified in
+the library bundle (`builtIn(t.d, "r", {theta: i})`), not inferred.
+
 **Exportable members.** `mermaid`, `plot` and `plantuml` can be saved as an image
 (right-click, or long-press on touch). Math cannot — KaTeX renders positioned HTML
 rather than SVG. Two consequences for authors who care about the exported file:

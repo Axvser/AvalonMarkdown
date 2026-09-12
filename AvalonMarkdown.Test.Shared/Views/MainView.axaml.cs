@@ -25,6 +25,8 @@ public partial class MainView : UserControl
     // Fence-dispatch check: unlike the other capture expectations (which are logged for a
     // human to read), this one gates the exit code — see the fence-dispatch phase.
     private bool _fenceDispatchOk = true;
+    // Showcase presets must load from their embedded assets; see the showcase phase.
+    private bool _showcaseOk = true;
 
     // ── Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1) ──
     private readonly StringBuilder _auditLog = new();
@@ -87,6 +89,13 @@ public partial class MainView : UserControl
         SimplePresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown();
         FullPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown();
         BigDocPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown();
+
+        // One showcase per special member. Each is a large set of cases for a single
+        // kind of element, so a regression in one member is obvious rather than
+        // buried in the general tour.
+        TablesPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetTablesShowcase();
+        DiagramsPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetDiagramsShowcase();
+        PlotsPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetPlotsShowcase();
 
         // Multi-view toggle
         MultiViewToggle.Click += (_, _) => ToggleMultiView();
@@ -300,6 +309,42 @@ public partial class MainView : UserControl
                 : "[fence] RESULT: FAIL — a json fence was intercepted by the plot branch, " +
                   "or the plot fences did not render");
 
+            // Special-member showcases. Each is loaded from an embedded .md asset, and
+            // a wrong avares key does not throw — LoadShowcase renders a fallback
+            // error block instead. Counting headings is what tells the two apart: a
+            // real showcase has many, the fallback has one.
+            _captureLog.AppendLine("\n=== Phase: special-member showcases ===");
+            var showcases = new (string Name, Func<string> Load)[]
+            {
+                ("Tables", MainViewModel.GetTablesShowcase),
+                ("Diagrams", MainViewModel.GetDiagramsShowcase),
+                ("Plots", MainViewModel.GetPlotsShowcase),
+            };
+            var showcaseBad = new List<string>();
+            foreach (var (name, load) in showcases)
+            {
+                await RunPhaseAsync($"Showcase: {name}", () => _vm.MarkdownText = load());
+                var h = await _singlePreview!.InvokeScriptAsync(
+                    "document.querySelectorAll('#preview h1,#preview h2,#preview h3').length");
+                // Match the fallback's own text. A shape-based heuristic ("one h1 and
+                // one code block") false-positives on any showcase that happens to
+                // contain a single top heading and a single code block — which
+                // diagrams.md does, because of its deliberate `mermiad` fence.
+                var fallback = await _singlePreview.InvokeScriptAsync(
+                    "document.getElementById('preview').textContent" +
+                    ".indexOf('Showcase asset missing') >= 0 ? 1 : 0");
+                var headingCount = int.TryParse(h?.Trim(), out var hn) ? hn : 0;
+                var isFallback = fallback?.Trim() == "1";
+                _captureLog.AppendLine($"[showcase] {name}: headings={headingCount} " +
+                    $"fallbackError={isFallback} (expect headings>5, fallbackError=False)");
+                if (headingCount <= 5 || isFallback) showcaseBad.Add(name);
+            }
+            _showcaseOk = showcaseBad.Count == 0;
+            _captureLog.AppendLine(_showcaseOk
+                ? "[showcase] RESULT: PASS"
+                : $"[showcase] RESULT: FAIL — {string.Join(", ", showcaseBad)} did not load " +
+                  "from Assets/Showcase/ (check the avares key)");
+
             FinishCapture(timeout: false);
         }
         catch (Exception ex)
@@ -347,6 +392,8 @@ public partial class MainView : UserControl
 
         if (!_fenceDispatchOk)
             _captureLog.AppendLine("\n[FATAL] fence-dispatch check failed");
+        if (!_showcaseOk)
+            _captureLog.AppendLine("\n[FATAL] a special-member showcase failed to load");
 
         try
         {
@@ -358,7 +405,7 @@ public partial class MainView : UserControl
         {
             Console.WriteLine($"[capture] failed to write log: {ex.Message}");
         }
-        var ok = !timeout && _fenceDispatchOk;
+        var ok = !timeout && _fenceDispatchOk && _showcaseOk;
         Console.WriteLine(ok ? "[capture] PASS" : "[capture] FAIL");
         Environment.Exit(ok ? 0 : 1);
     }

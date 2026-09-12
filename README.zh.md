@@ -298,6 +298,20 @@ python skills/avalonmarkdown-syntax/scripts/render_check.py --self-test
 
 仓库包含可运行的示例应用（`AvalonMarkdown.Test.Desktop` 及 Android/iOS/Browser 版本），覆盖以上两个层面。
 
+工具条上除总览之外还有三个**专项展示**入口 —— `Tables`、`Diagrams`、`Plots`。
+每个只针对一类元素、跑一大批用例，这样该类元素的回归会一眼看到，而不是埋在大杂烩里：
+
+- **表格** —— 对齐、代码块内转义竖线、单元格里的公式与脚注、中文与 emoji、
+  八列布局，以及三种**不该被当作表格**的形状。
+- **图表** —— 15 种 Mermaid 加 11 种 PlantUML，含中文与 HTML 标签；每种各配一个
+  故意写坏的样例，让失败长什么样和成功并排摆着。
+- **函数图像** —— 完整的 Penner / easings.net 缓动集（sine 到 bounce，`in`/`out`/`inOut`），
+  外加非 `y = f(x)` 的图类型：参数方程、极坐标、隐函数、散点、向量。
+
+它们以真实的 `.md` 文件存在 `AvalonMarkdown.Test.Shared/Assets/Showcase/` 下，而不是
+C# 字符串字面量 —— 这样校验器检查的就是演示实际渲染的那份文件。捕获驱动会断言三者都能
+加载，因为资源键写错只会静默退化成一个回退错误块。
+
 ## 许可证
 
 [MIT](LICENSE.txt)

@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using Avalonia.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AvalonMarkdown.Test.Shared.ViewModels;
@@ -447,4 +449,35 @@ public partial class MainViewModel : ViewModelBase
 
         > Performance test conclusion: Large documents should render within 200ms.
         """;
+
+    // ─── Special-member showcases ───────────────────────────────────────────
+    // Kept as .md assets under Assets/Showcase/ rather than C# raw strings, so
+    // render_check.py can validate the EXACT file the demo renders instead of a
+    // hand-extracted copy. Embedded automatically by the Assets\** glob.
+
+    private static string LoadShowcase(string fileName)
+    {
+        const string fallback = "# Showcase asset missing\n\n" +
+            "Expected `Assets/Showcase/{0}` to be embedded as an AvaloniaResource.";
+        try
+        {
+            using var stream = AssetLoader.Open(
+                new Uri($"avares://AvalonMarkdown.Test.Shared/Assets/Showcase/{fileName}"));
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (Exception ex)
+        {
+            return string.Format(fallback, fileName) + $"\n\n```\n{ex.Message}\n```";
+        }
+    }
+
+    /// <summary>Every table variant — alignment, escaping, CJK, wide, degenerate.</summary>
+    public static string GetTablesShowcase() => LoadShowcase("tables.md");
+
+    /// <summary>Mermaid and PlantUML diagram types, including deliberate failures.</summary>
+    public static string GetDiagramsShowcase() => LoadShowcase("diagrams.md");
+
+    /// <summary>Function plots — the full easing set plus other graph types.</summary>
+    public static string GetPlotsShowcase() => LoadShowcase("plots.md");
 }
