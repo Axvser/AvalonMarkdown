@@ -613,6 +613,10 @@ def analyse(path: Path, args) -> dict:
     findings += fence_findings
 
     counts = {"mermaid": 0, "plantuml": 0, "plot": 0, "video": 0, "code": 0}
+    # Set when the PlantUML host could not be reached, so callers can tell "the
+    # diagram is fine" from "we could not ask". plantuml.com is a third party and
+    # does go away.
+    plantuml_unreachable = False
     for f in fences:
         info = f.info
         if info in ("plantuml", "puml"):
@@ -639,7 +643,9 @@ def analyse(path: Path, args) -> dict:
                     id="puml-missing-end", severity=FAIL, line=f.body_line,
                     message="PlantUML body has no @enduml"))
             if args.plantuml:
-                pf, _ = check_plantuml(f.body, args.plantuml_timeout, _puml_cache)
+                pf, pmode = check_plantuml(f.body, args.plantuml_timeout, _puml_cache)
+                if pmode == "unreachable":
+                    plantuml_unreachable = True
                 for fi in pf:
                     fi.line = fi.line or f.body_line
                     findings.append(fi)
@@ -676,6 +682,7 @@ def analyse(path: Path, args) -> dict:
         "counts": counts,
         "findings": [f.__dict__ for f in findings],
         "unvalidated": unvalidated,
+        "plantuml_unreachable": plantuml_unreachable,
         "render": None,
         "render_error": "",
     }
@@ -998,6 +1005,8 @@ def self_test(args) -> int:
 
     failed = 0
 
+    notes_seen: list[str] = []
+
     def check(label: str, missing: list[str], detail: str,
               notes: list[str] | None = None) -> None:
         nonlocal failed
@@ -1009,6 +1018,7 @@ def self_test(args) -> int:
         # A relaxed assertion is printed even on success: a green self-test must
         # not hide that part of the surface went unverified.
         for n in (notes or []):
+            notes_seen.append(n)
             print(f"         note: {n}")
 
     for name, want in SELF_TEST_EXPECTATIONS.items():
@@ -1024,11 +1034,20 @@ def self_test(args) -> int:
               f": {len(static_got)} static findings")
 
         if want.get("plantuml"):
-            if can_plantuml:
-                check(f"{name} (plantuml server)",
-                      [i for i in want["plantuml"] if i not in static_got], "")
-            else:
+            if not can_plantuml:
                 print(f"  [skip] {name} (plantuml server) -- disabled")
+            else:
+                missing_puml = [i for i in want["plantuml"] if i not in static_got]
+                if missing_puml and res.get("plantuml_unreachable"):
+                    # The host is a third party and does go away. An unanswered
+                    # question is not a failed check -- but it must be loud, because
+                    # a silent skip would hide a real regression.
+                    note = f"{name}: {PLANTUML_SERVER} unreachable"
+                    notes_seen.append(note)
+                    print(f"  [note] {name} (plantuml server): {PLANTUML_SERVER} unreachable "
+                          "-- NOT verified")
+                else:
+                    check(f"{name} (plantuml server)", missing_puml, "")
 
         if want.get("render"):
             if not render_available:
@@ -1078,7 +1097,14 @@ def self_test(args) -> int:
                 bad += p2
         check("good.md (no false positives)", bad, detail, notes)
 
-    print(f"\nself-test: {'PASS' if not failed else f'FAIL ({failed} problem(s))'}")
+    verdict = "PASS" if not failed else f"FAIL ({failed} problem(s))"
+    if notes_seen:
+        # Never let a green line stand in for a complete one.
+        verdict += (f" - WITH {len(notes_seen)} UNVERIFIED ASSERTION(S); "
+                    "the environment was degraded:")
+        for n in notes_seen:
+            verdict += f"\n    - {n}"
+    print(f"\nself-test: {verdict}")
     return 0 if not failed else 1
 
 

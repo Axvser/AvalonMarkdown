@@ -281,6 +281,14 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 Markdown dialect this control renders — every member with worked good/bad examples,
 including the delimiter rules for math and the expression grammar for function plots.
 
+[`references/templates.md`](skills/avalonmarkdown-syntax/references/templates.md) holds
+copy-paste-ready source for each member. Those snippets are not written from memory:
+`scripts/check_templates.py` extracts every one of them, renders the result through the
+real pipeline, and fails if anything breaks.
+
+[`CLAUDE.md`](CLAUDE.md) points an agent working in this repository at the skill, so it
+is read before any Markdown here is written.
+
 It ships a validator that answers a question the preview cannot: *will this actually
 render?* Most failures here are silent — KaTeX draws its own error span without
 logging, a `$$` block left open deletes the rest of the document, and a PlantUML

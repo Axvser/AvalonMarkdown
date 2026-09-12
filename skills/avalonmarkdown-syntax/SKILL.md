@@ -1,7 +1,23 @@
 ---
 name: avalonmarkdown-syntax
-description: Authoring reference for the Markdown dialect that AvalonMarkdown renders — the exact syntax each member needs (headings and anchors, KaTeX math, Mermaid, PlantUML, function plots, video embeds, footnotes, task lists) with worked good/bad examples, plus a validator at scripts/render_check.py that renders a document and surfaces the failures this renderer would otherwise swallow without a message. Use when writing, reviewing, or debugging Markdown destined for an AvalonMarkdown preview, and before publishing any document containing math, diagrams or plots.
+description: Produces correct Markdown source for the dialect AvalonMarkdown renders, and validates it. Covers the exact syntax each member needs — headings and anchors, KaTeX math, tables, Mermaid, PlantUML, function plots, video embeds, footnotes, task lists — with copy-paste templates in references/templates.md, worked good/bad examples, and a validator (scripts/render_check.py) that renders a document and surfaces the failures this renderer otherwise swallows silently. Use when writing, generating, reviewing or debugging Markdown destined for an AvalonMarkdown preview, and before publishing any document containing math, diagrams, tables or plots.
 ---
+
+## Start here when writing Markdown
+
+**Copy from [references/templates.md](references/templates.md).** Every block in
+that file is extracted and rendered by `scripts/check_templates.py`, so the
+snippets are verified to render — not remembered. When unsure of a member's
+syntax, read the template and adapt it rather than reconstructing it.
+
+For a fuller worked corpus, the demo's showcase pages are real files that the
+validator checks on every run:
+
+| Corpus | Covers |
+| --- | --- |
+| `AvalonMarkdown.Test.Shared/Assets/Showcase/tables.md` | 23 table variants — alignment, escaped pipes, math and footnotes in cells, CJK, wide, and shapes that must *not* become tables |
+| `AvalonMarkdown.Test.Shared/Assets/Showcase/diagrams.md` | 15 Mermaid types and 11 PlantUML types, CJK and HTML labels, each failure mode beside its successes |
+| `AvalonMarkdown.Test.Shared/Assets/Showcase/plots.md` | the full Penner easing set plus parametric, polar, implicit, scatter and vector graph types |
 
 # AvalonMarkdown document authoring
 
@@ -40,6 +56,12 @@ writing, and `--json` for machine-readable output.
 A static-only pass prints `PASS (static only)` and an explicit warning, because it
 **cannot** prove a formula compiles or a diagram parses. Do not read a static pass
 as a full pass.
+
+To check the templates themselves:
+
+```bash
+python skills/avalonmarkdown-syntax/scripts/check_templates.py
+```
 
 ---
 
@@ -195,6 +217,24 @@ else renders as plain text in a code block, which is not an error. Every block g
 a copy button and height controls.
 
 ---
+
+## Mistakes that render wrong rather than fail
+
+Each of these produces a plausible-looking but incorrect preview, and most of them
+produce no message at all.
+
+| Written | What happens | Write instead |
+| --- | --- | --- |
+| `mermiad` (typo) | an ordinary code block, no warning | `mermaid` |
+| ` ```mermaid {theme=dark} ` | info string compared exactly, so no dispatch | ` ```mermaid ` |
+| `$$` on a line with text | **two characters silently deleted** | `\$` for a literal dollar |
+| an unclosed `$$` block | **the rest of the document is swallowed** | close it |
+| `pi`, `e` in a plot | undefined symbol, curve silently absent | `PI`, `E` |
+| `"domain": [-2*PI, 2*PI]` | not valid JSON — a plot error block | `"domain": [-6.283185307179586, 6.283185307179586]` |
+| `"fn": "x \| 1"` in a plot | rejected by the whitelist before evaluation | use allowed characters only |
+| a `|` inside a table cell | silently splits the cell | `\|`, even in a code span |
+| `![alt](x.mp4)` expecting an image | renders a `<video>` player | intentional? fine — just know it |
+| a `plot` body that is an array | must be a single JSON **object** | wrap it |
 
 ## Checklist before publishing
 

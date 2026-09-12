@@ -4,6 +4,11 @@ Every construct the renderer supports, with the markup it produces. Loaded on
 demand from [SKILL.md](../SKILL.md) — that file carries the rules you need while
 writing; this one is the lookup table.
 
+Two companions: [templates.md](templates.md) has copy-paste-ready source for each
+member, verified by rendering; and the demo's showcase pages under
+`AvalonMarkdown.Test.Shared/Assets/Showcase/` are a much larger corpus of the same
+syntax, validated on every run.
+
 The renderer is markdown-it 14 with `html: true`, `linkify: true`,
 `typographer: true`, plus markdown-it-footnote and markdown-it-task-lists. Five
 renderer rules are overridden: heading ids, inline math, block math, fences and

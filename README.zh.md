@@ -276,6 +276,13 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 Markdown 方言 —— 每个语法成员都配有正反案例，包括数学公式的定界符规则和函数图像的
 表达式文法。
 
+[`references/templates.md`](skills/avalonmarkdown-syntax/references/templates.md) 提供
+可直接复制的源码模板。这些片段不是凭记忆写的：`scripts/check_templates.py` 会把每一段
+抽出来、送进真实管线渲染，任何一段出问题就失败。
+
+[`CLAUDE.md`](CLAUDE.md) 让在本仓库工作的 agent 先读到这份 skill，从而在写任何 Markdown
+之前就拿到正确的语法。
+
 它还带了一个校验器，回答预览本身回答不了的问题：**这段写得出来吗？** 这里的失败大多
 是静默的 —— KaTeX 自己画一个错误 span 且不 log；未闭合的 `$$` 块会删掉文档余下全部；
 PlantUML 语法错误返回的是一张**能正常显示的报错图**，尺寸正常，看起来像画好了。
