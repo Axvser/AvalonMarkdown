@@ -280,8 +280,19 @@ Markdown 方言 —— 每个语法成员都配有正反案例，包括数学公
 可直接复制的源码模板。这些片段不是凭记忆写的：`scripts/check_templates.py` 会把每一段
 抽出来、送进真实管线渲染，任何一段出问题就失败。
 
-[`CLAUDE.md`](CLAUDE.md) 让在本仓库工作的 agent 先读到这份 skill，从而在写任何 Markdown
-之前就拿到正确的语法。
+### 作为 Claude Code skill 安装
+
+这个目录本身就是一个合法的 Claude Code skill，可直接用于**你自己的**项目 —— 如果你正在
+生成会交给本控件渲染的 Markdown，就把它装到生成发生的那个项目里：
+
+```bash
+mkdir -p .claude/skills
+cp -r <path-to>/AvalonMarkdown/skills/avalonmarkdown-syntax .claude/skills/
+```
+
+Claude Code 会自动加载它，并在写 Markdown 之前参考。它**有意不**装进本仓库自己的
+`.claude/` —— 面向文档写作的 skill 不是仓库本身需要的东西，而在这里提交一份 agent
+指令文件等于把它强加给每个克隆这个仓库的人。
 
 它还带了一个校验器，回答预览本身回答不了的问题：**这段写得出来吗？** 这里的失败大多
 是静默的 —— KaTeX 自己画一个错误 span 且不 log；未闭合的 `$$` 块会删掉文档余下全部；

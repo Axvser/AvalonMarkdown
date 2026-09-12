@@ -29,12 +29,14 @@ Exit codes: 0 pass, 1 findings, 2 usage/config error, 3 environment problem.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -448,67 +450,132 @@ def check_math(text: str, fences: list[Fence]) -> list[Finding]:
 # --------------------------------------------------------------------------
 
 
-def check_plantuml(body: str, timeout: int, cache: dict[str, tuple]) -> tuple[list[Finding], str]:
+def _puml_verdict(status: int, text: str) -> tuple[str, str]:
+    """Map one server answer to (verdict, detail).
+
+    Order matters: the HTTP status is checked BEFORE the body markers, because the
+    400 response for a syntax error also contains "Welcome to PlantUML".
+    """
+    if status != 200:
+        return "rejected", " ".join(text.split())[:200]
+    if 'data-diagram-type="' in text:
+        return "accepted", ""
+    if "Welcome to PlantUML" in text:
+        return "empty", ""
+    if "Syntax Error" in text:
+        return "syntax", " ".join(text.split())[:200]
+    return "unknown", " ".join(text.split())[:200]
+
+
+def _puml_findings(verdict: str, detail: str) -> list[Finding]:
+    if verdict == "accepted":
+        return []
+    if verdict == "empty":
+        return [Finding(
+            id="plantuml-empty", severity=FAIL,
+            message="PlantUML returned its welcome placeholder: the diagram is empty or "
+                    "degenerate (typically a bare @startuml/@enduml pair)")]
+    if verdict == "syntax":
+        return [Finding(
+            id="plantuml-syntax", severity=FAIL,
+            message="PlantUML reported a syntax error inside a 200 response",
+            sample=detail)]
+    if verdict == "rejected":
+        return [Finding(
+            id="plantuml-rejected", severity=FAIL,
+            message="PlantUML rejected the diagram; the preview will show a blank box "
+                    "with no error",
+            sample=detail)]
+    return [Finding(
+        id="plantuml-unknown-shape", severity=WARN,
+        message="PlantUML returned HTTP 200 with an unrecognised body shape",
+        sample=detail)]
+
+
+def _puml_key(body: str) -> str:
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]
+
+
+def _puml_cache_read(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _puml_cache_write(path: Path, data: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    except OSError:
+        pass   # a cache that cannot be written is not a failure
+
+
+def check_plantuml(body: str, args, cache: dict) -> tuple[list[Finding], str]:
     """Ask the server the same question the preview's <img> asks.
 
-    This is the ONLY way to validate PlantUML: a server-side failure leaves a
-    broken <img> in the DOM with no event and no console message, and the
-    browser cannot distinguish "diagram rejected" from "network down". Reading
-    the response body here can.
+    This is the only way to validate PlantUML: a server-side failure leaves a broken
+    <img> with no event and no console message, and the browser cannot tell "diagram
+    rejected" from "network down". Reading the response body here can.
 
-    Order matters: check the HTTP status BEFORE the body markers, because the
-    400 response for a syntax error also contains "Welcome to PlantUML".
+    Three things make it survive the host being flaky, because it is a third party
+    and `--self-test` checks the SAME diagrams on every run:
+
+    * **retry** — a refused connection or a timeout is retried with backoff; a real
+      HTTP answer is never retried, it IS the answer;
+    * **cache** — a verdict for a given source is stable (syntax does not change), so
+      one successful run makes every later run offline and deterministic;
+    * **--plantuml-server** — an escape hatch when the host is blocked outright.
+
+    Only definitive answers are cached. "Unreachable" never is, or an outage would
+    outlive itself.
     """
     from plantuml_encode import diagram_url
 
-    url = diagram_url(body, PLANTUML_SERVER)
-    if url in cache:
-        return cache[url]
+    key = _puml_key(body)
+    if args.plantuml_cache_enabled:
+        hit = cache.get(key)
+        if hit:
+            return _puml_findings(hit.get("verdict", "unknown"),
+                                  hit.get("detail", "")), "ok"
 
+    url = diagram_url(body, args.plantuml_server)
     headers = {"User-Agent": _BROWSER_UA,
                "Accept": "image/svg+xml,image/*,*/*;q=0.8"}
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            status, text = r.status, r.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        status, text = e.code, e.read().decode("utf-8", "replace")
-    except Exception as e:  # DNS, TLS, timeout, connection reset
-        result = ([Finding(
+
+    status = None
+    text = ""
+    last_err: Exception | None = None
+    for attempt in range(max(0, args.plantuml_retries) + 1):
+        if attempt:
+            time.sleep(min(2 ** attempt, 8))
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=args.plantuml_timeout) as r:
+                status, text = r.status, r.read().decode("utf-8", "replace")
+            break
+        except urllib.error.HTTPError as e:
+            # A response, even a 400 — that is the answer, do not retry it.
+            status, text = e.code, e.read().decode("utf-8", "replace")
+            break
+        except Exception as e:   # DNS, TLS, timeout, connection reset
+            last_err = e
+
+    if status is None:
+        return ([Finding(
             id="plantuml-unreachable", severity=ENV,
-            message=f"could not reach {PLANTUML_SERVER} ({e.__class__.__name__}: {e}); "
+            message=f"could not reach {args.plantuml_server} after "
+                    f"{max(0, args.plantuml_retries) + 1} attempt(s) "
+                    f"({last_err.__class__.__name__ if last_err else 'unknown'}); "
                     "diagram NOT validated -- this is an environment problem, not a "
                     "document problem")], "unreachable")
-        cache[url] = result
-        return result
 
-    if status != 200:
-        excerpt = " ".join(text.split())[:200]
-        result = ([Finding(
-            id="plantuml-rejected", severity=FAIL,
-            message=f"PlantUML rejected the diagram (HTTP {status}); the preview will show "
-                    "a blank box with no error",
-            sample=excerpt)], "ok")
-    elif 'data-diagram-type="' in text:
-        result = ([], "ok")
-    elif "Welcome to PlantUML" in text:
-        result = ([Finding(
-            id="plantuml-empty", severity=FAIL,
-            message="PlantUML returned its welcome placeholder: the diagram is empty or "
-                    "degenerate (typically a bare @startuml/@enduml pair)")], "ok")
-    elif "Syntax Error" in text:
-        result = ([Finding(
-            id="plantuml-syntax", severity=FAIL,
-            message="PlantUML reported a syntax error inside a 200 response",
-            sample=" ".join(text.split())[:200])], "ok")
-    else:
-        result = ([Finding(
-            id="plantuml-unknown-shape", severity=WARN,
-            message=f"PlantUML returned HTTP 200 with an unrecognised body shape",
-            sample=" ".join(text.split())[:200])], "ok")
-
-    cache[url] = result
-    return result
+    verdict, detail = _puml_verdict(status, text)
+    if args.plantuml_cache_enabled:
+        cache[key] = {"verdict": verdict, "detail": detail,
+                      "at": datetime.date.today().isoformat()}
+    return _puml_findings(verdict, detail), "ok"
 
 
 # --------------------------------------------------------------------------
@@ -643,7 +710,7 @@ def analyse(path: Path, args) -> dict:
                     id="puml-missing-end", severity=FAIL, line=f.body_line,
                     message="PlantUML body has no @enduml"))
             if args.plantuml:
-                pf, pmode = check_plantuml(f.body, args.plantuml_timeout, _puml_cache)
+                pf, pmode = check_plantuml(f.body, args, _puml_cache)
                 if pmode == "unreachable":
                     plantuml_unreachable = True
                 for fi in pf:
@@ -713,7 +780,17 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--plantuml", dest="plantuml", action="store_true", default=True,
                     help="verify PlantUML by asking the server (default)")
     ap.add_argument("--no-plantuml", dest="plantuml", action="store_false")
-    ap.add_argument("--plantuml-timeout", type=int, default=20)
+    ap.add_argument("--plantuml-timeout", type=int, default=15)
+    ap.add_argument("--plantuml-retries", type=int, default=2,
+                    help="retries on a refused/timed-out request; a real HTTP answer "
+                         "is never retried (default 2)")
+    ap.add_argument("--plantuml-server", default=PLANTUML_SERVER,
+                    help=f"override the render host (default {PLANTUML_SERVER})")
+    ap.add_argument("--plantuml-cache", type=Path, default=None,
+                    help="where to remember verdicts (default <repo>/.render-check/"
+                         "plantuml-cache.json); a diagram's verdict is stable, so a "
+                         "warm cache makes repeat runs offline")
+    ap.add_argument("--no-plantuml-cache", dest="no_plantuml_cache", action="store_true")
     ap.add_argument("--json", action="store_true", help="emit the machine report on stdout")
     ap.add_argument("--json-out", type=Path)
     ap.add_argument("--quiet", action="store_true")
@@ -721,6 +798,22 @@ def main(argv: list[str]) -> int:
                     help="assert every check fires against fixtures/")
     args = ap.parse_args(argv)
 
+    if args.plantuml_cache is None:
+        args.plantuml_cache = args.repo / ".render-check" / "plantuml-cache.json"
+    args.plantuml_cache_enabled = not args.no_plantuml_cache
+    if args.plantuml_cache_enabled:
+        _puml_cache.update(_puml_cache_read(args.plantuml_cache))
+
+    try:
+        return _run(args, ap)
+    finally:
+        # Written even on the failure paths: a verdict already obtained is worth
+        # keeping, and an outage must not discard the warm entries.
+        if args.plantuml_cache_enabled and _puml_cache:
+            _puml_cache_write(args.plantuml_cache, _puml_cache)
+
+
+def _run(args, ap) -> int:
     if args.self_test:
         return self_test(args)
 
@@ -1042,10 +1135,13 @@ def self_test(args) -> int:
                     # The host is a third party and does go away. An unanswered
                     # question is not a failed check -- but it must be loud, because
                     # a silent skip would hide a real regression.
-                    note = f"{name}: {PLANTUML_SERVER} unreachable"
+                    # Name the server that was actually used: it can be overridden,
+                    # and a message pointing at the wrong host sends people the wrong
+                    # way.
+                    note = f"{name}: {args.plantuml_server} unreachable"
                     notes_seen.append(note)
-                    print(f"  [note] {name} (plantuml server): {PLANTUML_SERVER} unreachable "
-                          "-- NOT verified")
+                    print(f"  [note] {name} (plantuml server): {args.plantuml_server} "
+                          "unreachable -- NOT verified")
                 else:
                     check(f"{name} (plantuml server)", missing_puml, "")
 

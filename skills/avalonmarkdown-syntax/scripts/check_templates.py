@@ -48,12 +48,23 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--theme", default="dark", choices=["dark", "light"])
     ap.add_argument("--settle-ms", type=int, default=20000)
     ap.add_argument("--timeout", type=int, default=120)
-    # render_check.analyse reads these two off the namespace.
+    # render_check.analyse reads these off the namespace.
     ap.add_argument("--plantuml", dest="plantuml", action="store_true", default=True,
                     help="verify the PlantUML template against the server (default)")
     ap.add_argument("--no-plantuml", dest="plantuml", action="store_false")
-    ap.add_argument("--plantuml-timeout", type=int, default=20)
+    ap.add_argument("--plantuml-timeout", type=int, default=15)
+    ap.add_argument("--plantuml-retries", type=int, default=2)
+    ap.add_argument("--plantuml-server", default=rc.PLANTUML_SERVER)
+    ap.add_argument("--plantuml-cache", type=Path, default=None)
+    ap.add_argument("--no-plantuml-cache", dest="no_plantuml_cache", action="store_true")
     args = ap.parse_args(argv)
+
+    # Same cache as render_check, so the two tools share one warm set of verdicts.
+    if args.plantuml_cache is None:
+        args.plantuml_cache = args.repo / ".render-check" / "plantuml-cache.json"
+    args.plantuml_cache_enabled = not args.no_plantuml_cache
+    if args.plantuml_cache_enabled:
+        rc._puml_cache.update(rc._puml_cache_read(args.plantuml_cache))
 
     if not TEMPLATES.exists():
         print(f"error: {TEMPLATES} is missing", file=sys.stderr)
@@ -102,6 +113,9 @@ def main(argv: list[str]) -> int:
                       f"rendered: {report.get('counts', {})}")
         else:
             print("  render tier: SKIPPED — diagram and formula rendering NOT verified")
+
+    if args.plantuml_cache_enabled and rc._puml_cache:
+        rc._puml_cache_write(args.plantuml_cache, rc._puml_cache)
 
     print(f"\nRESULT: {'PASS' if not problems else f'FAIL ({len(problems)} finding(s))'}")
     return 0 if not problems else 1

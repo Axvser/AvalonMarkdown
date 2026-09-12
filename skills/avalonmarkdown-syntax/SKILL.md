@@ -63,6 +63,12 @@ To check the templates themselves:
 python skills/avalonmarkdown-syntax/scripts/check_templates.py
 ```
 
+PlantUML is the one member that cannot be validated offline — it renders on a
+third-party host. Verdicts are cached (`.render-check/plantuml-cache.json`), and a
+diagram's verdict does not change, so after one successful run repeat checks need
+no network at all. If the host is blocked outright, point the check elsewhere with
+`--plantuml-server`, and use `--plantuml-retries` to ride out a flaky connection.
+
 ---
 
 ## Members with sharp edges

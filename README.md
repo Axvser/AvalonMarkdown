@@ -275,6 +275,20 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 ---
 
+## Working on the renderer
+
+There is no unit test project and no CI. Verification is three environment-gated
+drivers in the demo app, each of which exits the process — enable **exactly one**
+(a guard fails fast if more than one is set):
+
+| Command | Checks |
+| --- | --- |
+| `AVALON_THEME_AUDIT=1 dotnet run --project AvalonMarkdown.Test.Desktop` | every `MarkdownThemeViewModel` property reaches the generated CSS, and every generated rule has a live consumer |
+| `AVALON_CAPTURE_ERRORS=1 dotnet run --project AvalonMarkdown.Test.Desktop` | drives the app through its phases; asserts fence dispatch and that the showcase assets load |
+| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<abs path> dotnet run --project AvalonMarkdown.Test.Desktop` | renders one file through the real pipeline and DOM-audits it; normally driven by `render_check.py` |
+
+Run without any of them for an ordinary visual check.
+
 ## Authoring reference & validator
 
 [`skills/avalonmarkdown-syntax/`](skills/avalonmarkdown-syntax/) documents the exact
@@ -286,8 +300,21 @@ copy-paste-ready source for each member. Those snippets are not written from mem
 `scripts/check_templates.py` extracts every one of them, renders the result through the
 real pipeline, and fails if anything breaks.
 
-[`CLAUDE.md`](CLAUDE.md) points an agent working in this repository at the skill, so it
-is read before any Markdown here is written.
+### Installing it as a Claude Code skill
+
+The folder is a valid Claude Code skill, so it works as-is for **your** projects —
+if you are generating Markdown that this control will render, install it into the
+project where the generation happens:
+
+```bash
+mkdir -p .claude/skills
+cp -r <path-to>/AvalonMarkdown/skills/avalonmarkdown-syntax .claude/skills/
+```
+
+Claude Code then loads it automatically and consults it before writing Markdown.
+It is deliberately **not** installed into this repository's own `.claude/` — a
+skill for authoring documents is not something the repository itself needs, and
+committing an agent instruction file here would push it on everyone who clones.
 
 It ships a validator that answers a question the preview cannot: *will this actually
 render?* Most failures here are silent — KaTeX draws its own error span without
