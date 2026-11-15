@@ -10,9 +10,9 @@ three-backtick fences of their own.
 Rules that apply to all of them:
 
 - Fence info strings are matched **exactly** after trim + lower-case.
-- Only `mermaid`, `plantuml`, `puml`, `plot` and `video` are intercepted.
+- Only `mermaid`, `plantuml`, `puml`, `plot`, `video` and `chat` are intercepted.
   Everything else is a highlighted code block, which is never wrong, just not a
-  diagram.
+  diagram. `chat` is the one member that also accepts bracketed arguments.
 - Raw HTML passes through, so `<u>`, `<span style>`, `<details>` and `<a id>` work.
 
 ---
@@ -196,6 +196,38 @@ differs per type — `x` linear, `t` parametric, **`theta` polar**:
 }
 ```
 ````
+
+## Chat / collapsible blocks
+
+````markdown
+```chat[思考中]
+正在检查 `renderer.js` 的分派规则…
+```
+
+```chat[工具调用中][open]
+运行 `dotnet build`：
+
+- `--configuration Release`
+- `--no-restore`
+```
+
+```chat[已完成][static]
+任务结束。
+```
+````
+
+The bracketed text is the summary label and is displayed as written. The badge
+icon follows the step state: thinking → lightbulb, tool → wrench, done → check,
+error → cross, otherwise a chat bubble. The state is inferred from the label or
+set explicitly with `[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The
+panel is collapsed by default; a second bracket group with `open` starts it
+expanded, and `static` / `idle` freezes the top-right halo (`spin` is the default;
+`done` / `error` hide the outer halo entirely). A custom icon can be supplied with
+`svg="M12 2 L22 12 L12 22 L2 12 Z"` (quote the value if it contains commas) or a
+full `<svg>…</svg>` string. The body is Markdown, so inline code, lists and
+emphasis all work. A label cannot contain `]`; an unknown option or malformed info
+string renders a visible `.chat-error` block. To nest a fenced code block in the
+body, open the `chat` fence with more backticks than the inner fence.
 
 ## Video
 

@@ -172,8 +172,41 @@
             katex: count('.katex'),
             mermaid: count('.mermaid-container'),
             puml: count('.puml-container'),
+            chats: count('.chat-block'),
             plots: count('.plot-container')
         };
+
+        // ── chat ────────────────────────────────────────────────────────────
+        // A ```chat fence with a malformed info string renders `.chat-error`
+        // instead of a panel; that is the one chat failure the static tier can
+        // predict but only the DOM can prove.
+        var chatErrors = 0, chatSample = '';
+        each('.chat-error', function (el) {
+            chatErrors++;
+            if (!chatSample) chatSample = text(el);
+        });
+        if (chatErrors) {
+            out.findings.push(finding('chat-error', 'fail',
+                chatErrors + ' chat fence(s) failed to parse or render; the renderer ' +
+                'shows the reason inline.', chatSample, chatErrors));
+        }
+        var chatMalformed = 0;
+        each('.chat-block', function (el) {
+            if (el.tagName !== 'DETAILS' ||
+                !el.parentElement ||
+                !el.parentElement.classList.contains('chat-block-wrap') ||
+                !el.parentElement.querySelector('.chat-status-ring') ||
+                !el.parentElement.querySelector('.chat-status-logo') ||
+                !el.querySelector('summary.chat-summary') ||
+                !el.querySelector('.chat-body')) {
+                chatMalformed++;
+            }
+        });
+        if (chatMalformed) {
+            out.findings.push(finding('chat-structure', 'fail',
+                chatMalformed + ' chat block(s) are missing their summary or body element.',
+                '', chatMalformed));
+        }
 
         // ── math ────────────────────────────────────────────────────────────
         // KaTeX's OWN error span carries an inline style and puts the message in

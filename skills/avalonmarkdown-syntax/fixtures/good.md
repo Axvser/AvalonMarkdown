@@ -116,6 +116,14 @@ A platform URL becomes a click-to-play facade, not an iframe, until clicked.
 
 ![YouTube](https://www.youtube.com/watch?v=YhKuZImznEE)
 
+## Chat block
+
+A free-form label; the body is Markdown. No state vocabulary is imposed.
+
+```chat[思考中]
+正在检查 `renderer.js` 的分派规则。
+```
+
 ## Footnotes and inline HTML
 
 A statement needing support.[^note]

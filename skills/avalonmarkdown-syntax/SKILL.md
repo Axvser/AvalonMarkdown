@@ -1,6 +1,6 @@
 ---
 name: avalonmarkdown-syntax
-description: Produces correct Markdown source for the dialect AvalonMarkdown renders, and validates it. Covers the exact syntax each member needs — headings and anchors, KaTeX math, tables, Mermaid, PlantUML, function plots, video embeds, footnotes, task lists — with copy-paste templates in references/templates.md, worked good/bad examples, and a validator (scripts/render_check.py) that renders a document and surfaces the failures this renderer otherwise swallows silently. Use when writing, generating, reviewing or debugging Markdown destined for an AvalonMarkdown preview, and before publishing any document containing math, diagrams, tables or plots.
+description: Produces correct Markdown source for the dialect AvalonMarkdown renders, and validates it. Covers the exact syntax each member needs — headings and anchors, KaTeX math, tables, Mermaid, PlantUML, function plots, video embeds, collapsible chat blocks, footnotes, task lists — with copy-paste templates in references/templates.md, worked good/bad examples, and a validator (scripts/render_check.py) that renders a document and surfaces the failures this renderer otherwise swallows silently. Use when writing, generating, reviewing or debugging Markdown destined for an AvalonMarkdown preview, and before publishing any document containing math, diagrams, tables or plots.
 ---
 
 ## Start here when writing Markdown
@@ -184,6 +184,44 @@ Things that will bite you, all measured:
 
 Omit `width` and it fits the container, which is usually what you want.
 
+### Chat / collapsible blocks
+
+````markdown
+```chat[思考中]
+正在检查 `renderer.js` 的分派规则…
+```
+
+```chat[工具调用中][open]
+运行 `dotnet build`：
+
+- `--configuration Release`
+```
+````
+
+A `chat` fence renders a collapsed `<details>` panel; click the summary to expand
+it. The bracketed label is free-form and displayed as written — there is no state
+vocabulary, so `思考中`, `工具调用中`, `Thinking` and anything else are equally
+valid. A second bracket group configures the panel: `open` / `expanded` start it
+expanded, `collapsed` (the default) keeps it shut. `static` / `done` / `idle`
+freezes the top-right status halo, which spins by default while a step is live
+(`spin` / `live` / `active` are explicit aliases).
+
+The body is **ordinary Markdown**, rendered recursively, so inline code, lists,
+tables and even other fences work inside it. A label cannot contain `]`. Unlike a
+typo'd `mermaid`, a malformed chat info string or an unknown option does not fail
+silently: the renderer draws a visible `.chat-error` block.
+
+The top-right status badge picks its icon from the step state: lightbulb for
+**thinking**, wrench for **tool**, check for **done**, cross for **error**, and a
+chat bubble otherwise. The state is inferred from the label (`思考` / `think`,
+`工具` / `tool`, `完成` / `done`, `错误` / `fail`) or set explicitly with
+`[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The halo spins while the
+step is live; `done` / `error` freeze it and hide the outer ring entirely, and
+`[spin]` / `[static]` override the animation. A custom 24×24 path can be supplied
+with `svg="..."` (quote it if the path contains commas), or a full `<svg>…</svg>`
+string. MarkdownThemeViewModel exposes the badge colour, glow colour and blur as
+`ChatAccentColor`, `ChatGlassColor` and `ChatGlassBlur`.
+
 ---
 
 ## Ordinary members
@@ -249,4 +287,7 @@ produce no message at all.
 3. Every `@startuml` has its `@enduml`.
 4. Every `plot` body is one JSON object, with `PI`/`E` in upper case.
 5. Fence info strings are spelled exactly: `mermaid`, `plantuml`, `plot`, `video`.
+   `chat` takes a free-form `[label]` and optional `[open]` / `[collapsed]`,
+   `[spin]` / `[static]`, a state (`[thinking]`, `[tool]`, `[done]`, `[error]`,
+   `[chat]`) for the badge icon, and `svg="..."` for a custom icon.
 6. `render_check.py` reports no findings, with the render tier actually running.

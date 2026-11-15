@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Avalonia.Threading;
@@ -137,6 +138,7 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(MermaidBgHex));
         OnPropertyChanged(nameof(PumlBgHex));
         OnPropertyChanged(nameof(PlotBgHex));
+        OnPropertyChanged(nameof(ChatBgHex));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(BorderRadius));
         MarkDirty();
@@ -434,6 +436,45 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     public string PlotAxisColor        { get => _plotAxisColor;        set => SetProperty(ref _plotAxisColor,        value); }
     #endregion
 
+    // ════════════════════════════════════════════════════════════
+    //  Chat / collapsible blocks section
+    // ════════════════════════════════════════════════════════════
+
+    #region Chat properties
+    // Chat block background
+    private int _chatBgR = 37;
+    private int _chatBgG = 37;
+    private int _chatBgB = 38;
+    [Description("对话块背景色的红色通道（0-255）")]
+    public int ChatBgR { get => _chatBgR; set => SetProperty(ref _chatBgR, value); }
+    [Description("对话块背景色的绿色通道（0-255）")]
+    public int ChatBgG { get => _chatBgG; set => SetProperty(ref _chatBgG, value); }
+    [Description("对话块背景色的蓝色通道（0-255）")]
+    public int ChatBgB { get => _chatBgB; set => SetProperty(ref _chatBgB, value); }
+    [Description("对话块背景色 HEX 预览（只读）")]
+    public string ChatBgHex => $"#{ChatBgR:X2}{ChatBgG:X2}{ChatBgB:X2}";
+
+    private double _chatContainerPadding = 12;
+    private double _chatContainerMargin = 16;
+    private int _chatBorderRadius = 6;
+    private string _chatAccentColor = "rgba(255,255,255,0.76)";
+    private string _chatGlassColor = "rgba(255,255,255,0.18)";
+    private double _chatGlassBlur = 5;
+
+    [Description("对话块正文内边距（px）")]
+    public double ChatContainerPadding { get => _chatContainerPadding; set => SetProperty(ref _chatContainerPadding, value); }
+    [Description("对话块上下外边距（px）")]
+    public double ChatContainerMargin  { get => _chatContainerMargin;  set => SetProperty(ref _chatContainerMargin,  value); }
+    [Description("对话块右侧圆角（px；左侧始终为直角）")]
+    public int    ChatBorderRadius     { get => _chatBorderRadius;     set => SetProperty(ref _chatBorderRadius,     value); }
+    [Description("状态徽标颜色（CSS 颜色值，含透明度）")]
+    public string ChatAccentColor      { get => _chatAccentColor;      set => SetProperty(ref _chatAccentColor,      value); }
+    [Description("状态徽标辉光颜色（CSS 颜色值，含透明度）")]
+    public string ChatGlassColor       { get => _chatGlassColor;       set => SetProperty(ref _chatGlassColor,       value); }
+    [Description("状态徽标辉光模糊半径（px）")]
+    public double ChatGlassBlur        { get => _chatGlassBlur;        set => SetProperty(ref _chatGlassBlur,        value); }
+    #endregion
+
     // ──────────────────────────────────────────────────
     //  highlight.js — keyword / literal / symbol / name
     // ──────────────────────────────────────────────────
@@ -729,6 +770,29 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine($"    border-radius: {PlotBorderRadius}px;");
         sb.AppendLine($"    color: {PlotAxisColor};");
         sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  Chat / collapsible blocks
+        // ════════════════════════════════════════════════════════════
+        // Chat panel surface and the top-right status badge's colour / glow.
+        sb.AppendLine("/* === Chat block overrides === */");
+        sb.AppendLine("html.theme-dark, html.theme-light {");
+        sb.AppendLine($"    --chat-bg: {ChatBgHex};");
+        sb.AppendLine($"    --chat-status-color: {ChatAccentColor};");
+        sb.AppendLine($"    --chat-status-glow: {ChatGlassColor};");
+        sb.AppendLine($"    --chat-glass-blur: {ChatGlassBlur.ToString("F1", CultureInfo.InvariantCulture)}px;");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-block-wrap, html.theme-light .chat-block-wrap {");
+        sb.AppendLine($"    margin: {ChatContainerMargin.ToString("F1", CultureInfo.InvariantCulture)}px 0;");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-block, html.theme-light .chat-block {");
+        sb.AppendLine($"    border-radius: 0 {ChatBorderRadius}px {ChatBorderRadius}px 0;");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-body, html.theme-light .chat-body {");
+        sb.AppendLine($"    padding: {ChatContainerPadding.ToString("F1", CultureInfo.InvariantCulture)}px;");
+        sb.AppendLine("}");
+        sb.AppendLine();
 
         return sb.ToString();
     }

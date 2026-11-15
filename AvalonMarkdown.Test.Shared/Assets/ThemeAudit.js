@@ -54,6 +54,13 @@
             '<div class="mermaid-container"><svg></svg></div>' +
             '<div class="puml-container puml-dark"><img alt=""/></div>' +
             '<div class="plot-container"><svg class="function-plot"></svg></div>' +
+            '<div class="chat-block-wrap"><details class="chat-block">' +
+            '<summary class="chat-summary"><span class="chat-chevron">▸</span>' +
+            '<span class="chat-label">chat</span></summary>' +
+            '<div class="chat-body">body</div></details>' +
+            '<span class="chat-status chat-status-live"><span class="chat-status-ring"></span>' +
+            '<span class="chat-status-logo"><svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>' +
+            '</span></span></div>' +
             '<pre class="hljs"><code class="hljs">' +
             '<span class="hljs-keyword">kw</span><span class="hljs-literal">lit</span>' +
             '<span class="hljs-symbol">sy</span><span class="hljs-name">nm</span>' +

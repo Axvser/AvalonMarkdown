@@ -94,6 +94,7 @@ public partial class MainViewModel : ViewModelBase
         - [跳到 “3. Lists”](#3-lists)
         - [跳到 “10. Function Plots”](#10-function-plots)
         - [跳到 “14. HTML Inline”](#14-html-inline)
+        - [跳到 “16. Chat / Collapsible Blocks”](#16-chat-collapsible-blocks)
         - [跳到 手写 HTML id 目标（应生效）](#inpage-demo-target)
         - [跳到 脚注定义 fn1（应生效）](#fn1)
         - [跳回 脚注引用处 fnref1（应生效）](#fnref1)
@@ -325,6 +326,23 @@ public partial class MainViewModel : ViewModelBase
         ## 15. Emojis
 
         🚀 ✅ ❤️ ⭐ 🎉 🔥 🎯
+
+        ## 16. Chat / Collapsible Blocks
+
+        ```chat[思考中]
+        正在检查 `renderer.js` 的分派规则…
+        ```
+
+        ```chat[工具调用中][open]
+        运行 `dotnet build`：
+
+        - `--configuration Release`
+        - `--no-restore`
+        ```
+
+        ```chat[已完成][static]
+        任务结束，状态光圈停止旋转。
+        ```
         """;
 
     /// <summary>

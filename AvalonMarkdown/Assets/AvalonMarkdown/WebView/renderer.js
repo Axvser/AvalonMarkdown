@@ -1732,11 +1732,184 @@
         return renderKatexBlock(tokens[idx].content) + '\n';
     };
 
-    // === Mermaid / PlantUML code blocks ===
+    // === Chat / collapsible status blocks ===
+    // ```chat[label][option,...]``` becomes a collapsed <details> panel. The label
+    // is free-form; the badge icon follows the step state — lightbulb for thinking,
+    // wrench for tool calls, check/x for done/error, chat bubble otherwise.
+    var CHAT_STATUS_ICONS = {
+        thinking: 'M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z',
+        tool: 'M14.7 6.3a4 4 0 0 0-5.2 5.2L3 18l3 3 6.5-6.5a4 4 0 0 0 5.2-5.2l-2.1 2.1-2.8-.7-.7-2.8 2.6-2.6Z',
+        done: 'M20 6 9 17l-5-5',
+        error: 'M18 6 6 18M6 6l12 12',
+        chat: 'M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z'
+    };
+
+    function chatStatusIcon(state, customSvg) {
+        if (customSvg) {
+            if (/^\s*<svg[\s>]/i.test(customSvg)) return customSvg;
+            return '<svg viewBox="0 0 24 24" focusable="false"><path d="' +
+                escapeHtml(customSvg) + '"/></svg>';
+        }
+        var d = CHAT_STATUS_ICONS[state] || CHAT_STATUS_ICONS.chat;
+        return '<svg viewBox="0 0 24 24" focusable="false"><path d="' + d + '"/></svg>';
+    }
+
+    // Split an option group on commas, but keep commas inside "..." / '...'.
+    // The quotes are preserved so a value can be unwrapped exactly once.
+    function splitChatOptions(group) {
+        var out = [], cur = '', quote = null;
+        for (var i = 0; i < group.length; i++) {
+            var ch = group[i];
+            if (quote) {
+                cur += ch;
+                if (ch === quote) quote = null;
+            } else if (ch === '"' || ch === "'") {
+                quote = ch;
+                cur += ch;
+            } else if (ch === ',') {
+                out.push(cur);
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        out.push(cur);
+        return out;
+    }
+
+    function stripOuterQuotes(value) {
+        if (value.length >= 2 &&
+            (value[0] === '"' || value[0] === "'") &&
+            value[value.length - 1] === value[0]) {
+            return value.slice(1, -1);
+        }
+        return value;
+    }
+
+    function inferChatState(label) {
+        var l = String(label || '').toLowerCase();
+        if (/错误|失败|出错|error|fail/.test(l)) return 'error';
+        if (/完成|成功|done|complete|success/.test(l)) return 'done';
+        if (/思考|推理|think|reason/.test(l)) return 'thinking';
+        if (/工具|调用|tool|call/.test(l)) return 'tool';
+        return 'chat';
+    }
+
+    function parseChatInfo(rawInfo) {
+        var rest = rawInfo.slice(4);          // after "chat", case preserved
+        var groups = [];
+        var consumed = 0;
+        var bracket = /\[([^\]]*)\]/g;
+        var match;
+        while ((match = bracket.exec(rest)) !== null) {
+            if (match.index !== consumed) {
+                return { error: 'expected chat[label][options] with no text between groups; got ' + rawInfo };
+            }
+            groups.push(match[1]);
+            consumed = match.index + match[0].length;
+        }
+        if (consumed !== rest.length) {
+            return { error: 'malformed info string "' + rawInfo + '"; expected chat or chat[label]...' };
+        }
+        var label = groups.length ? groups[0].trim() : '';
+        var open = false;
+        var spin = true;      // the status halo spins unless explicitly frozen
+        var spinExplicit = false;
+        var state = null;
+        var customSvg = null;
+        for (var i = 1; i < groups.length; i++) {
+            var options = splitChatOptions(groups[i]);
+            for (var j = 0; j < options.length; j++) {
+                var rawOption = options[j].trim();
+                if (rawOption === '') continue;
+                var eq = rawOption.indexOf('=');
+                if (eq > 0) {
+                    var key = rawOption.slice(0, eq).trim().toLowerCase();
+                    if (key === 'svg') {
+                        customSvg = stripOuterQuotes(rawOption.slice(eq + 1).trim());
+                        if (!customSvg) return { error: 'svg= needs a path data or SVG string' };
+                        continue;
+                    }
+                    return {
+                        error: 'unknown chat option "' + key +
+                            '"; expected open, collapsed, spin, static, thinking, tool, ' +
+                            'done, error, chat or svg=...'
+                    };
+                }
+                var option = rawOption.toLowerCase();
+                if (option === 'open' || option === 'expanded') open = true;
+                else if (option === 'collapsed') open = false;
+                else if (option === 'spin' || option === 'live' || option === 'active') {
+                    spin = true; spinExplicit = true;
+                }
+                else if (option === 'static' || option === 'idle') {
+                    spin = false; spinExplicit = true;
+                }
+                else if (option === 'thinking' || option === 'think') state = 'thinking';
+                else if (option === 'tool' || option === 'tools' ||
+                         option === 'tool-call' || option === 'toolcall') state = 'tool';
+                else if (option === 'done' || option === 'complete' || option === 'success') state = 'done';
+                else if (option === 'error' || option === 'fail' || option === 'failed') state = 'error';
+                else if (option === 'chat' || option === 'message') state = 'chat';
+                else return {
+                    error: 'unknown chat option "' + rawOption +
+                        '"; expected open, collapsed, spin, static, thinking, tool, ' +
+                        'done, error, chat or svg=...'
+                };
+            }
+        }
+        var resolvedLabel = label || '详情';
+        if (!state) state = inferChatState(resolvedLabel);
+        if (!spinExplicit && (state === 'done' || state === 'error')) spin = false;
+        return { label: resolvedLabel, open: open, spin: spin, state: state, svg: customSvg };
+    }
+
+    function renderChatFence(content, rawInfo) {
+        var parsed = parseChatInfo(rawInfo);
+        if (parsed.error) {
+            return '<div class="chat-error">⚠ chat fence error: ' + escapeHtml(parsed.error) +
+                (content.trim() ? '<pre>' + escapeHtml(content) + '</pre>' : '') +
+                '</div>\n';
+        }
+        var body = '';
+        if (content.trim()) {
+            try {
+                // A nested render: the body is Markdown, not escaped text. markdown-it
+                // keeps no global parse state, so re-entering the parser is safe.
+                body = md.render(content);
+            } catch (e) {
+                return '<div class="chat-error">⚠ chat fence error: the body failed to render: ' +
+                    escapeHtml(e.message) + '<pre>' + escapeHtml(content) + '</pre></div>\n';
+            }
+        }
+        return '<div class="chat-block-wrap">' +
+            '<details class="chat-block"' + (parsed.open ? ' open' : '') + '>' +
+            '<summary class="chat-summary">' +
+            '<span class="chat-chevron" aria-hidden="true">' +
+            '<svg viewBox="0 0 16 16"><path d="M3 1 13 8 3 15 Z"/></svg>' +
+            '</span>' +
+            '<span class="chat-label">' + escapeHtml(parsed.label) + '</span>' +
+            '</summary>' +
+            '<div class="chat-body">' + body + '</div>' +
+            '</details>' +
+            '<span class="chat-status chat-status-' + parsed.state +
+                (parsed.spin ? ' chat-status-live' : '') +
+                '" aria-hidden="true">' +
+            '<span class="chat-status-ring"></span>' +
+            '<span class="chat-status-logo">' + chatStatusIcon(parsed.state, parsed.svg) + '</span>' +
+            '</span>' +
+            '</div>\n';
+    }
+
+    // === Mermaid / PlantUML / plot / video / chat code blocks ===
     var origFence = md.renderer.rules.fence;
     md.renderer.rules.fence = function(tokens, idx, options, env, self) {
         var token = tokens[idx];
-        var info = token.info ? token.info.trim().toLowerCase() : '';
+        var rawInfo = token.info ? token.info.trim() : '';
+        var info = rawInfo.toLowerCase();
+        if (info === 'chat' || info.indexOf('chat[') === 0) {
+            return renderChatFence(token.content, rawInfo);
+        }
         if (info === 'mermaid') {
             return '<div class="mermaid-container">' +
                 '<pre class="mermaid" style="text-align:center;">' +

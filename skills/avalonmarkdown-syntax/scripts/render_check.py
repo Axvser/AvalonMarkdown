@@ -46,12 +46,30 @@ HERE = Path(__file__).resolve().parent
 SKILL_DIR = HERE.parent
 REPO_ROOT = SKILL_DIR.parent.parent
 
-# The five info strings renderer.js intercepts in `md.renderer.rules.fence`.
+# The info strings renderer.js intercepts in `md.renderer.rules.fence`.
 # Everything else falls through to markdown-it's built-in fence renderer, which
 # routes through the highlight.js wrapper -- that is not an error, so an
 # unrecognised info string is only reported when it is a NEAR MISS of one of
 # these (a typo silently degrades a diagram into a plain code block).
-SPECIAL_FENCES = ("mermaid", "plantuml", "puml", "plot", "video")
+#
+# `chat` is special: it dispatches on the bare word and on `chat[...]` (the
+# brackets carry a free-form label plus options), so it is checked separately
+# rather than by the exact-equality path below.
+SPECIAL_FENCES = ("mermaid", "plantuml", "puml", "plot", "video", "chat")
+
+# renderer.js parseChatInfo(): chat, chat[label], chat[label][option,...].
+# A label cannot contain "]" -- the renderer rejects it with a visible error.
+CHAT_INFO_RE = re.compile(r"^chat((?:\[[^\]]*\])*)$")
+CHAT_OPTIONS = frozenset({
+    "open", "expanded", "collapsed",
+    "spin", "live", "active",       # status halo animation on (the default)
+    "static", "idle",               # freeze the halo for a finished step
+    "thinking", "think",            # lightbulb icon
+    "tool", "tools", "tool-call", "toolcall",   # wrench icon
+    "done", "complete", "success",  # check icon + frozen halo by default
+    "error", "fail", "failed",      # cross icon + frozen halo by default
+    "chat", "message",              # chat-bubble icon
+})
 
 # renderer.js:414 -- /^[0-9A-Za-z_+\-*/^().,\s%?:<>=!]*$/
 # Rejecting quotes, backticks, semicolons, braces, brackets and backslash keeps
@@ -203,9 +221,17 @@ def scan_fences(text: str) -> tuple[list[Fence], list[Finding]]:
     return fences, findings
 
 
+def is_chat_info(info: str) -> bool:
+    """True for the info strings renderer.js routes to renderChatFence()."""
+    return info == "chat" or info.startswith("chat[")
+
+
 def check_fence_info(info: str) -> list[Finding]:
     """Only near misses are findings -- an unknown info string is a normal code block."""
     if not info or info in SPECIAL_FENCES or info in NEAR_MISS_EXCEPTIONS:
+        return []
+    if is_chat_info(info):
+        # Structural validation lives in check_chat(), which has the line number.
         return []
     if " " in info or "\t" in info:
         # ```mermaid {theme=dark} does NOT dispatch in this renderer: the info
@@ -297,6 +323,81 @@ def check_plot(fence: Fence) -> list[Finding]:
 
     # Not checked on purpose: a duplicate "id" (buildPlotOptions deletes it), and
     # width/height/title/color, none of which can fail.
+    return out
+
+
+# --------------------------------------------------------------------------
+# static tier -- chat
+# --------------------------------------------------------------------------
+
+
+def _split_chat_options(group: str) -> list[str]:
+    """Split an option group on commas outside quotes.
+
+    A custom ``svg="M12 2,3 4"`` path contains commas, so a plain split would
+    produce false unknown-option findings. Quotes are kept so the value can be
+    unwrapped by the caller.
+    """
+    out: list[str] = []
+    cur = ""
+    quote = ""
+    for ch in group:
+        if quote:
+            cur += ch
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+            cur += ch
+        elif ch == ",":
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return out
+
+
+def check_chat(fence: Fence) -> list[Finding]:
+    """Validate ```chat[label][option,...]``` without relying on the render tier.
+
+    The renderer turns a malformed info string or an unknown option into a visible
+    `.chat-error`, so unlike a typo'd ``mermaid`` this is not silent. The static
+    check still repeats it here because it can name the line and the allowed
+    options, and because the render tier is optional.
+    """
+    out: list[Finding] = []
+    info = fence.info          # scan_fences() lower-cases it
+    match = CHAT_INFO_RE.fullmatch(info)
+    if not match:
+        return [Finding(
+            id="chat-info-malformed", severity=FAIL, line=fence.open_line,
+            message="chat fence info must be `chat`, `chat[label]` or "
+                    "`chat[label][option,...]`; this form renders a visible error block",
+            sample=fence.info)]
+
+    groups = re.findall(r"\[([^\]]*)\]", info)
+    for group in groups[1:]:
+        for raw_option in _split_chat_options(group):
+            option = raw_option.strip()
+            if not option:
+                continue
+            key, sep, value = option.partition("=")
+            if sep and key.strip().lower() == "svg":
+                if not value.strip().strip("\"'"):
+                    out.append(Finding(
+                        id="chat-svg-empty", severity=FAIL, line=fence.open_line,
+                        message="svg= needs path data or an SVG string; an empty value "
+                                "renders a visible error block",
+                        sample=fence.info))
+                continue
+            if option not in CHAT_OPTIONS:
+                out.append(Finding(
+                    id="chat-unknown-option", severity=FAIL, line=fence.open_line,
+                    message=f"unknown chat option {option!r}; recognised options are "
+                            "open, expanded, collapsed, spin, static, thinking, tool, "
+                            "done, error, chat and svg=...",
+                    sample=fence.info))
     return out
 
 
@@ -679,7 +780,7 @@ def analyse(path: Path, args) -> dict:
     fences, fence_findings = scan_fences(text)
     findings += fence_findings
 
-    counts = {"mermaid": 0, "plantuml": 0, "plot": 0, "video": 0, "code": 0}
+    counts = {"mermaid": 0, "plantuml": 0, "plot": 0, "video": 0, "chat": 0, "code": 0}
     # Set when the PlantUML host could not be reached, so callers can tell "the
     # diagram is fine" from "we could not ask". plantuml.com is a third party and
     # does go away.
@@ -688,6 +789,8 @@ def analyse(path: Path, args) -> dict:
         info = f.info
         if info in ("plantuml", "puml"):
             counts["plantuml"] += 1
+        elif is_chat_info(info):
+            counts["chat"] += 1
         elif info in counts:
             counts[info] += 1
         else:
@@ -732,6 +835,8 @@ def analyse(path: Path, args) -> dict:
                 findings.append(Finding(
                     id="video-empty", severity=FAIL, line=f.body_line,
                     message="video fence is empty; it renders <source src=\"\"> silently"))
+        elif is_chat_info(info):
+            findings += check_chat(f)
 
     findings += check_math(text, fences)
 
@@ -759,6 +864,15 @@ _puml_cache: dict[str, tuple] = {}
 
 
 def main(argv: list[str]) -> int:
+    # A Windows console often reports cp936/GBK. A sample from the DOM can contain
+    # characters the console cannot encode (the "⚠" in a .chat-error message, for
+    # example), and printing one would otherwise crash the report itself.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
+
     ap = argparse.ArgumentParser(
         prog="render_check.py",
         description="Validate an AvalonMarkdown document.",
@@ -880,7 +994,7 @@ def print_report(res: dict, render_requested: bool) -> None:
     print(f"\n=== {res['file']} ===")
     c = res["counts"]
     print(f"  blocks: {c['mermaid']} mermaid, {c['plantuml']} plantuml, "
-          f"{c['plot']} plot, {c['code']} code")
+          f"{c['plot']} plot, {c['chat']} chat, {c['code']} code")
 
     hard = [f for f in res["findings"] if f["severity"] == FAIL]
     soft = [f for f in res["findings"] if f["severity"] != FAIL]
@@ -933,8 +1047,9 @@ def print_report(res: dict, render_requested: bool) -> None:
 SELF_TEST_EXPECTATIONS = {
     # static ids, render ids, plantuml-server ids
     "broken.md": {
-        "static": ["plot-invalid-json", "plot-expression-rejected", "info-near-miss"],
-        "render": ["katex-error", "mermaid-render-error", "plot-error"],
+        "static": ["plot-invalid-json", "plot-expression-rejected", "info-near-miss",
+                   "chat-info-malformed", "chat-unknown-option"],
+        "render": ["katex-error", "mermaid-render-error", "plot-error", "chat-error"],
         "plantuml": ["plantuml-rejected"],
         # The deliberately-broken plot has no artefact, so its two export attempts
         # (svg + png) are skipped. The deliberately-broken PlantUML image DOES load

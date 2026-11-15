@@ -1,6 +1,6 @@
 # AvalonMarkdown
 
-A Markdown preview control for **AvaloniaUI** — renders Markdown with math (KaTeX), syntax highlighting (highlight.js), diagrams (Mermaid / PlantUML), function plots, and video embeds.
+A Markdown preview control for **AvaloniaUI** — renders Markdown with math (KaTeX), syntax highlighting (highlight.js), diagrams (Mermaid / PlantUML), function plots, video embeds, and collapsible chat / status blocks.
 
 > 🌏 [中文文档](README.zh.md)
 
@@ -85,6 +85,26 @@ Two things to know about the expression syntax, both straight from the library:
 
 - **Constants are upper-case** — `PI` and `E`, not `pi` / `e`. Lower-case forms are undefined and the series silently fails to draw.
 - Available functions include `sin` `cos` `tan` `asin` `acos` `atan` `sqrt` `abs` `exp` `log` `ln` `max` `min`. Names outside that set (`floor`, `sign`, …) are undefined.
+
+### Chat / collapsible blocks
+
+A `chat` fence renders a collapsed `<details>` panel — useful for streaming agent output where "思考中" or "工具调用中" is a step you can expand:
+
+````markdown
+```chat[思考中]
+正在检查 `renderer.js` 的分派规则…
+```
+
+```chat[工具调用中][open]
+运行 `dotnet build`：
+
+- `--configuration Release`
+```
+````
+
+The bracketed label is free-form and displayed as written. A second bracket group configures the panel — `open` (or `expanded`) starts it expanded, `collapsed` keeps it shut (the default), and `static` / `idle` freezes the status halo (`spin` is the default). The body is ordinary Markdown, rendered recursively, so inline code, lists, tables and nested fences work inside it. A label cannot contain `]`; a malformed info string or an unknown option renders a visible error block rather than silently becoming a code block.
+
+The top-right status badge picks its icon from the step state: **thinking → lightbulb**, **tool → wrench**, **done → check**, **error → cross**, otherwise a chat bubble. The state is inferred from the label (`思考` / `think`, `工具` / `tool`, `完成` / `done`, `错误` / `fail`) or can be set explicitly with `[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The halo spins while the step is live; `done` / `error` freeze it **and hide the outer ring entirely**, and `[spin]` / `[static]` override the animation. A custom icon can be supplied with `svg="M12 2 L22 12 L12 22 L2 12 Z"` — quote the value when the path contains commas — or with a full `<svg>…</svg>` string. The colour and glow are configurable through the `Chat*` properties on `MarkdownThemeViewModel`.
 
 ### Handle link clicks
 
@@ -233,6 +253,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | Code highlighting | Color of each syntax token (keyword, string, number, comment, …) |
 | Diagrams | Mermaid & PlantUML container background / padding / margin / radius; PlantUML dark invert strength |
 | Function plots | Plot container background / padding / margin / radius; axis, grid and title colour |
+| Chat / status blocks | Chat background / body padding / margin / right-side radius (the left edge is square and borderless); status badge colour and glow |
 
 ### Supported style properties
 
@@ -266,12 +287,16 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PlotBgR` `PlotBgG` `PlotBgB` | Function-plot container background (0–255) |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | Function-plot container padding / margin / radius |
 | `PlotAxisColor` | Function-plot axis / grid / title colour (CSS colour `string`, code-only) |
+| `ChatBgR` `ChatBgG` `ChatBgB` | Chat block background (0–255) |
+| `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | Chat body padding / container margin / right-side radius (the left edge is square and borderless) |
+| `ChatAccentColor` · `ChatGlassColor` | Status-badge colour and glow colour (CSS colour `string`, including alpha; code-only) |
+| `ChatGlassBlur` | Status-badge glow blur radius (px) |
 
 **Code highlighting** — highlight.js token colors (`string`, e.g. `"#569cd6"`):
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` — plus diff markers `HljsAdditionBg`/`HljsAdditionColor` and `HljsDeletionBg`/`HljsDeletionColor`.
 
-> The built-in `MarkdownThemeView` panel covers colors, typography, and diagrams; code-highlighting tokens (`Hljs*`) and `PlotAxisColor` are configured in code (or bound in your own UI).
+> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow; code-highlighting tokens (`Hljs*`), `PlotAxisColor`, `ChatAccentColor` and `ChatGlassColor` are configured in code (or bound in your own UI).
 
 ---
 

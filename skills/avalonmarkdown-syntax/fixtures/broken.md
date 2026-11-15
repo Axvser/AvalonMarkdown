@@ -70,3 +70,19 @@ Block:
 $$
 \sqrt{1 + }
 $$
+
+## Malformed chat info string
+
+Expected: `chat-info-malformed` (static) and `chat-error` (render). The renderer
+turns the bad info string into a visible error block, so this one is not silent —
+the static check still names the line and the accepted forms.
+
+```chat[未闭合
+```
+
+## Unknown chat option
+
+Expected: `chat-unknown-option` (static) and `chat-error` (render).
+
+```chat[思考中][bogus]
+```

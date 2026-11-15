@@ -1,6 +1,6 @@
 # AvalonMarkdown
 
-面向 **AvaloniaUI** 的 Markdown 预览控件——支持数学公式（KaTeX）、语法高亮（highlight.js）、图表（Mermaid / PlantUML）、函数图像与视频嵌入。
+面向 **AvaloniaUI** 的 Markdown 预览控件——支持数学公式（KaTeX）、语法高亮（highlight.js）、图表（Mermaid / PlantUML）、函数图像、视频嵌入，以及可折叠的对话 / 状态块。
 
 > 🌏 [English Documentation](README.md)
 
@@ -85,6 +85,26 @@ JSON 写错时会在原位渲染一个错误块，不会影响预览的其余部
 
 - **常量是大写的** —— 是 `PI` 和 `E`，不是 `pi` / `e`。小写形式未定义，该条曲线会静默画不出来。
 - 可用函数包括 `sin` `cos` `tan` `asin` `acos` `atan` `sqrt` `abs` `exp` `log` `ln` `max` `min`；此外的名称（如 `floor`、`sign`）均未定义。
+
+### 对话 / 可折叠块
+
+`chat` 围栏渲染一个默认折叠的 `<details>` 面板，适合展示流式 Agent 输出中可展开的「思考中」「工具调用中」等步骤：
+
+````markdown
+```chat[思考中]
+正在检查 `renderer.js` 的分派规则…
+```
+
+```chat[工具调用中][open]
+运行 `dotnet build`：
+
+- `--configuration Release`
+```
+````
+
+方括号里的标签完全自定义、按原样显示。第二个方括号组用于配置面板：`open`（或 `expanded`）初始展开，`collapsed` 保持折叠（默认），`static` / `idle` 冻结状态光圈（默认 `spin` 旋转）。围栏体是普通 Markdown，会递归渲染，因此行内代码、列表、表格乃至嵌套围栏都能正常工作。标签中不能包含 `]`；info 字符串写错或选项未知时，会渲染一个可见的错误块，而不是静默降级成代码块。
+
+右上角的状态徽标会根据步骤状态切换图标：**思考 → 灯泡**、**工具 → 扳手**、**完成 → 对勾**、**错误 → 叉号**，其他情况显示聊天气泡。状态会自动从标签文字推断（`思考` / `think`、`工具` / `tool`、`完成` / `done`、`错误` / `fail`），也可以用 `[thinking]`、`[tool]`、`[done]`、`[error]`、`[chat]` 显式指定。步骤进行中光圈旋转；`done` / `error` 会冻结光圈并**完全隐藏外圈**，`[spin]` / `[static]` 可覆盖动画。也可以用 `svg="M12 2 L22 12 L12 22 L2 12 Z"` 传入自定义图标（路径含逗号时用引号括起来），或直接传完整的 `<svg>…</svg>` 字符串。颜色与辉光可通过 `MarkdownThemeViewModel` 的 `Chat*` 属性配置。
 
 ### 处理链接点击
 
@@ -228,6 +248,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | 代码高亮 | 每种语法 token 的颜色（关键字、字符串、数字、注释……） |
 | 图表 | Mermaid 与 PlantUML 容器背景 / 内边距 / 外边距 / 圆角；PlantUML 暗色反色强度 |
 | 函数图像 | 容器背景 / 内边距 / 外边距 / 圆角；坐标轴、网格与标题颜色 |
+| 对话 / 状态块 | 对话块背景 / 正文内边距 / 外边距 / 右侧圆角（左侧为直角且无边框）；状态徽标的颜色与辉光 |
 
 ### 支持的样式属性
 
@@ -261,12 +282,16 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PlotBgR` `PlotBgG` `PlotBgB` | 函数图像容器背景（0–255） |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | 函数图像容器内边距 / 外边距 / 圆角 |
 | `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`，仅代码设置） |
+| `ChatBgR` `ChatBgG` `ChatBgB` | 对话块背景（0–255） |
+| `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | 对话块正文内边距 / 容器外边距 / 右侧圆角（左侧为直角且无边框） |
+| `ChatAccentColor` · `ChatGlassColor` | 状态徽标的颜色与辉光颜色（CSS 颜色 `string`，含透明度，仅代码设置） |
+| `ChatGlassBlur` | 状态徽标辉光模糊半径（px） |
 
 **代码高亮** —— highlight.js 各 token 的颜色（`string`，如 `"#569cd6"`）：
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` —— 以及 diff 标记 `HljsAdditionBg`/`HljsAdditionColor` 与 `HljsDeletionBg`/`HljsDeletionColor`。
 
-> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表；代码高亮 token（`Hljs*`）与 `PlotAxisColor` 需在代码中配置（或在自己 UI 中绑定）。
+> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光；代码高亮 token（`Hljs*`）、`PlotAxisColor`、`ChatAccentColor` 与 `ChatGlassColor` 需在代码中配置（或在自己 UI 中绑定）。
 
 ---
 

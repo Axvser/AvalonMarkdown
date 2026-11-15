@@ -514,6 +514,52 @@
           </StackPanel>
         </Border>
 
+        <!-- ───────── Chat / status blocks ───────── -->
+        <Border Classes="card">
+          <StackPanel Spacing="3">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,2">
+              <Border Classes="swatch" Background="{Binding ChatBgHex}"/>
+              <TextBlock Classes="gtitle" Grid.Column="1" Margin="10,0,0,0" Text="Chat / Status"/>
+              <TextBlock Classes="ghex" Grid.Column="2" Text="{Binding ChatBgHex}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#ff6b6b" Text="R"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatBgR}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBgR}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#7bd88f" Text="G"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatBgG}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBgG}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#5aa7f0" Text="B"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatBgB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBgB}"/>
+            </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8" Margin="0,4,0,0">
+              <TextBlock Classes="flbl" Text="Body padding"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="32" Value="{Binding ChatContainerPadding}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatContainerPadding}"/>
+            </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8">
+              <TextBlock Classes="flbl" Text="Container margin"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="48" Value="{Binding ChatContainerMargin}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatContainerMargin}"/>
+            </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8">
+              <TextBlock Classes="flbl" Text="Right radius"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding ChatBorderRadius}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBorderRadius}"/>
+            </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8">
+              <TextBlock Classes="flbl" Text="Glow blur"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding ChatGlassBlur}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatGlassBlur}"/>
+            </Grid>
+          </StackPanel>
+        </Border>
+
       </StackPanel>
     </ScrollViewer>
   </DockPanel>
