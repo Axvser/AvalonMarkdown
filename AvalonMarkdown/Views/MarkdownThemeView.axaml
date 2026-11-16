@@ -391,6 +391,16 @@
               <Slider Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding BorderRadius}" IsSnapToTickEnabled="True" TickFrequency="1"/>
               <TextBlock Classes="cval" Grid.Column="2" Text="{Binding BorderRadius}"/>
             </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8">
+              <TextBlock Classes="flbl" Text="Heading margin top"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="48" Value="{Binding HeadingMarginTop}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding HeadingMarginTop}"/>
+            </Grid>
+            <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8">
+              <TextBlock Classes="flbl" Text="Heading margin bottom"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="48" Value="{Binding HeadingMarginBottom}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding HeadingMarginBottom}"/>
+            </Grid>
           </StackPanel>
         </Border>
 
@@ -518,6 +528,13 @@
               <TextBlock Classes="flbl" Text="Corner radius"/>
               <Slider Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding PlotBorderRadius}" IsSnapToTickEnabled="True" TickFrequency="1"/>
               <TextBlock Classes="cval" Grid.Column="2" Text="{Binding PlotBorderRadius}"/>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8">
+              <Border Classes="swatch" Background="{Binding PlotAxisColor}"/>
+              <TextBlock Grid.Column="1" Classes="flbl" Text="Axis colour"/>
+              <TextBox Grid.Column="2" Classes="colorinput"
+                       Text="{Binding PlotAxisColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       PlaceholderText="#cccccc"/>
             </Grid>
           </StackPanel>
         </Border>

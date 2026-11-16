@@ -306,6 +306,8 @@
                 var tunable=false;
                 if ((dp==='font-size'||dp==='line-height') && ck.chunks.indexOf('body')>=0) tunable=true;
                 if (dp==='font-size' && ck.chunks.indexOf('code')>=0) tunable=true;
+                if ((dp==='margin-top'||dp==='margin-bottom') &&
+                    (ck.chunks.indexOf('h1')>=0 || ck.chunks.indexOf('h2')>=0 || ck.chunks.indexOf('h3')>=0)) tunable=true;
                 if (dp==='border-radius' && (ck.chunks.indexOf('pre')>=0||ck.chunks.indexOf('.code-block-wrapper')>=0)) tunable=true;
                 if (ck.chunks.indexOf('.hljs')>=0 && (dp==='background'||dp==='color')) tunable=true;
                 for (var cc=0;cc<ck.chunks.length;cc++){
@@ -315,6 +317,9 @@
                     if (ch.indexOf('.puml-container')===0) tunable=true;
                     if (ch.indexOf('.plot-container')===0) tunable=true;
                     if (ch==='.puml-dark img' && dp==='filter') tunable=true;
+                    if (ch==='.chat-block-wrap' && dp==='margin') tunable=true;
+                    if (ch==='.chat-block' && dp==='border-radius') tunable=true;
+                    if (ch==='.chat-body' && dp==='padding') tunable=true;
                 }
                 var label=(ck.chunks[0]||'rule')+' · '+dp;
                 if (!els.length){

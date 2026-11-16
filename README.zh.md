@@ -246,7 +246,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | --- | --- |
 | 核心颜色 | 页面背景、正文文字、链接、标题、行内代码、边框 |
 | 表面颜色 | 次级背景（如代码头）、次级文字、行内代码背景、代码块背景、表头背景 |
-| 排版 | 代码字号；代码块 / pre 圆角 |
+| 排版 | 代码字号；代码块 / pre 圆角；h1–h3 上下边距 |
 | 代码高亮 | 每种语法 token 的颜色（关键字、字符串、数字、注释……） |
 | 图表 | Mermaid 与 PlantUML 容器背景 / 内边距 / 外边距 / 圆角；PlantUML 暗色反色强度 |
 | 函数图像 | 容器背景 / 内边距 / 外边距 / 圆角；坐标轴、网格与标题颜色 |
@@ -276,6 +276,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | --- | --- |
 | `CodeFontSize` | 代码字号 |
 | `BorderRadius` | 代码块 / pre 圆角 |
+| `HeadingMarginTop` · `HeadingMarginBottom` | h1–h3 上 / 下边距（px） |
 | `MermaidBgR` `MermaidBgG` `MermaidBgB` | Mermaid 容器背景（0–255） |
 | `MermaidContainerPadding` · `MermaidContainerMargin` · `MermaidBorderRadius` | Mermaid 容器内边距 / 外边距 / 圆角 |
 | `PumlBgR` `PumlBgG` `PumlBgB` | PlantUML 容器背景（0–255） |
@@ -283,7 +284,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PumlDarkInvert` | PlantUML 暗色反色强度（0–1） |
 | `PlotBgR` `PlotBgG` `PlotBgB` | 函数图像容器背景（0–255） |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | 函数图像容器内边距 / 外边距 / 圆角 |
-| `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`，仅代码设置） |
+| `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`；可在面板文本框中编辑） |
 | `ChatBgR` `ChatBgG` `ChatBgB` | 对话块背景（0–255） |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | 对话块正文内边距 / 容器外边距 / 右侧圆角（左侧为直角且无边框） |
 | `ChatAccentColor` · `ChatGlassColor` | 状态徽标的颜色与辉光颜色（CSS 颜色 `string`，含透明度；可在面板文本框中编辑） |
@@ -293,7 +294,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` —— 以及 diff 标记 `HljsAdditionBg`/`HljsAdditionColor` 与 `HljsDeletionBg`/`HljsDeletionColor`。
 
-> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光，并提供徽标颜色与辉光颜色的文本框输入；代码高亮 token（`Hljs*`）与 `PlotAxisColor` 需在代码中配置（或在自己 UI 中绑定）。
+> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光，并提供坐标轴颜色、徽标颜色与辉光颜色的文本框输入；只有代码高亮 token（`Hljs*`）需在代码中配置（或在自己 UI 中绑定）。
 
 ---
 

@@ -626,7 +626,45 @@ public partial class MainView : UserControl
         }
         _auditLog.AppendLine($"summaryProps: writable={propLines.Count} unused={unusedProps.Count}");
 
-        var ok = !timeout && deadUnexpected.Count == 0 && unusedProps.Count == 0;
+        // Coverage: the built-in MarkdownThemeView panel surfaces every property
+        // except the intentional code-only set (Hljs*). The "hard" rows are
+        // authored declarations that have no property at all; the semantic hljs
+        // rules are the only allowed hardcoded ones.
+        var codeOnlyProps = propLines.Count(pl =>
+            pl.StartsWith("[PROP] Hljs", StringComparison.Ordinal));
+        var knownHardcoded = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ".hljs-link · text-decoration",
+            ".hljs-emphasis · font-style",
+            ".hljs-strong · font-weight",
+        };
+        var hardRows = new List<string>();
+        var eqRows = new List<string>();
+        var unexpectedHard = new List<string>();
+        foreach (var l in rows)
+        {
+            var b = l[(l.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var p = b.Split('|');
+            if (p.Length >= 3 && p[0] == "eff" && p[2] == "hard")
+            {
+                hardRows.Add(l);
+                if (p.Length >= 2 && !knownHardcoded.Contains(p[1])) unexpectedHard.Add(l);
+            }
+            if (p.Length >= 4 && p[0] == "eff" && p[3] == "eqdefault") eqRows.Add(l);
+        }
+        _auditLog.AppendLine($"coverage: panel-bound={propLines.Count - codeOnlyProps} " +
+                             $"code-only={codeOnlyProps} hardcoded-declarations={hardRows.Count} " +
+                             $"hardcoded-unexpected={unexpectedHard.Count} equal-to-default={eqRows.Count}");
+        foreach (var h in hardRows)
+        {
+            var b = h[(h.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var label = b.Split('|')[1];
+            _auditLog.AppendLine((knownHardcoded.Contains(label) ? "  [KNOWN-HARDCODED] " : "  [regression?] ") + h);
+        }
+        foreach (var e in eqRows) _auditLog.AppendLine("  [=default] " + e);
+
+        var ok = !timeout && deadUnexpected.Count == 0 && unusedProps.Count == 0 &&
+                 unexpectedHard.Count == 0;
         _auditLog.AppendLine(ok ? "\nRESULT: PASS" : "\nRESULT: FAIL");
 
         try

@@ -279,11 +279,17 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     #region Typography properties
     private double _codeFontSize = 13;
     private int _borderRadius = 4;
+    private double _headingMarginTop = 20;
+    private double _headingMarginBottom = 12;
 
     [Description("代码字体大小（px）")]
     public double CodeFontSize  { get => _codeFontSize; set => SetProperty(ref _codeFontSize, value); }
     [Description("代码块/pre 圆角半径（px）")]
     public int    BorderRadius  { get => _borderRadius; set => SetProperty(ref _borderRadius, value); }
+    [Description("h1/h2/h3 上边距（px）")]
+    public double HeadingMarginTop { get => _headingMarginTop; set => SetProperty(ref _headingMarginTop, value); }
+    [Description("h1/h2/h3 下边距（px）")]
+    public double HeadingMarginBottom { get => _headingMarginBottom; set => SetProperty(ref _headingMarginBottom, value); }
     #endregion
 
     // ─── Derived computed properties ───
@@ -652,7 +658,7 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine("html.theme-dark h1, html.theme-light h1,");
         sb.AppendLine("html.theme-dark h2, html.theme-light h2,");
         sb.AppendLine("html.theme-dark h3, html.theme-light h3 {");
-        sb.AppendLine("    margin-top: 20px; margin-bottom: 12px;");
+        sb.AppendLine($"    margin-top: {HeadingMarginTop}px; margin-bottom: {HeadingMarginBottom}px;");
         sb.AppendLine("}");
         sb.AppendLine("html.theme-dark pre, html.theme-light pre,");
         sb.AppendLine("html.theme-dark .code-block-wrapper, html.theme-light .code-block-wrapper {");

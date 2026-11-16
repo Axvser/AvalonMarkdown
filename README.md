@@ -251,7 +251,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | --- | --- |
 | Core colors | Page background, text, links, headings, inline code, borders |
 | Surface colors | Secondary background (e.g. code headers), secondary text, inline-code background, code-block background, table header |
-| Typography | Code font size; code-block / pre corner radius |
+| Typography | Code font size; code-block / pre corner radius; h1–h3 top/bottom margins |
 | Code highlighting | Color of each syntax token (keyword, string, number, comment, …) |
 | Diagrams | Mermaid & PlantUML container background / padding / margin / radius; PlantUML dark invert strength |
 | Function plots | Plot container background / padding / margin / radius; axis, grid and title colour |
@@ -281,6 +281,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | --- | --- |
 | `CodeFontSize` | Code font size |
 | `BorderRadius` | Code-block / pre corner radius |
+| `HeadingMarginTop` · `HeadingMarginBottom` | h1–h3 top / bottom margin (px) |
 | `MermaidBgR` `MermaidBgG` `MermaidBgB` | Mermaid container background (0–255) |
 | `MermaidContainerPadding` · `MermaidContainerMargin` · `MermaidBorderRadius` | Mermaid container padding / margin / radius |
 | `PumlBgR` `PumlBgG` `PumlBgB` | PlantUML container background (0–255) |
@@ -288,7 +289,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PumlDarkInvert` | PlantUML dark invert strength (0–1) |
 | `PlotBgR` `PlotBgG` `PlotBgB` | Function-plot container background (0–255) |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | Function-plot container padding / margin / radius |
-| `PlotAxisColor` | Function-plot axis / grid / title colour (CSS colour `string`, code-only) |
+| `PlotAxisColor` | Function-plot axis / grid / title colour (CSS colour `string`; editable in the panel's text input) |
 | `ChatBgR` `ChatBgG` `ChatBgB` | Chat block background (0–255) |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | Chat body padding / container margin / right-side radius (the left edge is square and borderless) |
 | `ChatAccentColor` · `ChatGlassColor` | Status-badge colour and glow colour (CSS colour `string`, including alpha; editable in the panel's text inputs) |
@@ -298,7 +299,7 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` — plus diff markers `HljsAdditionBg`/`HljsAdditionColor` and `HljsDeletionBg`/`HljsDeletionColor`.
 
-> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow, including text inputs for the badge and glow colours; code-highlighting tokens (`Hljs*`) and `PlotAxisColor` are configured in code (or bound in your own UI).
+> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow, including text inputs for the plot axis colour and the badge/glow colours; only the code-highlighting tokens (`Hljs*`) are configured in code (or bound in your own UI).
 
 ---
 
