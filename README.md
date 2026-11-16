@@ -289,17 +289,17 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PumlDarkInvert` | PlantUML dark invert strength (0–1) |
 | `PlotBgR` `PlotBgG` `PlotBgB` | Function-plot container background (0–255) |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | Function-plot container padding / margin / radius |
-| `PlotAxisColor` | Function-plot axis / grid / title colour (CSS colour `string`; editable in the panel's text input) |
+| `PlotAxisR` · `PlotAxisG` · `PlotAxisB` | Function-plot axis / grid / title colour channels (0–255); `PlotAxisColor` is the read-only `#RRGGBB` preview |
 | `ChatBgR` `ChatBgG` `ChatBgB` | Chat block background (0–255) |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | Chat body padding / container margin / right-side radius (the left edge is square and borderless) |
-| `ChatAccentColor` · `ChatGlassColor` | Status-badge colour and glow colour (CSS colour `string`, including alpha; editable in the panel's text inputs) |
+| `ChatAccentR/G/B/A` · `ChatGlassR/G/B/A` | Status-badge and glow RGBA channels (0–255, alpha included); `ChatAccentColor` / `ChatGlassColor` are read-only `rgba()` previews |
 | `ChatGlassBlur` | Status-badge glow blur radius (px) |
 
 **Code highlighting** — highlight.js token colors (`string`, e.g. `"#569cd6"`):
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` — plus diff markers `HljsAdditionBg`/`HljsAdditionColor` and `HljsDeletionBg`/`HljsDeletionColor`.
 
-> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow, including text inputs for the plot axis colour and the badge/glow colours; only the code-highlighting tokens (`Hljs*`) are configured in code (or bound in your own UI).
+> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow, with sliders for the plot axis and the badge/glow RGBA channels; only the code-highlighting tokens (`Hljs*`) are configured in code (or bound in your own UI).
 
 ---
 

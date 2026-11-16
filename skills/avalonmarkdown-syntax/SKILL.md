@@ -227,8 +227,9 @@ step is live; `done` / `error` hide the outer ring entirely. `[static]` freezes 
 non-terminal halo and `[spin]` forces it to animate. A custom 24×24 path can be
 supplied with `svg="..."` (quote it if the path contains commas), or a full
 `<svg>…</svg>` string; path data is stroked with the badge colour, while a full
-SVG may set its own fill/stroke. MarkdownThemeViewModel exposes the badge colour,
-glow colour and blur as `ChatAccentColor`, `ChatGlassColor` and `ChatGlassBlur`.
+SVG may set its own fill/stroke. MarkdownThemeViewModel exposes the badge/glow
+channels as `ChatAccentR/G/B/A` and `ChatGlassR/G/B/A` (plus `ChatGlassBlur`);
+`ChatAccentColor` / `ChatGlassColor` are read-only previews.
 
 ---
 

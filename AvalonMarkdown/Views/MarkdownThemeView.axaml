@@ -59,13 +59,12 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="MinHeight" Value="20"/>
       </Style>
-      <!-- Compact CSS colour input (accepts rgba() / #RRGGBBAA) -->
-      <Style Selector="TextBox.colorinput">
-        <Setter Property="FontFamily" Value="Consolas, monospace"/>
-        <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Padding" Value="5,3"/>
-        <Setter Property="MinHeight" Value="24"/>
-        <Setter Property="VerticalAlignment" Value="Center"/>
+      <!-- Group header in the editor -->
+      <Style Selector="TextBlock.section">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Opacity" Value="0.55"/>
+        <Setter Property="Margin" Value="4,8,0,0"/>
       </Style>
   </UserControl.Styles>
 
@@ -100,6 +99,8 @@
     <ScrollViewer x:Name="ContentPanel" MaxHeight="340" IsVisible="False">
       <StackPanel Margin="6" Spacing="10">
 
+        <TextBlock Classes="section" Text="PAGE"/>
+
         <!-- ───────── Base colors ───────── -->
         <Border Classes="card">
           <StackPanel Spacing="3">
@@ -125,6 +126,8 @@
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Classes="section" Text="TEXT"/>
 
         <Border Classes="card">
           <StackPanel Spacing="3">
@@ -225,6 +228,8 @@
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Classes="section" Text="SURFACES"/>
 
         <Border Classes="card">
           <StackPanel Spacing="3">
@@ -327,6 +332,8 @@
           </StackPanel>
         </Border>
 
+        <TextBlock Classes="section" Text="CODE"/>
+
         <Border Classes="card">
           <StackPanel Spacing="3">
             <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,2">
@@ -352,6 +359,8 @@
           </StackPanel>
         </Border>
 
+        <TextBlock Classes="section" Text="TABLES"/>
+
         <Border Classes="card">
           <StackPanel Spacing="3">
             <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,2">
@@ -376,6 +385,8 @@
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Classes="section" Text="TYPOGRAPHY"/>
 
         <!-- ───────── Typography ───────── -->
         <Border Classes="card">
@@ -403,6 +414,8 @@
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Classes="section" Text="DIAGRAMS"/>
 
         <!-- ───────── Mermaid ───────── -->
         <Border Classes="card">
@@ -491,6 +504,8 @@
           </StackPanel>
         </Border>
 
+        <TextBlock Classes="section" Text="FUNCTION PLOTS"/>
+
         <!-- ───────── Function Plots ───────── -->
         <Border Classes="card">
           <StackPanel Spacing="3">
@@ -529,15 +544,30 @@
               <Slider Grid.Column="1" Minimum="0" Maximum="20" Value="{Binding PlotBorderRadius}" IsSnapToTickEnabled="True" TickFrequency="1"/>
               <TextBlock Classes="cval" Grid.Column="2" Text="{Binding PlotBorderRadius}"/>
             </Grid>
-            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,6,0,2">
               <Border Classes="swatch" Background="{Binding PlotAxisColor}"/>
-              <TextBlock Grid.Column="1" Classes="flbl" Text="Axis colour"/>
-              <TextBox Grid.Column="2" Classes="colorinput"
-                       Text="{Binding PlotAxisColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       PlaceholderText="#cccccc"/>
+              <TextBlock Grid.Column="1" Classes="gtitle" Margin="10,0,0,0" Text="Axis colour"/>
+              <TextBlock Grid.Column="2" Classes="ghex" Text="{Binding PlotAxisColor}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#ff6b6b" Text="R"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding PlotAxisR}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding PlotAxisR}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#7bd88f" Text="G"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding PlotAxisG}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding PlotAxisG}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#5aa7f0" Text="B"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding PlotAxisB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding PlotAxisB}"/>
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Classes="section" Text="CHAT / STATUS"/>
 
         <!-- ───────── Chat / status blocks ───────── -->
         <Border Classes="card">
@@ -562,19 +592,53 @@
               <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatBgB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
               <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBgB}"/>
             </Grid>
-            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8" Margin="0,4,0,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,6,0,2">
               <Border Classes="swatch" Background="{Binding ChatAccentColor}"/>
-              <TextBlock Grid.Column="1" Classes="flbl" Text="Badge colour"/>
-              <TextBox Grid.Column="2" Classes="colorinput"
-                       Text="{Binding ChatAccentColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       PlaceholderText="rgba(255,255,255,0.76)"/>
+              <TextBlock Grid.Column="1" Classes="gtitle" Margin="10,0,0,0" Text="Badge colour"/>
             </Grid>
-            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8">
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#ff6b6b" Text="R"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatAccentR}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatAccentR}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#7bd88f" Text="G"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatAccentG}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatAccentG}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#5aa7f0" Text="B"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatAccentB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatAccentB}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Text="A"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatAccentA}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatAccentA}"/>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,6,0,2">
               <Border Classes="swatch" Background="{Binding ChatGlassColor}"/>
-              <TextBlock Grid.Column="1" Classes="flbl" Text="Glow colour"/>
-              <TextBox Grid.Column="2" Classes="colorinput"
-                       Text="{Binding ChatGlassColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       PlaceholderText="rgba(255,255,255,0.18)"/>
+              <TextBlock Grid.Column="1" Classes="gtitle" Margin="10,0,0,0" Text="Glow colour"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#ff6b6b" Text="R"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatGlassR}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatGlassR}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#7bd88f" Text="G"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatGlassG}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatGlassG}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Foreground="#5aa7f0" Text="B"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatGlassB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatGlassB}"/>
+            </Grid>
+            <Grid ColumnDefinitions="14,*,34" ColumnSpacing="8">
+              <TextBlock Classes="chlbl" Text="A"/>
+              <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatGlassA}" IsSnapToTickEnabled="True" TickFrequency="1"/>
+              <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatGlassA}"/>
             </Grid>
             <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8" Margin="0,4,0,0">
               <TextBlock Classes="flbl" Text="Body padding"/>

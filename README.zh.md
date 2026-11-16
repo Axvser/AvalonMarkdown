@@ -284,17 +284,17 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PumlDarkInvert` | PlantUML 暗色反色强度（0–1） |
 | `PlotBgR` `PlotBgG` `PlotBgB` | 函数图像容器背景（0–255） |
 | `PlotContainerPadding` · `PlotContainerMargin` · `PlotBorderRadius` | 函数图像容器内边距 / 外边距 / 圆角 |
-| `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`；可在面板文本框中编辑） |
+| `PlotAxisR` · `PlotAxisG` · `PlotAxisB` | 函数图像坐标轴 / 网格 / 标题颜色通道（0–255）；`PlotAxisColor` 是只读的 `#RRGGBB` 预览 |
 | `ChatBgR` `ChatBgG` `ChatBgB` | 对话块背景（0–255） |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | 对话块正文内边距 / 容器外边距 / 右侧圆角（左侧为直角且无边框） |
-| `ChatAccentColor` · `ChatGlassColor` | 状态徽标的颜色与辉光颜色（CSS 颜色 `string`，含透明度；可在面板文本框中编辑） |
+| `ChatAccentR/G/B/A` · `ChatGlassR/G/B/A` | 状态徽标与辉光的 RGBA 通道（0–255，含透明度）；`ChatAccentColor` / `ChatGlassColor` 是只读的 `rgba()` 预览 |
 | `ChatGlassBlur` | 状态徽标辉光模糊半径（px） |
 
 **代码高亮** —— highlight.js 各 token 的颜色（`string`，如 `"#569cd6"`）：
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` —— 以及 diff 标记 `HljsAdditionBg`/`HljsAdditionColor` 与 `HljsDeletionBg`/`HljsDeletionColor`。
 
-> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光，并提供坐标轴颜色、徽标颜色与辉光颜色的文本框输入；只有代码高亮 token（`Hljs*`）需在代码中配置（或在自己 UI 中绑定）。
+> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光，坐标轴颜色与徽标/辉光 RGBA 都使用滑块；只有代码高亮 token（`Hljs*`）需在代码中配置（或在自己 UI 中绑定）。
 
 ---
 

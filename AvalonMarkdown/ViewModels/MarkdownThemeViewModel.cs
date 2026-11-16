@@ -139,11 +139,19 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(PumlBgHex));
         OnPropertyChanged(nameof(PlotBgHex));
         OnPropertyChanged(nameof(ChatBgHex));
+        OnPropertyChanged(nameof(ChatAccentColor));
+        OnPropertyChanged(nameof(ChatGlassColor));
+        OnPropertyChanged(nameof(PlotAxisColor));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(BorderRadius));
         MarkDirty();
         return true;
     }
+
+    // Alpha is edited as a 0-255 channel so it uses the same slider as R/G/B.
+    private static string AlphaFraction(int a)
+        => (Math.Max(0, Math.Min(255, a)) / 255.0)
+            .ToString("0.##", CultureInfo.InvariantCulture);
 
     // ─── Core colors (R/G/B triplets, 0-255) ───
 
@@ -430,7 +438,9 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     private double _plotContainerPadding = 8;
     private double _plotContainerMargin = 16;
     private int _plotBorderRadius = 4;
-    private string _plotAxisColor = "#cccccc";
+    private int _plotAxisR = 204;
+    private int _plotAxisG = 204;
+    private int _plotAxisB = 204;
 
     [Description("函数图像容器内边距（px）")]
     public double PlotContainerPadding { get => _plotContainerPadding; set => SetProperty(ref _plotContainerPadding, value); }
@@ -438,8 +448,14 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     public double PlotContainerMargin  { get => _plotContainerMargin;  set => SetProperty(ref _plotContainerMargin,  value); }
     [Description("函数图像容器圆角（px）")]
     public int    PlotBorderRadius     { get => _plotBorderRadius;     set => SetProperty(ref _plotBorderRadius,     value); }
-    [Description("函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色值）")]
-    public string PlotAxisColor        { get => _plotAxisColor;        set => SetProperty(ref _plotAxisColor,        value); }
+    [Description("函数图像坐标轴红色通道（0-255）")]
+    public int PlotAxisR { get => _plotAxisR; set => SetProperty(ref _plotAxisR, value); }
+    [Description("函数图像坐标轴绿色通道（0-255）")]
+    public int PlotAxisG { get => _plotAxisG; set => SetProperty(ref _plotAxisG, value); }
+    [Description("函数图像坐标轴蓝色通道（0-255）")]
+    public int PlotAxisB { get => _plotAxisB; set => SetProperty(ref _plotAxisB, value); }
+    [Description("派生：函数图像坐标轴颜色（只读）")]
+    public string PlotAxisColor => $"#{PlotAxisR:X2}{PlotAxisG:X2}{PlotAxisB:X2}";
     #endregion
 
     // ════════════════════════════════════════════════════════════
@@ -463,8 +479,14 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     private double _chatContainerPadding = 12;
     private double _chatContainerMargin = 16;
     private int _chatBorderRadius = 6;
-    private string _chatAccentColor = "rgba(255,255,255,0.76)";
-    private string _chatGlassColor = "rgba(255,255,255,0.18)";
+    private int _chatAccentR = 255;
+    private int _chatAccentG = 255;
+    private int _chatAccentB = 255;
+    private int _chatAccentA = 194;
+    private int _chatGlassR = 255;
+    private int _chatGlassG = 255;
+    private int _chatGlassB = 255;
+    private int _chatGlassA = 46;
     private double _chatGlassBlur = 5;
 
     [Description("对话块正文内边距（px）")]
@@ -473,10 +495,26 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     public double ChatContainerMargin  { get => _chatContainerMargin;  set => SetProperty(ref _chatContainerMargin,  value); }
     [Description("对话块右侧圆角（px；左侧始终为直角）")]
     public int    ChatBorderRadius     { get => _chatBorderRadius;     set => SetProperty(ref _chatBorderRadius,     value); }
-    [Description("状态徽标颜色（CSS 颜色值，含透明度）")]
-    public string ChatAccentColor      { get => _chatAccentColor;      set => SetProperty(ref _chatAccentColor,      value); }
-    [Description("状态徽标辉光颜色（CSS 颜色值，含透明度）")]
-    public string ChatGlassColor       { get => _chatGlassColor;       set => SetProperty(ref _chatGlassColor,       value); }
+    [Description("状态徽标红色通道（0-255）")]
+    public int ChatAccentR { get => _chatAccentR; set => SetProperty(ref _chatAccentR, value); }
+    [Description("状态徽标绿色通道（0-255）")]
+    public int ChatAccentG { get => _chatAccentG; set => SetProperty(ref _chatAccentG, value); }
+    [Description("状态徽标蓝色通道（0-255）")]
+    public int ChatAccentB { get => _chatAccentB; set => SetProperty(ref _chatAccentB, value); }
+    [Description("状态徽标透明度（0-255）")]
+    public int ChatAccentA { get => _chatAccentA; set => SetProperty(ref _chatAccentA, value); }
+    [Description("派生：状态徽标颜色（只读）")]
+    public string ChatAccentColor => $"rgba({ChatAccentR},{ChatAccentG},{ChatAccentB},{AlphaFraction(ChatAccentA)})";
+    [Description("状态徽标辉光红色通道（0-255）")]
+    public int ChatGlassR { get => _chatGlassR; set => SetProperty(ref _chatGlassR, value); }
+    [Description("状态徽标辉光绿色通道（0-255）")]
+    public int ChatGlassG { get => _chatGlassG; set => SetProperty(ref _chatGlassG, value); }
+    [Description("状态徽标辉光蓝色通道（0-255）")]
+    public int ChatGlassB { get => _chatGlassB; set => SetProperty(ref _chatGlassB, value); }
+    [Description("状态徽标辉光透明度（0-255）")]
+    public int ChatGlassA { get => _chatGlassA; set => SetProperty(ref _chatGlassA, value); }
+    [Description("派生：状态徽标辉光颜色（只读）")]
+    public string ChatGlassColor => $"rgba({ChatGlassR},{ChatGlassG},{ChatGlassB},{AlphaFraction(ChatGlassA)})";
     [Description("状态徽标辉光模糊半径（px）")]
     public double ChatGlassBlur        { get => _chatGlassBlur;        set => SetProperty(ref _chatGlassBlur,        value); }
     #endregion
