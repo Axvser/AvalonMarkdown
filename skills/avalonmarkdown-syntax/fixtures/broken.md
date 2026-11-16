@@ -86,3 +86,11 @@ Expected: `chat-unknown-option` (static) and `chat-error` (render).
 
 ```chat[思考中][bogus]
 ```
+
+## Empty chat svg
+
+Expected: `chat-svg-empty` (static) and `chat-error` (render). An empty custom
+icon would otherwise leave the badge with no icon at all.
+
+```chat[空图标][svg=""]
+```

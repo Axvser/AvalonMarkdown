@@ -1048,7 +1048,7 @@ SELF_TEST_EXPECTATIONS = {
     # static ids, render ids, plantuml-server ids
     "broken.md": {
         "static": ["plot-invalid-json", "plot-expression-rejected", "info-near-miss",
-                   "chat-info-malformed", "chat-unknown-option"],
+                   "chat-info-malformed", "chat-unknown-option", "chat-svg-empty"],
         "render": ["katex-error", "mermaid-render-error", "plot-error", "chat-error"],
         "plantuml": ["plantuml-rejected"],
         # The deliberately-broken plot has no artefact, so its two export attempts

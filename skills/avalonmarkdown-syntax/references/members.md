@@ -169,12 +169,12 @@ exception is `chat`, which also accepts bracketed arguments.
 | `video` | a platform facade or a `<video>` element |
 | `chat[label][option,…]` | `<div class="chat-block-wrap"><details class="chat-block"><summary class="chat-summary">…label…</summary><div class="chat-body">…rendered Markdown…</div></details><span class="chat-status chat-status-<state>">…state icon + ring…</span></div>` |
 
-**`chat` is free-form.** The bracketed text is the summary label; no state
-vocabulary is imposed, so `` ```chat[思考中] `` and `` ```chat[工具调用中] `` are
-both correct. The panel is collapsed by default. A second bracket group configures
-it — `open` (or `expanded`) renders it expanded, `collapsed` keeps it shut, and
-`static` / `idle` freezes the status halo (`spin` is the default; `live` and
-`active` are aliases):
+**`chat` is free-form.** The bracketed text is the summary label and is displayed
+as written; the badge icon is inferred from it (see below) or set explicitly. Both
+`` ```chat[思考中] `` and `` ```chat[工具调用中] `` are correct. The panel is
+collapsed by default. A second bracket group configures it — `open` (or
+`expanded`) renders it expanded, `collapsed` keeps it shut, and `static` / `idle`
+freezes the status halo (`spin` is the default; `live` and `active` are aliases):
 
 ```chat[工具调用中][open]
 ```
@@ -197,19 +197,26 @@ The top-right status badge picks its icon from the step state:
 | anything else | chat bubble | spins |
 
 The state can also be set explicitly with `[thinking]`, `[tool]`, `[done]`,
-`[error]` or `[chat]`; `[spin]` / `[static]` override the halo animation. For
-`done` / `error` the outer halo is **hidden entirely** — only the check/cross icon
-remains. A custom icon can be supplied with a 24×24 path string, quoting it when
-the path contains commas:
+`[error]` or `[chat]`. `[static]` freezes the halo on non-terminal states and
+`[spin]` forces it to animate. For `done` / `error` the outer halo is **hidden
+entirely** — only the check/cross icon remains. A custom icon can be supplied with
+a 24×24 path string, quoting it when the path contains commas:
 
 ```chat[自定义][svg="M12 2 L22 12 L12 22 L2 12 Z"]
 ```
 
-or with a full `<svg>…</svg>` string. The colour and glow are theme-configurable
+or with a full `<svg>…</svg>` string. Path data is stroked with the badge colour;
+a full SVG may set its own fill/stroke. The colour and glow are theme-configurable
 (see [theming hooks](#theming-hooks)).
 
 `puml-dark` adds `filter: invert(0.882) hue-rotate(180deg)` to the image so a
 white-background diagram matches the dark theme.
+
+**Grid cells stay square.** x and y are scaled independently; for linear axes the
+renderer expands whichever domain needs it, so the requested range remains visible
+and the plot still fills its content area. Both axes then use the same tick step,
+so adjacent grid lines are the same pixel distance apart. Log axes are not
+adjusted.
 
 **Graph types that need `"sampler": "builtIn"`.** `plot` defaults to the `interval`
 sampler, which only understands plain `y = f(x)`. These throw

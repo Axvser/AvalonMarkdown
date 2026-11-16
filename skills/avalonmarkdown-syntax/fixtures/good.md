@@ -118,10 +118,14 @@ A platform URL becomes a click-to-play facade, not an iframe, until clicked.
 
 ## Chat block
 
-A free-form label; the body is Markdown. No state vocabulary is imposed.
+A free-form label; the body is Markdown. The badge icon follows the label state.
 
 ```chat[思考中]
 正在检查 `renderer.js` 的分派规则。
+```
+
+```chat[自定义][svg="M12,2 L22,12 L12,22 L2,12 Z"]
+自定义图标。
 ```
 
 ## Footnotes and inline HTML

@@ -75,7 +75,9 @@ Preview.OnReady += async (_, _) =>
 - **`color`** —— 未指定时按数据序号取自主题调色板。曲线颜色是逐条数据的选项（`color` 只在 datum 上），因此无法由 CSS 提供。
 - **`disableZoom`** —— 默认为 `true`，即图像静态、滚轮照常滚动页面。写 `"disableZoom": false` 才在该块上启用滚轮缩放与平移。这个默认值是有意为之：该库的缩放绑定会吞掉图上方的所有滚轮事件，在阅读场景里等于把滚轮卡住。
 
-`width` 与 `height` 是**含边距的整个 SVG 尺寸**（左 40 / 右 20 / 下 20、上 20 —— 有 `title` 时为 40），所以 `"height": 350` 实际绘图区只有 310px。省略 `width` 时会自适应容器宽度。
+`width` 与 `height` 是**含边距的整个 SVG 尺寸**（左 40 / 右 20 / 下 20、上 20 —— 有 `title` 时为 40），所以 `"height": 350` 实际绘图区只有 310px。省略 `width` 时会自适应容器宽度；省略 `height` 时为 350。
+
+**格子保持正方形。** function-plot 会独立缩放 x / y；如果绘图区宽高比与定义域宽高比不一致，格子就会变成矩形。对线性坐标轴，渲染器会扩展需要扩展的那一维定义域：请求的范围仍然完整可见，图表同时填满内容区域，多出来的部分只是显示更多图形；然后给两个轴相同的刻度步长，所以相邻网格线的像素间距相等。对数坐标轴不做这项调整。
 
 JSON 写错时会在原位渲染一个错误块，不会影响预览的其余部分。围栏按 info 字符串精确匹配，因此普通代码围栏（包括 `json`）完全不受影响。
 
@@ -104,7 +106,7 @@ JSON 写错时会在原位渲染一个错误块，不会影响预览的其余部
 
 方括号里的标签完全自定义、按原样显示。第二个方括号组用于配置面板：`open`（或 `expanded`）初始展开，`collapsed` 保持折叠（默认），`static` / `idle` 冻结状态光圈（默认 `spin` 旋转）。围栏体是普通 Markdown，会递归渲染，因此行内代码、列表、表格乃至嵌套围栏都能正常工作。标签中不能包含 `]`；info 字符串写错或选项未知时，会渲染一个可见的错误块，而不是静默降级成代码块。
 
-右上角的状态徽标会根据步骤状态切换图标：**思考 → 灯泡**、**工具 → 扳手**、**完成 → 对勾**、**错误 → 叉号**，其他情况显示聊天气泡。状态会自动从标签文字推断（`思考` / `think`、`工具` / `tool`、`完成` / `done`、`错误` / `fail`），也可以用 `[thinking]`、`[tool]`、`[done]`、`[error]`、`[chat]` 显式指定。步骤进行中光圈旋转；`done` / `error` 会冻结光圈并**完全隐藏外圈**，`[spin]` / `[static]` 可覆盖动画。也可以用 `svg="M12 2 L22 12 L12 22 L2 12 Z"` 传入自定义图标（路径含逗号时用引号括起来），或直接传完整的 `<svg>…</svg>` 字符串。颜色与辉光可通过 `MarkdownThemeViewModel` 的 `Chat*` 属性配置。
+右上角的状态徽标会根据步骤状态切换图标：**思考 → 灯泡**、**工具 → 扳手**、**完成 → 对勾**、**错误 → 叉号**，其他情况显示聊天气泡。状态会自动从标签文字推断（`思考` / `think`、`工具` / `tool`、`完成` / `done`、`错误` / `fail`），也可以用 `[thinking]`、`[tool]`、`[done]`、`[error]`、`[chat]` 显式指定。步骤进行中光圈旋转；`done` / `error` 会完全隐藏外圈。`[static]` 用于冻结非终态的光圈，`[spin]` 则强制保持旋转。也可以用 `svg="M12 2 L22 12 L12 22 L2 12 Z"` 传入自定义图标（路径含逗号时用引号括起来），或直接传完整的 `<svg>…</svg>` 字符串；路径数据会使用徽标颜色描边，完整 SVG 可以自己设置 fill/stroke。颜色与辉光可通过 `MarkdownThemeViewModel` 的 `Chat*` 属性配置。
 
 ### 处理链接点击
 
@@ -284,14 +286,14 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PlotAxisColor` | 函数图像坐标轴 / 网格 / 标题颜色（CSS 颜色 `string`，仅代码设置） |
 | `ChatBgR` `ChatBgG` `ChatBgB` | 对话块背景（0–255） |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | 对话块正文内边距 / 容器外边距 / 右侧圆角（左侧为直角且无边框） |
-| `ChatAccentColor` · `ChatGlassColor` | 状态徽标的颜色与辉光颜色（CSS 颜色 `string`，含透明度，仅代码设置） |
+| `ChatAccentColor` · `ChatGlassColor` | 状态徽标的颜色与辉光颜色（CSS 颜色 `string`，含透明度；可在面板文本框中编辑） |
 | `ChatGlassBlur` | 状态徽标辉光模糊半径（px） |
 
 **代码高亮** —— highlight.js 各 token 的颜色（`string`，如 `"#569cd6"`）：
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` —— 以及 diff 标记 `HljsAdditionBg`/`HljsAdditionColor` 与 `HljsDeletionBg`/`HljsDeletionColor`。
 
-> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光；代码高亮 token（`Hljs*`）、`PlotAxisColor`、`ChatAccentColor` 与 `ChatGlassColor` 需在代码中配置（或在自己 UI 中绑定）。
+> 说明：内置 `MarkdownThemeView` 面板覆盖颜色 / 排版 / 图表 / 函数图像以及对话块的背景、内边距、圆角、辉光，并提供徽标颜色与辉光颜色的文本框输入；代码高亮 token（`Hljs*`）与 `PlotAxisColor` 需在代码中配置（或在自己 UI 中绑定）。
 
 ---
 

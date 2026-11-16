@@ -75,7 +75,9 @@ Only two things are ever defaulted, and your JSON always wins:
 - **`color`** — a series without one takes a colour from the theme palette, by index. Series colours are per-function (`color` is a per-datum option), so they cannot come from CSS.
 - **`disableZoom`** — defaults to `true`, keeping the graph static so the wheel keeps scrolling the page. Set `"disableZoom": false` to enable wheel zoom and panning on that block. This default is deliberate: the library's zoom binding consumes every wheel event over the graph, which traps the scroll wheel in a reading pane.
 
-`width` and `height` are the **whole SVG including margins** (left 40 / right 20 / bottom 20, top 20 — or 40 when there is a `title`), so `"height": 350` yields a 310px plot area. If you omit `width`, it is fitted to the container.
+`width` and `height` are the **whole SVG including margins** (left 40 / right 20 / bottom 20, top 20 — or 40 when there is a `title`), so `"height": 350` yields a 310px plot area. If you omit `width`, it is fitted to the container. If you omit `height`, it is 350.
+
+**Grid cells stay square.** function-plot scales x and y independently, so a plot area whose aspect differs from the domain aspect would draw rectangular cells. For linear axes the renderer expands whichever domain needs it, keeping the requested range visible and the chart filling its content area — the extra range simply shows more of the graph — and gives both axes the same tick step, so adjacent grid lines are the same pixel distance apart. Log axes are left alone.
 
 A malformed body renders an inline error block instead of breaking the preview. The fence is matched on its info string exactly, so ordinary code fences — `json` included — are untouched.
 
@@ -104,7 +106,7 @@ A `chat` fence renders a collapsed `<details>` panel — useful for streaming ag
 
 The bracketed label is free-form and displayed as written. A second bracket group configures the panel — `open` (or `expanded`) starts it expanded, `collapsed` keeps it shut (the default), and `static` / `idle` freezes the status halo (`spin` is the default). The body is ordinary Markdown, rendered recursively, so inline code, lists, tables and nested fences work inside it. A label cannot contain `]`; a malformed info string or an unknown option renders a visible error block rather than silently becoming a code block.
 
-The top-right status badge picks its icon from the step state: **thinking → lightbulb**, **tool → wrench**, **done → check**, **error → cross**, otherwise a chat bubble. The state is inferred from the label (`思考` / `think`, `工具` / `tool`, `完成` / `done`, `错误` / `fail`) or can be set explicitly with `[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The halo spins while the step is live; `done` / `error` freeze it **and hide the outer ring entirely**, and `[spin]` / `[static]` override the animation. A custom icon can be supplied with `svg="M12 2 L22 12 L12 22 L2 12 Z"` — quote the value when the path contains commas — or with a full `<svg>…</svg>` string. The colour and glow are configurable through the `Chat*` properties on `MarkdownThemeViewModel`.
+The top-right status badge picks its icon from the step state: **thinking → lightbulb**, **tool → wrench**, **done → check**, **error → cross**, otherwise a chat bubble. The state is inferred from the label (`思考` / `think`, `工具` / `tool`, `完成` / `done`, `错误` / `fail`) or can be set explicitly with `[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The halo spins while the step is live; `done` / `error` hide the outer ring entirely. `[static]` freezes the halo on non-terminal states, and `[spin]` forces it to keep animating. A custom icon can be supplied with `svg="M12 2 L22 12 L12 22 L2 12 Z"` — quote the value when the path contains commas — or with a full `<svg>…</svg>` string; path data is stroked with the badge colour, while a full SVG may set its own fill/stroke. The colour and glow are configurable through the `Chat*` properties on `MarkdownThemeViewModel`.
 
 ### Handle link clicks
 
@@ -289,14 +291,14 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 | `PlotAxisColor` | Function-plot axis / grid / title colour (CSS colour `string`, code-only) |
 | `ChatBgR` `ChatBgG` `ChatBgB` | Chat block background (0–255) |
 | `ChatContainerPadding` · `ChatContainerMargin` · `ChatBorderRadius` | Chat body padding / container margin / right-side radius (the left edge is square and borderless) |
-| `ChatAccentColor` · `ChatGlassColor` | Status-badge colour and glow colour (CSS colour `string`, including alpha; code-only) |
+| `ChatAccentColor` · `ChatGlassColor` | Status-badge colour and glow colour (CSS colour `string`, including alpha; editable in the panel's text inputs) |
 | `ChatGlassBlur` | Status-badge glow blur radius (px) |
 
 **Code highlighting** — highlight.js token colors (`string`, e.g. `"#569cd6"`):
 
 `HljsKeyword`, `HljsLiteral`, `HljsSymbol`, `HljsName`, `HljsBuiltIn`, `HljsType`, `HljsClass`, `HljsNumber`, `HljsString`, `HljsMetaString`, `HljsTitle`, `HljsTitleClass`, `HljsTitleClassInherited`, `HljsParams`, `HljsVariable`, `HljsTemplateVariable`, `HljsComment`, `HljsQuote`, `HljsAttr`, `HljsAttribute`, `HljsMeta`, `HljsTag`, `HljsSelectorAttr`, `HljsSelectorClass`, `HljsSelectorId`, `HljsSelectorPseudo`, `HljsSelectorTag`, `HljsBullet`, `HljsSection`, `HljsLink`, `HljsRegexp`, `HljsTemplateTag`, `HljsDoctag`, `HljsBackground`, `HljsForeground` — plus diff markers `HljsAdditionBg`/`HljsAdditionColor` and `HljsDeletionBg`/`HljsDeletionColor`.
 
-> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow; code-highlighting tokens (`Hljs*`), `PlotAxisColor`, `ChatAccentColor` and `ChatGlassColor` are configured in code (or bound in your own UI).
+> The built-in `MarkdownThemeView` panel covers colors, typography, diagrams, plots and the chat background/padding/radius/glow, including text inputs for the badge and glow colours; code-highlighting tokens (`Hljs*`) and `PlotAxisColor` are configured in code (or bound in your own UI).
 
 ---
 

@@ -343,6 +343,10 @@ public partial class MainViewModel : ViewModelBase
         ```chat[已完成][static]
         任务结束，状态光圈停止旋转。
         ```
+
+        ```chat[自定义图标][svg="M12 2 L22 12 L12 22 L2 12 Z"]
+        自定义 SVG 路径图标。
+        ```
         """;
 
     /// <summary>

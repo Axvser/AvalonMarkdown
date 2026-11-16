@@ -214,6 +214,10 @@ differs per type — `x` linear, `t` parametric, **`theta` polar**:
 ```chat[已完成][static]
 任务结束。
 ```
+
+```chat[自定义图标][svg="M12 2 L22 12 L12 22 L2 12 Z"]
+自定义 SVG 路径。
+```
 ````
 
 The bracketed text is the summary label and is displayed as written. The badge

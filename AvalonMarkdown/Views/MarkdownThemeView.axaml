@@ -59,6 +59,14 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="MinHeight" Value="20"/>
       </Style>
+      <!-- Compact CSS colour input (accepts rgba() / #RRGGBBAA) -->
+      <Style Selector="TextBox.colorinput">
+        <Setter Property="FontFamily" Value="Consolas, monospace"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="5,3"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+      </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -536,6 +544,20 @@
               <TextBlock Classes="chlbl" Foreground="#5aa7f0" Text="B"/>
               <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ChatBgB}" IsSnapToTickEnabled="True" TickFrequency="1"/>
               <TextBlock Classes="cval" Grid.Column="2" Text="{Binding ChatBgB}"/>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8" Margin="0,4,0,0">
+              <Border Classes="swatch" Background="{Binding ChatAccentColor}"/>
+              <TextBlock Grid.Column="1" Classes="flbl" Text="Badge colour"/>
+              <TextBox Grid.Column="2" Classes="colorinput"
+                       Text="{Binding ChatAccentColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       PlaceholderText="rgba(255,255,255,0.76)"/>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,112,*" ColumnSpacing="8">
+              <Border Classes="swatch" Background="{Binding ChatGlassColor}"/>
+              <TextBlock Grid.Column="1" Classes="flbl" Text="Glow colour"/>
+              <TextBox Grid.Column="2" Classes="colorinput"
+                       Text="{Binding ChatGlassColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       PlaceholderText="rgba(255,255,255,0.18)"/>
             </Grid>
             <Grid ColumnDefinitions="112,*,44" ColumnSpacing="8" Margin="0,4,0,0">
               <TextBlock Classes="flbl" Text="Body padding"/>

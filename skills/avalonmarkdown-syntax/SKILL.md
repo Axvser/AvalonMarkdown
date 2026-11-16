@@ -184,6 +184,13 @@ Things that will bite you, all measured:
 
 Omit `width` and it fits the container, which is usually what you want.
 
+**Grid cells stay square.** The library scales x and y independently, so a plot
+area whose aspect differs from the domain aspect would draw rectangular cells.
+For linear axes the renderer expands whichever domain needs it: the requested
+range stays visible, the chart still fills its content area, and the extra range
+just shows more of the graph. Both axes then use the same tick step, so adjacent
+grid lines are the same pixel distance apart. Log axes are not adjusted.
+
 ### Chat / collapsible blocks
 
 ````markdown
@@ -199,12 +206,12 @@ Omit `width` and it fits the container, which is usually what you want.
 ````
 
 A `chat` fence renders a collapsed `<details>` panel; click the summary to expand
-it. The bracketed label is free-form and displayed as written — there is no state
-vocabulary, so `思考中`, `工具调用中`, `Thinking` and anything else are equally
-valid. A second bracket group configures the panel: `open` / `expanded` start it
-expanded, `collapsed` (the default) keeps it shut. `static` / `done` / `idle`
-freezes the top-right status halo, which spins by default while a step is live
-(`spin` / `live` / `active` are explicit aliases).
+it. The bracketed label is free-form and displayed as written — `思考中`,
+`工具调用中`, `Thinking` and anything else are equally valid. A second bracket
+group configures the panel: `open` / `expanded` start it expanded, `collapsed`
+(the default) keeps it shut; `static` / `idle` freezes the top-right status halo
+(`spin` is the default; `live` / `active` are aliases), and the `done` / `error`
+states freeze it by default.
 
 The body is **ordinary Markdown**, rendered recursively, so inline code, lists,
 tables and even other fences work inside it. A label cannot contain `]`. Unlike a
@@ -216,11 +223,12 @@ The top-right status badge picks its icon from the step state: lightbulb for
 chat bubble otherwise. The state is inferred from the label (`思考` / `think`,
 `工具` / `tool`, `完成` / `done`, `错误` / `fail`) or set explicitly with
 `[thinking]`, `[tool]`, `[done]`, `[error]` or `[chat]`. The halo spins while the
-step is live; `done` / `error` freeze it and hide the outer ring entirely, and
-`[spin]` / `[static]` override the animation. A custom 24×24 path can be supplied
-with `svg="..."` (quote it if the path contains commas), or a full `<svg>…</svg>`
-string. MarkdownThemeViewModel exposes the badge colour, glow colour and blur as
-`ChatAccentColor`, `ChatGlassColor` and `ChatGlassBlur`.
+step is live; `done` / `error` hide the outer ring entirely. `[static]` freezes a
+non-terminal halo and `[spin]` forces it to animate. A custom 24×24 path can be
+supplied with `svg="..."` (quote it if the path contains commas), or a full
+`<svg>…</svg>` string; path data is stroked with the badge colour, while a full
+SVG may set its own fill/stroke. MarkdownThemeViewModel exposes the badge colour,
+glow colour and blur as `ChatAccentColor`, `ChatGlassColor` and `ChatGlassBlur`.
 
 ---
 

@@ -521,6 +521,165 @@
         return Math.round(Math.max(240, Math.min(760, avail > 0 ? avail : 550)));
     }
 
+    // The library scales x and y independently. When both domains are given, the
+    // grid cells are only square if the domain spans match the plot area's aspect
+    // ratio. Expand whichever axis needs it (keeping the requested range) so the
+    // chart fills the area with square cells.
+    function squarePlotDomains(opts) {
+        // Only grid plots need the square-cell treatment; without a grid the
+        // author's requested domains should be shown exactly as written.
+        if (!opts.grid) return;
+        var xAxis = opts.xAxis ? shallowCopy(opts.xAxis) : {};
+        var yAxis = opts.yAxis ? shallowCopy(opts.yAxis) : {};
+        var typeX = xAxis.type || 'linear';
+        var typeY = yAxis.type || 'linear';
+        if (typeX !== 'linear' || typeY !== 'linear') {
+            opts.xAxis = xAxis;
+            opts.yAxis = yAxis;
+            return;
+        }
+
+        // These are the library's own margins (internalVars): left 40, right 20,
+        // bottom 20, top 20 — or 40 when a title is present.
+        var width = Number(opts.width) || 550;
+        var height = Number(opts.height) || 350;
+        var top = opts.title ? 40 : 20;
+        var plotW = width - 40 - 20;
+        var plotH = height - top - 20;
+        if (!(plotW > 0 && plotH > 0)) {
+            opts.xAxis = xAxis;
+            opts.yAxis = yAxis;
+            return;
+        }
+
+        var xDom = Object.prototype.toString.call(xAxis.domain) === '[object Array]' &&
+            xAxis.domain.length >= 2 ? xAxis.domain : null;
+        var yDom = Object.prototype.toString.call(yAxis.domain) === '[object Array]' &&
+            yAxis.domain.length >= 2 ? yAxis.domain : null;
+        var xSpan = xDom ? Number(xDom[1]) - Number(xDom[0]) : 0;
+        var ySpan = yDom ? Number(yDom[1]) - Number(yDom[0]) : 0;
+
+        if (xDom && yDom && xSpan > 0 && ySpan > 0) {
+            var wantX = ySpan * plotW / plotH;
+            if (xSpan < wantX) {
+                var midX = (Number(xDom[0]) + Number(xDom[1])) / 2;
+                xAxis.domain = [midX - wantX / 2, midX + wantX / 2];
+            } else {
+                var wantY = xSpan * plotH / plotW;
+                if (ySpan < wantY) {
+                    var midY = (Number(yDom[0]) + Number(yDom[1])) / 2;
+                    yAxis.domain = [midY - wantY / 2, midY + wantY / 2];
+                }
+            }
+        } else if (yDom && !xDom && ySpan > 0) {
+            // When y is explicit and x is not, the library's x default would not
+            // preserve the pixel-per-unit. Derive a centred x range instead.
+            var derivedX = ySpan * plotW / plotH;
+            xAxis.domain = [-derivedX / 2, derivedX / 2];
+        }
+        // x explicit, y absent: the library already derives y from xSpan and the
+        // plot area, which is the square-cell case.
+        opts.xAxis = xAxis;
+        opts.yAxis = yAxis;
+    }
+
+    function niceStep(raw) {
+        if (!(raw > 0) || !isFinite(raw)) return 0;
+        var p = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+        var m = raw / p;
+        return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+    }
+
+    function ticksWithin(dom, step) {
+        var out = [];
+        var start = Math.ceil(dom[0] / step - 1e-9) * step;
+        for (var v = start; v <= dom[1] + step * 1e-9; v += step) {
+            out.push(Math.abs(v) < step * 1e-9 ? 0 : Number(v.toPrecision(12)));
+        }
+        return out;
+    }
+
+    function replaceAxisTicks(axis, values, pixelFor, horizontal, formatter) {
+        var ticks = [];
+        for (var i = 0; i < axis.children.length; i++) {
+            var child = axis.children[i];
+            if (child.classList && child.classList.contains('tick')) ticks.push(child);
+        }
+        if (!ticks.length) return;
+        var template = ticks[0].cloneNode(true);
+        for (var j = 0; j < ticks.length; j++) axis.removeChild(ticks[j]);
+        for (var k = 0; k < values.length; k++) {
+            var g = template.cloneNode(true);
+            g.__data__ = values[k];   // keep the d3 binding honest for probes
+            var p = pixelFor(values[k]);
+            g.setAttribute('transform', horizontal ?
+                'translate(' + p + ',0)' : 'translate(0,' + p + ')');
+            var t = g.querySelector('text');
+            if (t) {
+                var label;
+                try {
+                    label = formatter ? formatter(values[k]) : String(values[k]);
+                } catch (e) {
+                    label = String(values[k]);
+                }
+                t.textContent = label;
+            }
+            axis.appendChild(g);
+        }
+    }
+
+    // Equal x/y scales still leave rectangular GRID CELLS when d3 picks different
+    // tick intervals on the two axes (e.g. every 1 on x and every 0.5 on y). Give
+    // both axes the same nice data step so adjacent grid lines are the same pixel
+    // distance apart. The chart's own selections are stale after drawing, so the
+    // tick groups are replaced directly in the SVG; the line/text template keeps
+    // the library's grid styling and label alignment.
+    function applySquareGridTicks(chart, opts, el) {
+        if (!chart || !chart.meta || !chart.meta.xScale || !chart.meta.yScale) return;
+        if (!opts.grid) return;
+        var typeX = (opts.xAxis && opts.xAxis.type) || 'linear';
+        var typeY = (opts.yAxis && opts.yAxis.type) || 'linear';
+        if (typeX !== 'linear' || typeY !== 'linear') return;
+        var xScale = chart.meta.xScale, yScale = chart.meta.yScale;
+        var xDom = xScale.domain(), yDom = yScale.domain();
+        var xSpan = xDom[1] - xDom[0], ySpan = yDom[1] - yDom[0];
+        if (!(xSpan > 0 && ySpan > 0)) return;
+        var pxX = Math.abs(xScale(1) - xScale(0));
+        var pxY = Math.abs(yScale(1) - yScale(0));
+        if (!(pxX > 0 && pxY > 0)) return;
+        // squarePlotDomains() should already have made these equal; if the
+        // library did something else, leave its own ticks alone.
+        if (Math.abs(pxX / pxY - 1) > 0.02) return;
+
+        var step = niceStep(Math.max(xSpan, ySpan) / 10);
+        if (!(step > 0)) return;
+        var xTicks = ticksWithin(xDom, step);
+        var yTicks = ticksWithin(yDom, step);
+        if (xTicks.length < 2 || yTicks.length < 2) return;
+
+        var svg = el && el.querySelector ? el.querySelector('svg') : null;
+        if (!svg) return;
+        var xAxis = svg.querySelector('.x.axis');
+        var yAxis = svg.querySelector('.y.axis');
+        if (!xAxis || !yAxis) return;
+        var fmtX = null, fmtY = null;
+        try { fmtX = chart.meta.xAxis.tickFormat(); } catch (e) { /* fall back */ }
+        try { fmtY = chart.meta.yAxis.tickFormat(); } catch (e) { /* fall back */ }
+        replaceAxisTicks(xAxis, xTicks, function(v) { return xScale(v); }, true, fmtX);
+        replaceAxisTicks(yAxis, yTicks, function(v) { return yScale(v); }, false, fmtY);
+
+        // Zoom re-renders the library's own axes; reapply after the frame settles
+        // so the grid stays square while the user zooms/pans.
+        if (opts.disableZoom === false && chart.on && !chart.__squareGridZoomHooked) {
+            chart.__squareGridZoomHooked = true;
+            chart.on('zoom', function() {
+                requestAnimationFrame(function() {
+                    applySquareGridTicks(chart, opts, el);
+                });
+            });
+        }
+    }
+
     // Merge order: the user's JSON always wins. Only two things are ever defaulted —
     // a missing width, and a missing disableZoom.
     function buildPlotOptions(parsed, el) {
@@ -536,6 +695,9 @@
         if (opts.width === undefined || opts.width === null) {
             opts.width = plotWidthFor(el);
         }
+
+        // Keep grid cells square for linear axes, whatever the pane aspect is.
+        squarePlotDomains(opts);
 
         // Apply the theme palette by datum index, unless the user set an explicit colour.
         var src = parsed.data;
@@ -700,7 +862,9 @@
         }
 
         try {
-            var chart = window.functionPlot(buildPlotOptions(parsed, el));
+            var opts = buildPlotOptions(parsed, el);
+            var chart = window.functionPlot(opts);
+            applySquareGridTicks(chart, opts, el);
             prunePlotCache(chart);
             installPlotWheelGate(el, parsed);
             // Remembered so the reflow pass can redraw at a new width. The chart is
@@ -788,7 +952,9 @@
                 var w = plotWidthFor(el);
                 if (w === el._plotWidth) return;
                 try {
-                    var chart = window.functionPlot(buildPlotOptions(el._plotOpts, el));
+                    var opts = buildPlotOptions(el._plotOpts, el);
+                    var chart = window.functionPlot(opts);
+                    applySquareGridTicks(chart, opts, el);
                     prunePlotCache(chart);
                     el._plotWidth = w;
                 } catch (e) {

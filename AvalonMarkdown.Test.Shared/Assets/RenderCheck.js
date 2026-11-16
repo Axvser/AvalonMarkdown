@@ -192,20 +192,26 @@
         }
         var chatMalformed = 0;
         each('.chat-block', function (el) {
+            var wrap = el.parentElement;
+            var status = wrap ? wrap.querySelector('.chat-status') : null;
+            var statusClass = status ? String(status.className) : '';
             if (el.tagName !== 'DETAILS' ||
-                !el.parentElement ||
-                !el.parentElement.classList.contains('chat-block-wrap') ||
-                !el.parentElement.querySelector('.chat-status-ring') ||
-                !el.parentElement.querySelector('.chat-status-logo') ||
+                !wrap ||
+                !wrap.classList.contains('chat-block-wrap') ||
+                !status ||
+                !/chat-status-(thinking|tool|done|error|chat)/.test(statusClass) ||
+                !status.querySelector('.chat-status-ring') ||
+                !status.querySelector('.chat-status-logo') ||
                 !el.querySelector('summary.chat-summary') ||
+                !el.querySelector('.chat-chevron svg') ||
                 !el.querySelector('.chat-body')) {
                 chatMalformed++;
             }
         });
         if (chatMalformed) {
             out.findings.push(finding('chat-structure', 'fail',
-                chatMalformed + ' chat block(s) are missing their summary or body element.',
-                '', chatMalformed));
+                chatMalformed + ' chat block(s) are missing their summary, body, ' +
+                'chevron or state badge.', '', chatMalformed));
         }
 
         // ── math ────────────────────────────────────────────────────────────
@@ -367,6 +373,70 @@
             out.findings.push(finding('plot-not-hydrated', 'environment',
                 plotsPending + ' plot container(s) were never hydrated (the marker attribute ' +
                 'is still present) — the rAF pass did not run', '', plotsPending));
+        }
+
+        // ── plot grid cells ─────────────────────────────────────────────────
+        // x and y use independent scales; a content area whose aspect does not
+        // match the domain aspect — or two axes whose tick intervals differ —
+        // draws rectangular grid cells. Compare the pixel distance between
+        // adjacent grid lines, skipping non-linear axes (a log axis has no
+        // constant local tick spacing).
+        var gridBad = 0, gridSample = '';
+        each('.plot-container svg', function (svg) {
+            function axisSpacing(axis) {
+                var ticks = svg.querySelectorAll('g.' + axis + '.axis .tick');
+                if (!ticks.length) return null;
+                // grid:false gives every tick line zero length. There is no grid
+                // to check in that case.
+                var line = ticks[0].querySelector('line');
+                if (!line) return null;
+                var lineLen = parseFloat(line.getAttribute(axis === 'x' ? 'y2' : 'x2'));
+                if (!isFinite(lineLen) || Math.abs(lineLen) < 1) return null;
+                var pts = [];
+                for (var i = 0; i < ticks.length; i++) {
+                    var t = ticks[i];
+                    var v = t.__data__;
+                    if (typeof v !== 'number' || !isFinite(v)) return null;
+                    var m = /translate\(\s*([-\d.]+)[, ]+([-\d.]+)\s*\)/
+                        .exec(t.getAttribute('transform') || '');
+                    if (!m) return null;
+                    pts.push({
+                        v: v,
+                        p: axis === 'x' ? parseFloat(m[1]) : parseFloat(m[2])
+                    });
+                }
+                if (pts.length < 3) return null;
+                var spacings = [];
+                for (var j = 1; j < pts.length; j++) {
+                    var dp = Math.abs(pts[j].p - pts[j - 1].p);
+                    if (dp > 0) spacings.push(dp);
+                }
+                if (spacings.length < 2) return null;
+                var min = spacings[0], max = spacings[0];
+                for (var k = 1; k < spacings.length; k++) {
+                    if (spacings[k] < min) min = spacings[k];
+                    if (spacings[k] > max) max = spacings[k];
+                }
+                // A log axis has wildly different local tick spacing; skip it.
+                if (max - min > max * 0.01) return null;
+                return min;
+            }
+            var sx = axisSpacing('x');
+            var sy = axisSpacing('y');
+            if (sx === null || sy === null || !sx || !sy) return;
+            var ratio = sx / sy;
+            if (ratio < 0.98 || ratio > 1.02) {
+                gridBad++;
+                if (!gridSample) {
+                    gridSample = 'x=' + sx.toFixed(2) + 'px, y=' +
+                        sy.toFixed(2) + 'px between grid lines';
+                }
+            }
+        });
+        if (gridBad) {
+            out.findings.push(finding('plot-grid-not-square', 'fail',
+                gridBad + ' plot(s) draw rectangular grid cells (' + gridSample + ')',
+                '', gridBad));
         }
 
         // ── vacuity qualifier ───────────────────────────────────────────────
