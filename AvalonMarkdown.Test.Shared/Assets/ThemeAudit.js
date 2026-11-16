@@ -53,6 +53,14 @@
             '<div class="embed-container"><div class="embed-facade"><span class="embed-play"></span><span class="embed-label">l</span></div></div>' +
             '<div class="mermaid-container"><svg></svg></div>' +
             '<div class="puml-container puml-dark"><img alt=""/></div>' +
+            '<div class="plot-container"><svg class="function-plot"></svg></div>' +
+            '<div class="chat-block-wrap"><details class="chat-block">' +
+            '<summary class="chat-summary"><span class="chat-chevron">▸</span>' +
+            '<span class="chat-label">chat</span></summary>' +
+            '<div class="chat-body">body</div></details>' +
+            '<span class="chat-status chat-status-live"><span class="chat-status-ring"></span>' +
+            '<span class="chat-status-logo"><svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>' +
+            '</span></span></div>' +
             '<pre class="hljs"><code class="hljs">' +
             '<span class="hljs-keyword">kw</span><span class="hljs-literal">lit</span>' +
             '<span class="hljs-symbol">sy</span><span class="hljs-name">nm</span>' +
@@ -298,6 +306,8 @@
                 var tunable=false;
                 if ((dp==='font-size'||dp==='line-height') && ck.chunks.indexOf('body')>=0) tunable=true;
                 if (dp==='font-size' && ck.chunks.indexOf('code')>=0) tunable=true;
+                if ((dp==='margin-top'||dp==='margin-bottom') &&
+                    (ck.chunks.indexOf('h1')>=0 || ck.chunks.indexOf('h2')>=0 || ck.chunks.indexOf('h3')>=0)) tunable=true;
                 if (dp==='border-radius' && (ck.chunks.indexOf('pre')>=0||ck.chunks.indexOf('.code-block-wrapper')>=0)) tunable=true;
                 if (ck.chunks.indexOf('.hljs')>=0 && (dp==='background'||dp==='color')) tunable=true;
                 for (var cc=0;cc<ck.chunks.length;cc++){
@@ -305,7 +315,11 @@
                     if (ch.indexOf('.hljs-')===0 && (dp==='color'||dp==='background')) tunable=true;
                     if (ch.indexOf('.mermaid-container')===0) tunable=true;
                     if (ch.indexOf('.puml-container')===0) tunable=true;
+                    if (ch.indexOf('.plot-container')===0) tunable=true;
                     if (ch==='.puml-dark img' && dp==='filter') tunable=true;
+                    if (ch==='.chat-block-wrap' && dp==='margin') tunable=true;
+                    if (ch==='.chat-block' && dp==='border-radius') tunable=true;
+                    if (ch==='.chat-body' && dp==='padding') tunable=true;
                 }
                 var label=(ck.chunks[0]||'rule')+' · '+dp;
                 if (!els.length){

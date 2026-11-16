@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Avalonia.Threading;
@@ -136,11 +137,40 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(TableBgHex));
         OnPropertyChanged(nameof(MermaidBgHex));
         OnPropertyChanged(nameof(PumlBgHex));
+        OnPropertyChanged(nameof(PlotBgHex));
+        OnPropertyChanged(nameof(ChatBgHex));
+        OnPropertyChanged(nameof(ChatAccentColor));
+        OnPropertyChanged(nameof(ChatGlassColor));
+        OnPropertyChanged(nameof(PlotAxisColor));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(BorderRadius));
         MarkDirty();
         return true;
     }
+
+    // Alpha is edited as a 0-255 channel so it uses the same slider as R/G/B.
+    private static string AlphaFraction(int a)
+        => (Math.Max(0, Math.Min(255, a)) / 255.0)
+            .ToString("0.##", CultureInfo.InvariantCulture);
+
+    // Public knobs can be set from code as well as from sliders. Clamp on the way
+    // OUT, so an out-of-range value can never produce an invalid colour or a CSS
+    // declaration of "NaN"/"Infinity" — either of which browsers silently drop.
+
+    private static int Byte(int v) => v < 0 ? 0 : v > 255 ? 255 : v;
+
+    private static string Hex(int r, int g, int b)
+        => $"#{Byte(r):X2}{Byte(g):X2}{Byte(b):X2}";
+
+    private static string Number(double v, double min, double max, string format = "0.###")
+    {
+        if (!double.IsFinite(v)) v = min;
+        return Math.Clamp(v, min, max).ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    private static string Px(double v, double min, double max) => Number(v, min, max) + "px";
+
+    private static int IntRange(int v, int min, int max) => Math.Clamp(v, min, max);
 
     // ─── Core colors (R/G/B triplets, 0-255) ───
 
@@ -276,65 +306,71 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     #region Typography properties
     private double _codeFontSize = 13;
     private int _borderRadius = 4;
+    private double _headingMarginTop = 20;
+    private double _headingMarginBottom = 12;
 
     [Description("代码字体大小（px）")]
     public double CodeFontSize  { get => _codeFontSize; set => SetProperty(ref _codeFontSize, value); }
     [Description("代码块/pre 圆角半径（px）")]
     public int    BorderRadius  { get => _borderRadius; set => SetProperty(ref _borderRadius, value); }
+    [Description("h1/h2/h3 上边距（px）")]
+    public double HeadingMarginTop { get => _headingMarginTop; set => SetProperty(ref _headingMarginTop, value); }
+    [Description("h1/h2/h3 下边距（px）")]
+    public double HeadingMarginBottom { get => _headingMarginBottom; set => SetProperty(ref _headingMarginBottom, value); }
     #endregion
 
     // ─── Derived computed properties ───
 
     [Description("派生：页面主背景色（只读）")]
-    public string BgPrimary => $"#{BgR:X2}{BgG:X2}{BgB:X2}";
+    public string BgPrimary => Hex(BgR, BgG, BgB);
     [Description("派生：次级背景色（只读）")]
-    public string BgSecondary => $"#{BgSecR:X2}{BgSecG:X2}{BgSecB:X2}";
+    public string BgSecondary => Hex(BgSecR, BgSecG, BgSecB);
     [Description("派生：正文文字色（只读）")]
-    public string TextPrimary => $"#{TextR:X2}{TextG:X2}{TextB:X2}";
+    public string TextPrimary => Hex(TextR, TextG, TextB);
     [Description("派生：次级文字色（只读）")]
-    public string TextSecondary => $"#{TextSecR:X2}{TextSecG:X2}{TextSecB:X2}";
+    public string TextSecondary => Hex(TextSecR, TextSecG, TextSecB);
     [Description("派生：链接色（只读）")]
-    public string LinkColor => $"#{LinkR:X2}{LinkG:X2}{LinkB:X2}";
+    public string LinkColor => Hex(LinkR, LinkG, LinkB);
     [Description("派生：标题文字色（只读）")]
-    public string HeadingColor => $"#{HeadingR:X2}{HeadingG:X2}{HeadingB:X2}";
+    public string HeadingColor => Hex(HeadingR, HeadingG, HeadingB);
     [Description("派生：行内代码文字色（只读）")]
-    public string InlineCodeColor => $"#{CodeR:X2}{CodeG:X2}{CodeB:X2}";
+    public string InlineCodeColor => Hex(CodeR, CodeG, CodeB);
     [Description("派生：边框色（只读）")]
-    public string BorderColor => $"#{BorderR:X2}{BorderG:X2}{BorderB:X2}";
+    public string BorderColor => Hex(BorderR, BorderG, BorderB);
     [Description("派生：行内代码背景色（只读）")]
-    public string InlineCodeBg => $"#{CodeBgR:X2}{CodeBgG:X2}{CodeBgB:X2}";
+    public string InlineCodeBg => Hex(CodeBgR, CodeBgG, CodeBgB);
     [Description("派生：引用块边框色（=链接色，只读）")]
     public string BlockquoteBorder => LinkColor;
     [Description("派生：引用块背景色（只读）")]
-    public string BlockquoteBg => $"rgba({BgR},{BgG},{BgB},0.2)";
+    public string BlockquoteBg => $"rgba({Byte(BgR)},{Byte(BgG)},{Byte(BgB)},0.2)";
     [Description("派生：代码块背景色（只读）")]
-    public string PreBg => $"#{PreBgR:X2}{PreBgG:X2}{PreBgB:X2}";
+    public string PreBg => Hex(PreBgR, PreBgG, PreBgB);
     [Description("派生：表头背景色（只读）")]
-    public string TableHeaderBg => $"#{TableBgR:X2}{TableBgG:X2}{TableBgB:X2}";
+    public string TableHeaderBg => Hex(TableBgR, TableBgG, TableBgB);
 
     // ─── Hex preview properties for UI binding ───
     [Description("主背景色 HEX 预览（只读）")]
-    public string BgHex      => $"#{BgR:X2}{BgG:X2}{BgB:X2}";
+    public string BgHex      => Hex(BgR, BgG, BgB);
     [Description("正文文字色 HEX 预览（只读）")]
-    public string TextHex    => $"#{TextR:X2}{TextG:X2}{TextB:X2}";
+    public string TextHex    => Hex(TextR, TextG, TextB);
     [Description("链接色 HEX 预览（只读）")]
-    public string LinkHex    => $"#{LinkR:X2}{LinkG:X2}{LinkB:X2}";
+    public string LinkHex    => Hex(LinkR, LinkG, LinkB);
     [Description("标题文字色 HEX 预览（只读）")]
-    public string HeadingHex => $"#{HeadingR:X2}{HeadingG:X2}{HeadingB:X2}";
+    public string HeadingHex => Hex(HeadingR, HeadingG, HeadingB);
     [Description("行内代码文字色 HEX 预览（只读）")]
-    public string CodeHex    => $"#{CodeR:X2}{CodeG:X2}{CodeB:X2}";
+    public string CodeHex    => Hex(CodeR, CodeG, CodeB);
     [Description("边框色 HEX 预览（只读）")]
-    public string BorderHex  => $"#{BorderR:X2}{BorderG:X2}{BorderB:X2}";
+    public string BorderHex  => Hex(BorderR, BorderG, BorderB);
     [Description("次级背景色 HEX 预览（只读）")]
-    public string BgSecHex   => $"#{BgSecR:X2}{BgSecG:X2}{BgSecB:X2}";
+    public string BgSecHex   => Hex(BgSecR, BgSecG, BgSecB);
     [Description("次级文字色 HEX 预览（只读）")]
-    public string TextSecHex => $"#{TextSecR:X2}{TextSecG:X2}{TextSecB:X2}";
+    public string TextSecHex => Hex(TextSecR, TextSecG, TextSecB);
     [Description("行内代码背景色 HEX 预览（只读）")]
-    public string CodeBgHex  => $"#{CodeBgR:X2}{CodeBgG:X2}{CodeBgB:X2}";
+    public string CodeBgHex  => Hex(CodeBgR, CodeBgG, CodeBgB);
     [Description("代码块背景色 HEX 预览（只读）")]
-    public string PreBgHex   => $"#{PreBgR:X2}{PreBgG:X2}{PreBgB:X2}";
+    public string PreBgHex   => Hex(PreBgR, PreBgG, PreBgB);
     [Description("表头背景色 HEX 预览（只读）")]
-    public string TableBgHex => $"#{TableBgR:X2}{TableBgG:X2}{TableBgB:X2}";
+    public string TableBgHex => Hex(TableBgR, TableBgG, TableBgB);
     // ──────────────────────────────────────────────────
 
     // ════════════════════════════════════════════════════════════
@@ -353,7 +389,7 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     [Description("Mermaid 容器背景色的蓝色通道（0-255）")]
     public int MermaidBgB { get => _mermaidBgB; set => SetProperty(ref _mermaidBgB, value); }
     [Description("Mermaid 容器背景色 HEX 预览（只读）")]
-    public string MermaidBgHex => $"#{MermaidBgR:X2}{MermaidBgG:X2}{MermaidBgB:X2}";
+    public string MermaidBgHex => Hex(MermaidBgR, MermaidBgG, MermaidBgB);
 
     private double _mermaidContainerPadding = 8;
     private double _mermaidContainerMargin = 16;
@@ -383,7 +419,7 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     [Description("PlantUML 容器背景色的蓝色通道（0-255）")]
     public int PumlBgB { get => _pumlBgB; set => SetProperty(ref _pumlBgB, value); }
     [Description("PlantUML 容器背景色 HEX 预览（只读）")]
-    public string PumlBgHex => $"#{PumlBgR:X2}{PumlBgG:X2}{PumlBgB:X2}";
+    public string PumlBgHex => Hex(PumlBgR, PumlBgG, PumlBgB);
 
     private double _pumlContainerPadding = 12;
     private double _pumlContainerMargin = 8;
@@ -398,6 +434,108 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
     public int    PumlBorderRadius     { get => _pumlBorderRadius;     set => SetProperty(ref _pumlBorderRadius,     value); }
     [Description("暗色下 PlantUML 反色强度（0-1）")]
     public double PumlDarkInvert       { get => _pumlDarkInvert;       set => SetProperty(ref _pumlDarkInvert,       value); }
+    #endregion
+
+    // ════════════════════════════════════════════════════════════
+    //  Function Plot section
+    // ════════════════════════════════════════════════════════════
+
+    #region Function plot properties
+    // Function plot container background
+    private int _plotBgR = 30;
+    private int _plotBgG = 30;
+    private int _plotBgB = 30;
+    [Description("函数图像容器背景色的红色通道（0-255）")]
+    public int PlotBgR { get => _plotBgR; set => SetProperty(ref _plotBgR, value); }
+    [Description("函数图像容器背景色的绿色通道（0-255）")]
+    public int PlotBgG { get => _plotBgG; set => SetProperty(ref _plotBgG, value); }
+    [Description("函数图像容器背景色的蓝色通道（0-255）")]
+    public int PlotBgB { get => _plotBgB; set => SetProperty(ref _plotBgB, value); }
+    [Description("函数图像容器背景色 HEX 预览（只读）")]
+    public string PlotBgHex => Hex(PlotBgR, PlotBgG, PlotBgB);
+
+    private double _plotContainerPadding = 8;
+    private double _plotContainerMargin = 16;
+    private int _plotBorderRadius = 4;
+    private int _plotAxisR = 204;
+    private int _plotAxisG = 204;
+    private int _plotAxisB = 204;
+
+    [Description("函数图像容器内边距（px）")]
+    public double PlotContainerPadding { get => _plotContainerPadding; set => SetProperty(ref _plotContainerPadding, value); }
+    [Description("函数图像容器上下外边距（px）")]
+    public double PlotContainerMargin  { get => _plotContainerMargin;  set => SetProperty(ref _plotContainerMargin,  value); }
+    [Description("函数图像容器圆角（px）")]
+    public int    PlotBorderRadius     { get => _plotBorderRadius;     set => SetProperty(ref _plotBorderRadius,     value); }
+    [Description("函数图像坐标轴红色通道（0-255）")]
+    public int PlotAxisR { get => _plotAxisR; set => SetProperty(ref _plotAxisR, value); }
+    [Description("函数图像坐标轴绿色通道（0-255）")]
+    public int PlotAxisG { get => _plotAxisG; set => SetProperty(ref _plotAxisG, value); }
+    [Description("函数图像坐标轴蓝色通道（0-255）")]
+    public int PlotAxisB { get => _plotAxisB; set => SetProperty(ref _plotAxisB, value); }
+    [Description("派生：函数图像坐标轴颜色（只读）")]
+    public string PlotAxisColor => Hex(PlotAxisR, PlotAxisG, PlotAxisB);
+    #endregion
+
+    // ════════════════════════════════════════════════════════════
+    //  Chat / collapsible blocks section
+    // ════════════════════════════════════════════════════════════
+
+    #region Chat properties
+    // Chat block background
+    private int _chatBgR = 37;
+    private int _chatBgG = 37;
+    private int _chatBgB = 38;
+    [Description("对话块背景色的红色通道（0-255）")]
+    public int ChatBgR { get => _chatBgR; set => SetProperty(ref _chatBgR, value); }
+    [Description("对话块背景色的绿色通道（0-255）")]
+    public int ChatBgG { get => _chatBgG; set => SetProperty(ref _chatBgG, value); }
+    [Description("对话块背景色的蓝色通道（0-255）")]
+    public int ChatBgB { get => _chatBgB; set => SetProperty(ref _chatBgB, value); }
+    [Description("对话块背景色 HEX 预览（只读）")]
+    public string ChatBgHex => Hex(ChatBgR, ChatBgG, ChatBgB);
+
+    private double _chatContainerPadding = 12;
+    private double _chatContainerMargin = 16;
+    private int _chatBorderRadius = 6;
+    private int _chatAccentR = 255;
+    private int _chatAccentG = 255;
+    private int _chatAccentB = 255;
+    private int _chatAccentA = 194;
+    private int _chatGlassR = 255;
+    private int _chatGlassG = 255;
+    private int _chatGlassB = 255;
+    private int _chatGlassA = 46;
+    private double _chatGlassBlur = 5;
+
+    [Description("对话块正文内边距（px）")]
+    public double ChatContainerPadding { get => _chatContainerPadding; set => SetProperty(ref _chatContainerPadding, value); }
+    [Description("对话块上下外边距（px）")]
+    public double ChatContainerMargin  { get => _chatContainerMargin;  set => SetProperty(ref _chatContainerMargin,  value); }
+    [Description("对话块右侧圆角（px；左侧始终为直角）")]
+    public int    ChatBorderRadius     { get => _chatBorderRadius;     set => SetProperty(ref _chatBorderRadius,     value); }
+    [Description("状态徽标红色通道（0-255）")]
+    public int ChatAccentR { get => _chatAccentR; set => SetProperty(ref _chatAccentR, value); }
+    [Description("状态徽标绿色通道（0-255）")]
+    public int ChatAccentG { get => _chatAccentG; set => SetProperty(ref _chatAccentG, value); }
+    [Description("状态徽标蓝色通道（0-255）")]
+    public int ChatAccentB { get => _chatAccentB; set => SetProperty(ref _chatAccentB, value); }
+    [Description("状态徽标透明度（0-255）")]
+    public int ChatAccentA { get => _chatAccentA; set => SetProperty(ref _chatAccentA, value); }
+    [Description("派生：状态徽标颜色（只读）")]
+    public string ChatAccentColor => $"rgba({ChatAccentR},{ChatAccentG},{ChatAccentB},{AlphaFraction(ChatAccentA)})";
+    [Description("状态徽标辉光红色通道（0-255）")]
+    public int ChatGlassR { get => _chatGlassR; set => SetProperty(ref _chatGlassR, value); }
+    [Description("状态徽标辉光绿色通道（0-255）")]
+    public int ChatGlassG { get => _chatGlassG; set => SetProperty(ref _chatGlassG, value); }
+    [Description("状态徽标辉光蓝色通道（0-255）")]
+    public int ChatGlassB { get => _chatGlassB; set => SetProperty(ref _chatGlassB, value); }
+    [Description("状态徽标辉光透明度（0-255）")]
+    public int ChatGlassA { get => _chatGlassA; set => SetProperty(ref _chatGlassA, value); }
+    [Description("派生：状态徽标辉光颜色（只读）")]
+    public string ChatGlassColor => $"rgba({ChatGlassR},{ChatGlassG},{ChatGlassB},{AlphaFraction(ChatGlassA)})";
+    [Description("状态徽标辉光模糊半径（px）")]
+    public double ChatGlassBlur        { get => _chatGlassBlur;        set => SetProperty(ref _chatGlassBlur,        value); }
     #endregion
 
     // ──────────────────────────────────────────────────
@@ -577,14 +715,14 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine("html.theme-dark h1, html.theme-light h1,");
         sb.AppendLine("html.theme-dark h2, html.theme-light h2,");
         sb.AppendLine("html.theme-dark h3, html.theme-light h3 {");
-        sb.AppendLine("    margin-top: 20px; margin-bottom: 12px;");
+        sb.AppendLine($"    margin-top: {Px(HeadingMarginTop, 0, 200)}; margin-bottom: {Px(HeadingMarginBottom, 0, 200)};");
         sb.AppendLine("}");
         sb.AppendLine("html.theme-dark pre, html.theme-light pre,");
         sb.AppendLine("html.theme-dark .code-block-wrapper, html.theme-light .code-block-wrapper {");
-        sb.AppendLine($"    border-radius: {BorderRadius}px;");
+        sb.AppendLine($"    border-radius: {IntRange(BorderRadius, 0, 64)}px;");
         sb.AppendLine("}");
         sb.AppendLine("html.theme-dark code, html.theme-light code {");
-        sb.AppendLine($"    font-size: {CodeFontSize}px;");
+        sb.AppendLine($"    font-size: {Px(CodeFontSize, 1, 96)};");
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("/* === Custom highlight.js base === */");
@@ -657,9 +795,9 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine("/* === Mermaid diagram overrides === */");
         sb.AppendLine($".mermaid-container {{");
         sb.AppendLine($"    background: {MermaidBgHex};");
-        sb.AppendLine($"    padding: {MermaidContainerPadding}px;");
-        sb.AppendLine($"    margin: {MermaidContainerMargin}px 0;");
-        sb.AppendLine($"    border-radius: {MermaidBorderRadius}px;");
+        sb.AppendLine($"    padding: {Px(MermaidContainerPadding, 0, 200)};");
+        sb.AppendLine($"    margin: {Px(MermaidContainerMargin, 0, 200)} 0;");
+        sb.AppendLine($"    border-radius: {IntRange(MermaidBorderRadius, 0, 64)}px;");
         sb.AppendLine("}");
         sb.AppendLine();
 
@@ -669,15 +807,55 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         sb.AppendLine("/* === PlantUML diagram overrides === */");
         sb.AppendLine($".puml-container {{");
         sb.AppendLine($"    background: {PumlBgHex};");
-        sb.AppendLine($"    padding: {PumlContainerPadding}px;");
-        sb.AppendLine($"    margin: {PumlContainerMargin}px 0;");
-        sb.AppendLine($"    border-radius: {PumlBorderRadius}px;");
+        sb.AppendLine($"    padding: {Px(PumlContainerPadding, 0, 200)};");
+        sb.AppendLine($"    margin: {Px(PumlContainerMargin, 0, 200)} 0;");
+        sb.AppendLine($"    border-radius: {IntRange(PumlBorderRadius, 0, 64)}px;");
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine(".puml-dark img {");
-        sb.AppendLine($"    filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
-        sb.AppendLine($"    -webkit-filter: invert({PumlDarkInvert:F3}) hue-rotate(180deg);");
+        sb.AppendLine($"    filter: invert({Number(PumlDarkInvert, 0, 1, "F3")}) hue-rotate(180deg);");
+        sb.AppendLine($"    -webkit-filter: invert({Number(PumlDarkInvert, 0, 1, "F3")}) hue-rotate(180deg);");
         sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  Function plots
+        // ════════════════════════════════════════════════════════════
+        // `color` drives the whole coordinate frame: renderer.css overrides the
+        // library's hard-coded black strokes with currentColor and sets
+        // fill: currentColor on the svg, so one value colours the grid, the axes,
+        // the tick labels and the title.
+        sb.AppendLine("/* === Function plot overrides === */");
+        sb.AppendLine($".plot-container {{");
+        sb.AppendLine($"    background: {PlotBgHex};");
+        sb.AppendLine($"    padding: {Px(PlotContainerPadding, 0, 200)};");
+        sb.AppendLine($"    margin: {Px(PlotContainerMargin, 0, 200)} 0;");
+        sb.AppendLine($"    border-radius: {IntRange(PlotBorderRadius, 0, 64)}px;");
+        sb.AppendLine($"    color: {PlotAxisColor};");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ════════════════════════════════════════════════════════════
+        //  Chat / collapsible blocks
+        // ════════════════════════════════════════════════════════════
+        // Chat panel surface and the top-right status badge's colour / glow.
+        sb.AppendLine("/* === Chat block overrides === */");
+        sb.AppendLine("html.theme-dark, html.theme-light {");
+        sb.AppendLine($"    --chat-bg: {ChatBgHex};");
+        sb.AppendLine($"    --chat-status-color: {ChatAccentColor};");
+        sb.AppendLine($"    --chat-status-glow: {ChatGlassColor};");
+        sb.AppendLine($"    --chat-glass-blur: {Px(ChatGlassBlur, 0, 100)};");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-block-wrap, html.theme-light .chat-block-wrap {");
+        sb.AppendLine($"    margin: {Px(ChatContainerMargin, 0, 200)} 0;");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-block, html.theme-light .chat-block {");
+        sb.AppendLine($"    border-radius: 0 {IntRange(ChatBorderRadius, 0, 64)}px {IntRange(ChatBorderRadius, 0, 64)}px 0;");
+        sb.AppendLine("}");
+        sb.AppendLine("html.theme-dark .chat-body, html.theme-light .chat-body {");
+        sb.AppendLine($"    padding: {Px(ChatContainerPadding, 0, 200)};");
+        sb.AppendLine("}");
+        sb.AppendLine();
 
         return sb.ToString();
     }

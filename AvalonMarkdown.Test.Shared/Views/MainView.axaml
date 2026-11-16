@@ -10,7 +10,7 @@
                 BorderBrush="{DynamicResource SystemAccentColor}"
                 BorderThickness="0,0,0,1"
                 Padding="8,4">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <TextBlock Grid.Column="0"
                            Text="Presets:"
                            FontSize="12"
@@ -32,14 +32,36 @@
                 <Separator Grid.Column="4" Width="1" Height="16"
                            Background="#3c3c3c" Margin="8,0" VerticalAlignment="Center"/>
 
-                <Button Grid.Column="5"
+                <!-- One showcase per special member, each a large set of cases. -->
+                <TextBlock Grid.Column="5"
+                           Text="Special:"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <Button Grid.Column="6"
+                        x:Name="TablesPresetButton"
+                        Content="Tables"
+                        FontSize="11" Padding="6,2" Margin="2,0"
+                        ToolTip.Tip="Every table variant — alignment, escaped pipes, CJK, wide, degenerate"/>
+                <Button Grid.Column="7"
+                        x:Name="DiagramsPresetButton"
+                        Content="Diagrams"
+                        FontSize="11" Padding="6,2" Margin="2,0"
+                        ToolTip.Tip="Mermaid and PlantUML diagram types, including deliberate failures"/>
+                <Button Grid.Column="8"
+                        x:Name="PlotsPresetButton"
+                        Content="Plots"
+                        FontSize="11" Padding="6,2" Margin="2,0"
+                        ToolTip.Tip="Function plots — the full easing set plus other graph types"/>
+
+                <Button Grid.Column="9"
                         x:Name="MultiViewToggle"
                         Content="Single"
                         FontSize="11" Padding="8,2"
                         ToolTip.Tip="Toggle single/multi-view comparison mode"/>
 
                 <!-- Single view timing info -->
-                <TextBlock Grid.Column="6"
+                <TextBlock Grid.Column="10"
                            x:Name="TimingText"
                            Text="{Binding TimingInfo}"
                            FontSize="11"

@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using AvalonMarkdown.ViewModels;
@@ -17,6 +18,8 @@ namespace AvalonMarkdown.Views;
 public partial class MarkdownThemeView : UserControl
 {
     private readonly MarkdownThemeViewModel _themeConfig;
+    private MarkdownView? _attachedTarget;
+    private EventHandler? _readyHandler;
 
     /// <summary>
     /// The MarkdownThemeViewModel driving this editor.
@@ -62,19 +65,73 @@ public partial class MarkdownThemeView : UserControl
 
     private static void OnTargetChanged(MarkdownThemeView sender, AvaloniaPropertyChangedEventArgs e)
     {
-        var oldTarget = e.OldValue as MarkdownView;
-        var newTarget = e.NewValue as MarkdownView;
+        sender.AttachTarget(e.NewValue as MarkdownView);
+    }
 
-        if (oldTarget is not null)
-            sender._themeConfig.StopAutoApply();
+    /// <summary>
+    /// Detach from the previous preview and attach to the new one. The old
+    /// OnReady subscription is removed: without this, changing Target repeatedly
+    /// leaves each former preview registered and re-applying CSS forever.
+    /// </summary>
+    private void AttachTarget(MarkdownView? target)
+    {
+        DetachTarget();
 
-        if (newTarget is not null)
+        _attachedTarget = target;
+        if (target is null)
+            return;
+
+        if (target.IsReady)
         {
-            newTarget.OnReady += (_, _) =>
-            {
-                sender._themeConfig.RegisterRenderer(newTarget);
-                sender._themeConfig.StartAutoApply();
-            };
+            _themeConfig.RegisterRenderer(target);
+            _themeConfig.StartAutoApply();
+            return;
         }
+
+        _readyHandler = (_, _) =>
+        {
+            // The target may have changed while the preview was loading.
+            if (!ReferenceEquals(_attachedTarget, target))
+                return;
+            _themeConfig.RegisterRenderer(target);
+            _themeConfig.StartAutoApply();
+        };
+        target.OnReady += _readyHandler;
+    }
+
+    private void DetachTarget()
+    {
+        if (_attachedTarget is not null && _readyHandler is not null)
+            _attachedTarget.OnReady -= _readyHandler;
+
+        _readyHandler = null;
+        _attachedTarget = null;
+        _themeConfig.StopAutoApply();
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+
+        // The editor may have been detached while the preview stayed alive.
+        if (_attachedTarget is null && Target is { } target)
+        {
+            AttachTarget(target);
+        }
+        else if (_attachedTarget is { IsReady: true })
+        {
+            _themeConfig.RegisterRenderer(_attachedTarget);
+            _themeConfig.StartAutoApply();
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+
+        // Stop the 10 Hz timer while the editor is not visible. The Target
+        // property (and its OnReady subscription) is kept so re-attaching resumes
+        // without the caller having to re-bind.
+        _themeConfig.StopAutoApply();
     }
 }

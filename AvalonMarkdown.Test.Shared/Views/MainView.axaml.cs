@@ -22,6 +22,13 @@ public partial class MainView : UserControl
     private readonly StringBuilder _captureLog = new();
     private bool _captureDone;
     private bool _captureStarted;
+    // Fence-dispatch check: unlike the other capture expectations (which are logged for a
+    // human to read), this one gates the exit code — see the fence-dispatch phase.
+    private bool _fenceDispatchOk = true;
+    // Showcase presets must load from their embedded assets; see the showcase phase.
+    private bool _showcaseOk = true;
+    // Last document a phase rendered, so an identical one can be forced; see RunPhaseAsync.
+    private string? _lastPhaseText;
 
     // ── Repeatable theme-CSS audit (AVALON_THEME_AUDIT=1) ──
     private readonly StringBuilder _auditLog = new();
@@ -30,6 +37,26 @@ public partial class MainView : UserControl
 
     public MainView()
     {
+        // Driver arbitration. Each capture driver owns the single shared Preview control
+        // and terminates the process with Environment.Exit, so at most one may run; two
+        // at once means the first to finish kills the other mid-run. Checked before
+        // InitializeComponent so a misconfiguration costs ~0s instead of a full
+        // WebView2 + CDN startup. (AVALON_THEME_AUDIT_KEEP is a modifier, not a driver.)
+        var drivers = new List<string>();
+        if (Environment.GetEnvironmentVariable("AVALON_CAPTURE_ERRORS") == "1") drivers.Add("AVALON_CAPTURE_ERRORS");
+        if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1") drivers.Add("AVALON_THEME_AUDIT");
+        if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1") drivers.Add("AVALON_RENDER_CHECK");
+        if (Environment.GetEnvironmentVariable("AVALON_FAULT_CHECK") == "1") drivers.Add("AVALON_FAULT_CHECK");
+        if (drivers.Count > 1)
+        {
+            Console.Error.WriteLine(
+                $"[drivers] {drivers.Count} capture drivers enabled at once: {string.Join(", ", drivers)}. " +
+                "They share one preview control and each exits the process - enable exactly one.");
+            Console.Out.Flush();
+            Console.Error.Flush();
+            Environment.Exit(2);
+        }
+
         InitializeComponent();
 
         _vm = new MainViewModel();
@@ -51,6 +78,16 @@ public partial class MainView : UserControl
         if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1")
             StartThemeAudit();
 
+        // When AVALON_RENDER_CHECK=1, render one markdown file and report every
+        // failure surface, then exit. Driven by skills/avalonmarkdown-syntax.
+        if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1")
+            StartRenderCheck();
+
+        // When AVALON_FAULT_CHECK=1, drive the preview with hostile input and
+        // removed CDN libraries, then exit. See Assets/FaultCheck.js.
+        if (Environment.GetEnvironmentVariable("AVALON_FAULT_CHECK") == "1")
+            StartFaultCheck();
+
         // LinkClicked example: intercept app:// links for in-app navigation.
         // Everything else (https://, mailto:, …) is left unhandled and still opens
         // in the system browser via the control's default behavior.
@@ -60,6 +97,13 @@ public partial class MainView : UserControl
         SimplePresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown();
         FullPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown();
         BigDocPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown();
+
+        // One showcase per special member. Each is a large set of cases for a single
+        // kind of element, so a regression in one member is obvious rather than
+        // buried in the general tour.
+        TablesPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetTablesShowcase();
+        DiagramsPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetDiagramsShowcase();
+        PlotsPresetButton.Click += (_, _) => _vm.MarkdownText = MainViewModel.GetPlotsShowcase();
 
         // Multi-view toggle
         MultiViewToggle.Click += (_, _) => ToggleMultiView();
@@ -114,10 +158,14 @@ public partial class MainView : UserControl
         {
             // Each phase waits for the JS "✅ Render complete" signal (via ConsoleMessage),
             // then a grace delay lets async mermaid/plantuml errors land.
-            await RunPhaseAsync("Simple", () => _vm.MarkdownText = MainViewModel.GetSimpleMarkdown());
-            await RunPhaseAsync("Full (incl. intentionally-broken mermaid/plantuml)",
-                () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
-            await RunPhaseAsync("BigDoc", () => _vm.MarkdownText = MainViewModel.GetBigDocumentMarkdown());
+            await RunPhaseAsync("Simple", MainViewModel.GetSimpleMarkdown());
+            // The label used to claim "intentionally-broken mermaid/plantuml"; it was never
+            // true — those four fences are all valid, and the only deliberate break is the
+            // plot JSON. Diagram failure surfaces are covered by the render-check driver's
+            // fixtures (skills/avalonmarkdown-syntax/fixtures), which assert on them.
+            await RunPhaseAsync("Full (incl. an intentionally-broken plot)",
+                MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("BigDoc", MainViewModel.GetBigDocumentMarkdown());
 
             // Verify the native scroll-progress API round-trips through the WebView.
             _captureLog.AppendLine("\n=== Phase: ScrollToProgressAsync round-trip ===");
@@ -184,7 +232,7 @@ public partial class MainView : UserControl
             // Verify the app:// link pipeline end-to-end: click dispatch → post('LINK')
             // → C# LinkClicked → demo swaps content (this is what Android hit).
             _captureLog.AppendLine("\n=== Phase: app:// link interception ===");
-            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
             var clickResult = await _singlePreview.InvokeScriptAsync(
                 "var a = document.querySelector('a[data-href=\"app://about\"]'); a ? (a.click(), 1) : 0;");
             await Task.Delay(500);
@@ -210,10 +258,100 @@ public partial class MainView : UserControl
             // Facade video embeds: the Full doc has 3 videos → 3 facades, 0 iframes
             // (platform players must NOT load until the user clicks).
             _captureLog.AppendLine("\n=== Phase: video facade (click-to-play) ===");
-            await RunPhaseAsync("Full", () => _vm.MarkdownText = MainViewModel.GetDefaultMarkdown());
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
             var facadeCount = await _singlePreview!.InvokeScriptAsync("document.querySelectorAll('.embed-facade').length");
             var iframeCount = await _singlePreview.InvokeScriptAsync("document.querySelectorAll('.embed-container iframe').length");
             _captureLog.AppendLine($"[facade] facades={facadeCount} (expect 3) iframes={iframeCount} (expect 0)");
+
+            // Fence dispatch: the ```plot branch must match the info string exactly, so a
+            // plain ```json fence — carrying the same object as the first plot block — has
+            // to stay a highlighted code block rather than being swallowed as a chart.
+            _captureLog.AppendLine("\n=== Phase: fence dispatch (plot vs json) ===");
+            await RunPhaseAsync("Full", MainViewModel.GetDefaultMarkdown());
+            // Plot hydration is deferred to a requestAnimationFrame, so give it a beat
+            // after the render-complete signal before sampling the DOM.
+            await Task.Delay(600);
+            var fenceProbe = await _singlePreview!.InvokeScriptAsync("""
+                (function(){
+                  var pv = document.getElementById('preview');
+                  var pcs = pv.querySelectorAll('.plot-container');
+                  var charts = 0, errs = 0;
+                  for (var i = 0; i < pcs.length; i++) {
+                    if (pcs[i].querySelector('svg.function-plot')) charts++;
+                    if (pcs[i].querySelector('pre[style]')) errs++;
+                  }
+                  var cbs = pv.querySelectorAll('.code-block-wrapper');
+                  var json = 0, inPlot = 0, spans = 0, lang = '';
+                  for (var j = 0; j < cbs.length; j++) {
+                    if ((cbs[j].textContent || '').indexOf('sin(x)/x and its envelope') >= 0) {
+                      json = 1;
+                      spans = cbs[j].querySelectorAll('span[class^=hljs-]').length;
+                      inPlot = cbs[j].closest('.plot-container') ? 1 : 0;
+                      var lg = cbs[j].querySelector('.code-lang');
+                      lang = lg ? (lg.textContent || '') : '';
+                    }
+                  }
+                  return pcs.length + ',' + charts + ',' + errs + ',' + cbs.length + ','
+                       + json + ',' + spans + ',' + inPlot + ',' + lang;
+                })()
+                """);
+            // InvokeScriptAsync JSON-serialises a string return, so it arrives quoted —
+            // numbers (as used by the facade probe above) do not. The payload is digits,
+            // commas and 'json', so trimming the quotes is safe.
+            var f = (fenceProbe ?? "").Trim('"').Split(',');
+            string FAt(int i) => i < f.Length ? f[i] : "?";
+            // Expect: 3 plot fences (2 charts + 1 error block), 4 code fences, and the
+            // json fence present as a highlighted block outside any plot container.
+            var jsonIsCode = FAt(4) == "1" && FAt(6) == "0" && FAt(7) == "json" &&
+                             int.TryParse(FAt(5), out var jsonSpans) && jsonSpans > 0;
+            _fenceDispatchOk = FAt(0) == "3" && FAt(1) == "2" && FAt(2) == "1" &&
+                               FAt(3) == "4" && jsonIsCode;
+            _captureLog.AppendLine(
+                $"[fence] plots={FAt(0)} charts={FAt(1)} errBlocks={FAt(2)} codeBlocks={FAt(3)} " +
+                $"jsonBlock={FAt(4)} jsonSpans={FAt(5)} jsonInPlot={FAt(6)} jsonLang={FAt(7)}");
+            _captureLog.AppendLine(
+                "[fence] expect plots=3 charts=2 errBlocks=1 codeBlocks=4 " +
+                "jsonBlock=1 jsonSpans>0 jsonInPlot=0 jsonLang=json");
+            _captureLog.AppendLine(_fenceDispatchOk
+                ? "[fence] RESULT: PASS"
+                : "[fence] RESULT: FAIL — a json fence was intercepted by the plot branch, " +
+                  "or the plot fences did not render");
+
+            // Special-member showcases. Each is loaded from an embedded .md asset, and
+            // a wrong avares key does not throw — LoadShowcase renders a fallback
+            // error block instead. Counting headings is what tells the two apart: a
+            // real showcase has many, the fallback has one.
+            _captureLog.AppendLine("\n=== Phase: special-member showcases ===");
+            var showcases = new (string Name, Func<string> Load)[]
+            {
+                ("Tables", MainViewModel.GetTablesShowcase),
+                ("Diagrams", MainViewModel.GetDiagramsShowcase),
+                ("Plots", MainViewModel.GetPlotsShowcase),
+            };
+            var showcaseBad = new List<string>();
+            foreach (var (name, load) in showcases)
+            {
+                await RunPhaseAsync($"Showcase: {name}", load());
+                var h = await _singlePreview!.InvokeScriptAsync(
+                    "document.querySelectorAll('#preview h1,#preview h2,#preview h3').length");
+                // Match the fallback's own text. A shape-based heuristic ("one h1 and
+                // one code block") false-positives on any showcase that happens to
+                // contain a single top heading and a single code block — which
+                // diagrams.md does, because of its deliberate `mermiad` fence.
+                var fallback = await _singlePreview.InvokeScriptAsync(
+                    "document.getElementById('preview').textContent" +
+                    ".indexOf('Showcase asset missing') >= 0 ? 1 : 0");
+                var headingCount = int.TryParse(h?.Trim(), out var hn) ? hn : 0;
+                var isFallback = fallback?.Trim() == "1";
+                _captureLog.AppendLine($"[showcase] {name}: headings={headingCount} " +
+                    $"fallbackError={isFallback} (expect headings>5, fallbackError=False)");
+                if (headingCount <= 5 || isFallback) showcaseBad.Add(name);
+            }
+            _showcaseOk = showcaseBad.Count == 0;
+            _captureLog.AppendLine(_showcaseOk
+                ? "[showcase] RESULT: PASS"
+                : $"[showcase] RESULT: FAIL — {string.Join(", ", showcaseBad)} did not load " +
+                  "from Assets/Showcase/ (check the avares key)");
 
             FinishCapture(timeout: false);
         }
@@ -224,10 +362,19 @@ public partial class MainView : UserControl
         }
     }
 
-    private async Task RunPhaseAsync(string name, Action load)
+    /// <summary>
+    /// Render <paramref name="markdown"/> and wait for the JS "Render complete" line.
+    ///
+    /// Takes the text rather than a setter so it can tell whether this phase re-uses
+    /// the previous document. The Text binding short-circuits on identical content
+    /// (<c>MyersDiff.AreEqual</c> in MarkdownView), which produces **no render and no
+    /// completion signal at all** — the phase would then burn its full 12s timeout and
+    /// sample whatever the previous phase happened to leave in the DOM. That made the
+    /// fence-dispatch phase read the wrong document, intermittently.
+    /// </summary>
+    private async Task RunPhaseAsync(string name, string markdown)
     {
         _captureLog.AppendLine($"\n=== Phase: {name} ===");
-        load();
 
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<MarkdownConsoleMessageEventArgs>? watcher = null;
@@ -235,9 +382,21 @@ public partial class MainView : UserControl
         {
             if (e.Level == "LOG" && e.Message.Contains("Render complete")) completed.TrySetResult(true);
         };
+        // Attach before rendering: a fast render's message can otherwise arrive first.
         _singlePreview!.ConsoleMessage += watcher;
         try
         {
+            var repeated = _lastPhaseText == markdown;
+            _vm.MarkdownText = markdown;   // keep the editor in sync
+            if (repeated)
+            {
+                // The binding will not re-render identical content, so drive the
+                // control directly. Without this the phase waits 12s for a signal
+                // that is never coming.
+                await _singlePreview.RenderMarkdownAsync(markdown);
+            }
+            _lastPhaseText = markdown;
+
             if (await Task.WhenAny(completed.Task, Task.Delay(TimeSpan.FromSeconds(12))) == completed.Task)
                 _captureLog.AppendLine($"[phase] '{name}' render completed");
             else
@@ -260,6 +419,11 @@ public partial class MainView : UserControl
         if (timeout)
             _captureLog.AppendLine("\n[FATAL] watchdog timeout — preview never became ready");
 
+        if (!_fenceDispatchOk)
+            _captureLog.AppendLine("\n[FATAL] fence-dispatch check failed");
+        if (!_showcaseOk)
+            _captureLog.AppendLine("\n[FATAL] a special-member showcase failed to load");
+
         try
         {
             var path = Path.Combine(Directory.GetCurrentDirectory(), "error-capture.log");
@@ -270,7 +434,9 @@ public partial class MainView : UserControl
         {
             Console.WriteLine($"[capture] failed to write log: {ex.Message}");
         }
-        Environment.Exit(timeout ? 1 : 0);
+        var ok = !timeout && _fenceDispatchOk && _showcaseOk;
+        Console.WriteLine(ok ? "[capture] PASS" : "[capture] FAIL");
+        Environment.Exit(ok ? 0 : 1);
     }
 
     // ====================================================================
@@ -319,7 +485,7 @@ public partial class MainView : UserControl
             await _singlePreview!.ApplyCustomCssAsync(css);
             await Task.Delay(700);
 
-            var js = ReadThemeAuditJs();
+            var js = ReadAssetJs("ThemeAudit.js");
             if (string.IsNullOrEmpty(js))
             {
                 _auditLog.AppendLine("[FATAL] cannot load ThemeAudit.js asset");
@@ -339,12 +505,16 @@ public partial class MainView : UserControl
         }
     }
 
-    private static string? ReadThemeAuditJs()
+    /// <summary>
+    /// Load an embedded JS asset from AvalonMarkdown.Test.Shared by file name.
+    /// Shared by the theme audit and render-check drivers.
+    /// </summary>
+    private static string? ReadAssetJs(string fileName)
     {
         try
         {
             using var s = Avalonia.Platform.AssetLoader.Open(
-                new Uri("avares://AvalonMarkdown.Test.Shared/Assets/ThemeAudit.js"));
+                new Uri($"avares://AvalonMarkdown.Test.Shared/Assets/{fileName}"));
             using var r = new StreamReader(s);
             return r.ReadToEnd();
         }
@@ -353,7 +523,7 @@ public partial class MainView : UserControl
             // Fallback: manifest resource in case the avares key differs.
             var asm = typeof(MainView).Assembly;
             var name = asm.GetManifestResourceNames()
-                .FirstOrDefault(n => n.EndsWith("ThemeAudit.js", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(n => n.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
             if (name is null) return null;
             using var s = asm.GetManifestResourceStream(name);
             if (s is null) return null;
@@ -462,7 +632,45 @@ public partial class MainView : UserControl
         }
         _auditLog.AppendLine($"summaryProps: writable={propLines.Count} unused={unusedProps.Count}");
 
-        var ok = !timeout && deadUnexpected.Count == 0 && unusedProps.Count == 0;
+        // Coverage: the built-in MarkdownThemeView panel surfaces every property
+        // except the intentional code-only set (Hljs*). The "hard" rows are
+        // authored declarations that have no property at all; the semantic hljs
+        // rules are the only allowed hardcoded ones.
+        var codeOnlyProps = propLines.Count(pl =>
+            pl.StartsWith("[PROP] Hljs", StringComparison.Ordinal));
+        var knownHardcoded = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ".hljs-link · text-decoration",
+            ".hljs-emphasis · font-style",
+            ".hljs-strong · font-weight",
+        };
+        var hardRows = new List<string>();
+        var eqRows = new List<string>();
+        var unexpectedHard = new List<string>();
+        foreach (var l in rows)
+        {
+            var b = l[(l.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var p = b.Split('|');
+            if (p.Length >= 3 && p[0] == "eff" && p[2] == "hard")
+            {
+                hardRows.Add(l);
+                if (p.Length >= 2 && !knownHardcoded.Contains(p[1])) unexpectedHard.Add(l);
+            }
+            if (p.Length >= 4 && p[0] == "eff" && p[3] == "eqdefault") eqRows.Add(l);
+        }
+        _auditLog.AppendLine($"coverage: panel-bound={propLines.Count - codeOnlyProps} " +
+                             $"code-only={codeOnlyProps} hardcoded-declarations={hardRows.Count} " +
+                             $"hardcoded-unexpected={unexpectedHard.Count} equal-to-default={eqRows.Count}");
+        foreach (var h in hardRows)
+        {
+            var b = h[(h.IndexOf("[TAUDIT] ", StringComparison.Ordinal) + 9)..];
+            var label = b.Split('|')[1];
+            _auditLog.AppendLine((knownHardcoded.Contains(label) ? "  [KNOWN-HARDCODED] " : "  [regression?] ") + h);
+        }
+        foreach (var e in eqRows) _auditLog.AppendLine("  [=default] " + e);
+
+        var ok = !timeout && deadUnexpected.Count == 0 && unusedProps.Count == 0 &&
+                 unexpectedHard.Count == 0;
         _auditLog.AppendLine(ok ? "\nRESULT: PASS" : "\nRESULT: FAIL");
 
         try

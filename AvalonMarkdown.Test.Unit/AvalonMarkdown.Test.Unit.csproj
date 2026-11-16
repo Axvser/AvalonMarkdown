@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Self-contained runner: no xUnit/NUnit package needed, so it runs offline
+         in the same environments as the rest of the repository's drivers. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
+  </ItemGroup>
+</Project>
