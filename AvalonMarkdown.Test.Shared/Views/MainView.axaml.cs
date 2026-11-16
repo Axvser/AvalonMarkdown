@@ -46,6 +46,7 @@ public partial class MainView : UserControl
         if (Environment.GetEnvironmentVariable("AVALON_CAPTURE_ERRORS") == "1") drivers.Add("AVALON_CAPTURE_ERRORS");
         if (Environment.GetEnvironmentVariable("AVALON_THEME_AUDIT") == "1") drivers.Add("AVALON_THEME_AUDIT");
         if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1") drivers.Add("AVALON_RENDER_CHECK");
+        if (Environment.GetEnvironmentVariable("AVALON_FAULT_CHECK") == "1") drivers.Add("AVALON_FAULT_CHECK");
         if (drivers.Count > 1)
         {
             Console.Error.WriteLine(
@@ -81,6 +82,11 @@ public partial class MainView : UserControl
         // failure surface, then exit. Driven by skills/avalonmarkdown-syntax.
         if (Environment.GetEnvironmentVariable("AVALON_RENDER_CHECK") == "1")
             StartRenderCheck();
+
+        // When AVALON_FAULT_CHECK=1, drive the preview with hostile input and
+        // removed CDN libraries, then exit. See Assets/FaultCheck.js.
+        if (Environment.GetEnvironmentVariable("AVALON_FAULT_CHECK") == "1")
+            StartFaultCheck();
 
         // LinkClicked example: intercept app:// links for in-app navigation.
         // Everything else (https://, mailto:, …) is left unhandled and still opens

@@ -305,17 +305,48 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 ## Working on the renderer
 
-There is no unit test project and no CI. Verification is three environment-gated
-drivers in the demo app, each of which exits the process — enable **exactly one**
-(a guard fails fast if more than one is set):
+Verification is an offline C# unit suite plus four environment-gated drivers in
+the demo app. The drivers each exit the process — enable **exactly one** (a guard
+fails fast if more than one is set):
 
 | Command | Checks |
 | --- | --- |
+| `dotnet run --project AvalonMarkdown.Test.Unit` | pure C#: Myers diff, JavaScript-literal encoding, export-name sanitising, theme CSS under hostile culture / out-of-range values, and the local HTTP server under malformed, oversized, concurrent and abandoned clients. Offline, no window. |
 | `AVALON_THEME_AUDIT=1 dotnet run --project AvalonMarkdown.Test.Desktop` | every `MarkdownThemeViewModel` property reaches the generated CSS, and every generated rule has a live consumer |
 | `AVALON_CAPTURE_ERRORS=1 dotnet run --project AvalonMarkdown.Test.Desktop` | drives the app through its phases; asserts fence dispatch and that the showcase assets load |
 | `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<abs path> dotnet run --project AvalonMarkdown.Test.Desktop` | renders one file through the real pipeline and DOM-audits it; normally driven by `render_check.py` |
+| `AVALON_FAULT_CHECK=1 dotnet run --project AvalonMarkdown.Test.Desktop` | fault injection: junk configs, malformed fences, pathological Markdown, each optional CDN library removed in turn, hanging export paths, and subscribers that throw. Writes `fault-check.log` / `fault-check.json`. |
 
-Run without any of them for an ordinary visual check.
+Run without any driver for an ordinary visual check.
+
+### Fault tolerance
+
+The preview is built to degrade visibly, never silently:
+
+- **markdown-it missing** — a plain-text renderer is installed and `READY` is
+  posted immediately, so the control never waits out its 15-second timeout.
+- **optional libraries missing** (mermaid, KaTeX, function-plot, plantuml-encoder,
+  the footnote / task-list plugins) — each affected fence renders a local
+  explanation and the rest of the document still renders.
+- **one bad fence or image token** — the fence/image renderer rules are
+  isolated; the remaining Markdown renders and the failing member shows its
+  source plus the error.
+- **bad config, script or CSS** — values are clamped and coerced; an invalid
+  script or stylesheet cannot leave the preview blank.
+- **exports** — every rasterise/fetch path has a timeout and a single-shot
+  callback; a failed export reports a toast instead of disabling the menu
+  forever.
+- **event boundaries** — async-void handlers and every public event subscriber
+  (`OnReady`, `ErrorOccurred`, `ConsoleMessage`, `LinkClicked`) are guarded, so a
+  throwing subscriber cannot terminate the host.
+- **renders** — requests are serialised and stale ones dropped; a failed render
+  leaves its text retryable rather than recording it as rendered.
+- **local HTTP server** — bounded request headers, a connection cap, a
+  per-client deadline, GET/HEAD only, and idempotent disposal that releases the
+  port before a restart binds a new one.
+- **restart / re-attach** — a restart re-renders the current text instead of
+  leaving the pane blank, and a control removed from and re-added to the visual
+  tree re-initialises itself.
 
 ## Authoring reference & validator
 

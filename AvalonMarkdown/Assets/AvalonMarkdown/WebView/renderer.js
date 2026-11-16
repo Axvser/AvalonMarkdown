@@ -4,31 +4,63 @@
     // Avalonia WebView Browser backend via av-webview.mjs polyfill, and
     // Android native WebView via Avalonia's built-in JavaScriptInterface).
     var origLog = console.log, origWarn = console.warn, origError = console.error;
+
+    // JSON.stringify throws on circular objects and BigInt. A console wrapper
+    // must never be able to break the caller, so every argument is stringified
+    // defensively.
+    function argText(a) {
+        if (typeof a === 'string') return a;
+        try { return JSON.stringify(a); } catch (e) { return String(a); }
+    }
+    function joinArgs(args) {
+        var out = [];
+        for (var i = 0; i < args.length; i++) out.push(argText(args[i]));
+        return out.join(' ');
+    }
+
     var post = function(level, msg) {
         var data = '[' + level + '] ' + msg;
+        // Truncate DIAGNOSTICS (a runaway stack trace) but never an export
+        // payload: truncating base64/XML would corrupt the file. The export path
+        // has its own, platform-aware size limits.
+        var limit = (level === 'EXPORT') ? 32 * 1024 * 1024 : 64 * 1024;
+        if (data.length > limit) data = data.slice(0, limit) + '…[truncated]';
+
+        var attempted = false;
         // Try every known Avalonia JS→C# bridge in order. Only the first that
         // succeeds is used; guards keep a throwing bridge from breaking the rest.
         if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            attempted = true;
             try { window.chrome.webview.postMessage(data); return; } catch (e) { /* next */ }
         }
         if (window.AvaloniaWebViewBridge && window.AvaloniaWebViewBridge.postMessage) {
+            attempted = true;
             try { window.AvaloniaWebViewBridge.postMessage(data); return; } catch (e) { /* next */ }
         }
         if (typeof window.invokeCSharpAction === 'function') {
+            attempted = true;
             try { window.invokeCSharpAction(data); return; } catch (e) { /* next */ }
         }
         if (window.external && typeof window.external.notify === 'function') {
+            attempted = true;
             try { window.external.notify(data); return; } catch (e) { /* next */ }
         }
         if (window.webkit && window.webkit.messageHandlers &&
             window.webkit.messageHandlers.postAvWebViewMessage) {
+            attempted = true;
             try { window.webkit.messageHandlers.postAvWebViewMessage.postMessage(data); return; } catch (e) { /* next */ }
         }
         // Browser/WASM iframe without any bridge shim → relay to the host page.
         // Guard with window.parent !== window so a top-level page (Android WebView)
         // never self-posts and swallows the message.
         if (window.parent !== window) {
-            try { window.parent.postMessage(data, '*'); } catch (e2) { /* last resort */ }
+            attempted = true;
+            try { window.parent.postMessage(data, '*'); return; } catch (e2) { /* last resort */ }
+        }
+        // A bridge existed but every call failed. Surface that once per message
+        // on the ORIGINAL console (not the wrapped one) so it cannot recurse.
+        if (attempted) {
+            try { origError('[Bridge] could not deliver a ' + data.length + '-byte message'); } catch (e3) { /* ignore */ }
         }
     };
 
@@ -43,16 +75,19 @@
             !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.postAvWebViewMessage);
     }
     console.log = function() {
-        var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
-        origLog.apply(console, arguments); post('LOG', m);
+        var m = joinArgs(arguments);
+        try { origLog.apply(console, arguments); } catch (e) { /* never throw from logging */ }
+        post('LOG', m);
     };
     console.warn = function() {
-        var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
-        origWarn.apply(console, arguments); post('WARN', m);
+        var m = joinArgs(arguments);
+        try { origWarn.apply(console, arguments); } catch (e) { /* never throw from logging */ }
+        post('WARN', m);
     };
     console.error = function() {
-        var m = Array.prototype.map.call(arguments, function(a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ');
-        origError.apply(console, arguments); post('ERR', m);
+        var m = joinArgs(arguments);
+        try { origError.apply(console, arguments); } catch (e) { /* never throw from logging */ }
+        post('ERR', m);
     };
 
     // === Global error capture — shown within the control instead of silent swallow ===
@@ -99,8 +134,75 @@
         if (overlay) overlay.style.display = 'none';
     };
 
+    function describeError(e) {
+        if (e == null) return 'unknown error';
+        if (typeof e === 'string') return e;
+        return e.message ? String(e.message) : String(e);
+    }
+
+    // ── Disaster recovery: markdown-it itself is missing ────────────────────
+    // It is the one critical dependency. If the CDN is blocked, the old code
+    // threw while constructing md, which aborted this whole script: no
+    // renderMarkdown, no READY, and a 15-second timeout in C#. Install a plain-
+    // text renderer instead and signal readiness immediately.
+    function installFallbackMode(reason) {
+        window.renderMarkdown = function(text) {
+            var pv = document.getElementById('preview');
+            if (!pv) return;
+            text = (text == null) ? '' : String(text);
+            pv.innerHTML = '';
+            if (!text) { pv.removeAttribute('data-source'); return; }
+            pv.setAttribute('data-source', text);
+
+            var note = document.createElement('div');
+            note.className = 'render-unavailable';
+            note.textContent = '⚠ ' + reason + ' Showing the Markdown source as plain text.';
+            var pre = document.createElement('pre');
+            pre.className = 'render-fallback';
+            pre.textContent = text;
+            pv.appendChild(note);
+            pv.appendChild(pre);
+            console.log('renderMarkdown called, length=' + text.length);
+        };
+        window.onMarkdownUpdate = window.renderMarkdown;
+        window.setPreviewConfig = function(config) {
+            if (!config || typeof config !== 'object') return;
+            if (typeof config.fontSize === 'number' && isFinite(config.fontSize)) {
+                var size = Math.max(1, Math.min(96, config.fontSize));
+                document.body.style.fontSize = size + 'px';
+            }
+            if (typeof config.lineHeight === 'number' && isFinite(config.lineHeight)) {
+                document.body.style.lineHeight = Math.max(0.8, Math.min(4, config.lineHeight));
+            }
+        };
+        window.setTheme = function(theme) {
+            document.documentElement.className =
+                (theme === 'light') ? 'theme-light' : 'theme-dark';
+        };
+        window.setCustomCss = function() {};
+        window.setScrollProgress = function() {};
+        window.getScrollProgress = function() { return 0; };
+        window.navigateToHeading = function() { return 0; };
+        window.getHeadings = function() { return []; };
+        window.exportAvailable = function() { return false; };
+        window.exportMemberAsync = function(container, kind, format, cb) {
+            cb({ ok: false, error: reason + ' Export is unavailable.' });
+        };
+        window.md = null;
+        window.escapeHtml = escapeHtml;
+
+        post('ERR', '[Init] ' + reason);
+        post('READY', '');
+        console.log('✅ Markdown Preview ready (plain-text fallback)');
+    }
+
     console.log('Markdown Preview initializing');
     console.log('UA: ' + navigator.userAgent);
+
+    if (typeof window.markdownit !== 'function') {
+        installFallbackMode('markdown-it failed to load from the CDN.');
+        return;
+    }
 
     // ===== Preview configuration =====
     var previewConfig = {
@@ -122,33 +224,61 @@
         contextMenuEnabled: true
     };
 
+    function clampNumber(value, min, max, fallback) {
+        var n = Number(value);
+        if (!isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+    }
+
     window.setPreviewConfig = function(config) {
-        if (config.fontSize !== undefined) previewConfig.fontSize = config.fontSize;
-        if (config.lineHeight !== undefined) previewConfig.lineHeight = config.lineHeight;
-        if (config.showCodeLanguage !== undefined) previewConfig.showCodeLanguage = config.showCodeLanguage;
-        if (config.showCopyButton !== undefined) previewConfig.showCopyButton = config.showCopyButton;
-        if (config.maxCodeBlockHeight !== undefined) previewConfig.maxCodeBlockHeight = config.maxCodeBlockHeight;
-        if (config.autoScrollOnUpdate !== undefined) previewConfig.autoScrollOnUpdate = config.autoScrollOnUpdate;
-        if (config.autoScrollCooldown !== undefined) previewConfig.autoScrollCooldown = config.autoScrollCooldown;
-        if (config.placeholder !== undefined) previewConfig.placeholder = config.placeholder;
-        if (config.contextMenuEnabled !== undefined) {
-            previewConfig.contextMenuEnabled = config.contextMenuEnabled;
-            if (config.contextMenuEnabled === false) ctxHide();
+        if (!config || typeof config !== 'object') return;
+
+        // C# normally sends well-formed values, but InvokeScript is also public
+        // API: a bad config must not paint an invalid CSS value or throw.
+        if (config.fontSize !== undefined) {
+            previewConfig.fontSize = clampNumber(config.fontSize, 1, 96, previewConfig.fontSize);
+            document.body.style.fontSize = previewConfig.fontSize + 'px';
         }
-        document.body.style.fontSize = previewConfig.fontSize + 'px';
-        document.body.style.lineHeight = previewConfig.lineHeight;
-        // Apply code block max height
+        if (config.lineHeight !== undefined) {
+            previewConfig.lineHeight = clampNumber(config.lineHeight, 0.8, 4, previewConfig.lineHeight);
+            document.body.style.lineHeight = previewConfig.lineHeight;
+        }
+        if (config.showCodeLanguage !== undefined) previewConfig.showCodeLanguage = !!config.showCodeLanguage;
+        if (config.showCopyButton !== undefined) previewConfig.showCopyButton = !!config.showCopyButton;
+        if (config.maxCodeBlockHeight !== undefined) {
+            previewConfig.maxCodeBlockHeight =
+                Math.round(clampNumber(config.maxCodeBlockHeight, 0, 5000, previewConfig.maxCodeBlockHeight));
+        }
+        if (config.autoScrollOnUpdate !== undefined) previewConfig.autoScrollOnUpdate = !!config.autoScrollOnUpdate;
+        if (config.autoScrollCooldown !== undefined) {
+            previewConfig.autoScrollCooldown =
+                Math.round(clampNumber(config.autoScrollCooldown, 0, 60000, previewConfig.autoScrollCooldown));
+        }
+        if (config.placeholder !== undefined) {
+            previewConfig.placeholder = String(config.placeholder == null ? '' : config.placeholder)
+                .slice(0, 2000);
+        }
+        if (config.contextMenuEnabled !== undefined) {
+            previewConfig.contextMenuEnabled = !!config.contextMenuEnabled;
+            if (previewConfig.contextMenuEnabled === false) ctxHide();
+        }
+
         applyCodeBlockMaxHeight();
+
         // Re-render to apply language label / copy button visibility.
         // Pass followToBottom=false: a config change is not a content update, so it
         // must not yank the user's scroll position to the bottom.
-        var preview = document.getElementById('preview');
-        var text = preview.getAttribute('data-source') || '';
-        if (text) {
-            window.renderMarkdown(text, false);
-        } else if (config.placeholder !== undefined) {
-            // Re-render the empty state so a changed placeholder takes effect.
-            window.renderMarkdown('', false);
+        try {
+            var preview = document.getElementById('preview');
+            var text = preview ? (preview.getAttribute('data-source') || '') : '';
+            if (text) {
+                window.renderMarkdown(text, false);
+            } else if (config.placeholder !== undefined) {
+                // Re-render the empty state so a changed placeholder takes effect.
+                window.renderMarkdown('', false);
+            }
+        } catch (e) {
+            console.error('[Config] re-render failed: ' + describeError(e));
         }
         console.log('[Config] updated', JSON.stringify(previewConfig));
     };
@@ -255,7 +385,7 @@
         var started = nowMs();
 
         function warn(e) {
-            if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + e.message);
+            if (gen === mermaidGeneration) console.warn('[Mermaid] Render error: ' + describeError(e));
         }
 
 
@@ -290,9 +420,28 @@
         pump();
     }
 
+    // A blocked mermaid CDN used to throw a ReferenceError inside requestAnimationFrame
+    // for every diagram. Show one visible, local explanation per diagram and keep
+    // the fence source readable instead.
+    function markMermaidUnavailable(pre) {
+        if (!pre || pre.getAttribute('data-avalon-missing')) return;
+        pre.setAttribute('data-avalon-missing', '1');
+        var note = document.createElement('div');
+        note.className = 'render-unavailable';
+        note.textContent = '⚠ Mermaid is unavailable (the library failed to load). ' +
+            'The diagram source is shown below.';
+        if (pre.parentNode) pre.parentNode.insertBefore(note, pre);
+    }
+
     function runMermaidAll(container) {
         var els = container.querySelectorAll('.mermaid');
         if (els.length === 0) return;
+
+        if (typeof window.mermaid === 'undefined' || typeof window.mermaid.run !== 'function') {
+            for (var m = 0; m < els.length; m++) markMermaidUnavailable(els[m]);
+            return;
+        }
+
         var gen = ++mermaidGeneration;
         if (mermaidTimer) cancelAnimationFrame(mermaidTimer);
         mermaidTimer = requestAnimationFrame(function() {
@@ -805,28 +954,47 @@
      */
     function runInFrames(slot, getItems, worker, isStale, onDone) {
         if (slot.timer) cancelAnimationFrame(slot.timer);
-        var items = null, index = 0, busy = 0;
+        var items = null, index = 0, busy = 0, finished = false;
+
+        function finish() {
+            if (finished) return;
+            finished = true;
+            if (!onDone) return;
+            try { onDone(busy); }
+            catch (e) { console.warn('[Frames] completion handler failed: ' + describeError(e)); }
+        }
 
         function step() {
             slot.timer = null;
-            if (isStale && isStale()) return;
-            if (!items) {
-                items = getItems() || [];
-                if (!items.length) { if (onDone) onDone(0); return; }
-            }
-            var started = nowMs();
-            while (index < items.length) {
+            try {
                 if (isStale && isStale()) return;
-                worker(items[index]);
-                index++;
-                if (nowMs() - started >= PLOT_FRAME_BUDGET_MS) break;
+                if (!items) {
+                    items = getItems() || [];
+                    if (!items.length) { finish(); return; }
+                }
+                var started = nowMs();
+                while (index < items.length) {
+                    if (isStale && isStale()) return;
+                    try {
+                        worker(items[index]);
+                    } catch (e) {
+                        // One bad item must not strand the rest of the pass (and,
+                        // for the reflow slot, must not leave its busy flag set).
+                        console.warn('[Frames] worker failed: ' + describeError(e));
+                    }
+                    index++;
+                    if (nowMs() - started >= PLOT_FRAME_BUDGET_MS) break;
+                }
+                busy += nowMs() - started;
+                if (index < items.length) {
+                    slot.timer = requestAnimationFrame(step);
+                    return;
+                }
+                finish();
+            } catch (e) {
+                console.warn('[Frames] pass aborted: ' + describeError(e));
+                finish();
             }
-            busy += nowMs() - started;
-            if (index < items.length) {
-                slot.timer = requestAnimationFrame(step);
-                return;
-            }
-            if (onDone) onDone(busy);
         }
 
         slot.timer = requestAnimationFrame(step);
@@ -861,23 +1029,33 @@
             return;
         }
 
+        var opts, chart;
         try {
-            var opts = buildPlotOptions(parsed, el);
-            var chart = window.functionPlot(opts);
-            applySquareGridTicks(chart, opts, el);
-            prunePlotCache(chart);
-            installPlotWheelGate(el, parsed);
-            // Remembered so the reflow pass can redraw at a new width. The chart is
-            // laid out once, from whatever the container measured at this moment —
-            // which is not necessarily its final width.
-            el._plotOpts = parsed;
-            el._plotWidth = plotWidthFor(el);
-            ensurePlotResizeObserver();
+            opts = buildPlotOptions(parsed, el);
+            chart = window.functionPlot(opts);
         } catch (e2) {
             if (gen !== plotGeneration) return;   // stale-node artefact — stay quiet
-            console.warn('[Plot] Render error: ' + e2.message);
-            showPlotError(el, e2.message, raw);
+            console.warn('[Plot] Render error: ' + describeError(e2));
+            showPlotError(el, describeError(e2), raw);
+            return;
         }
+
+        // Post-draw decoration is best-effort. A library quirk in the grid/zoom
+        // pass must not turn a chart that already drew into an error block.
+        try { applySquareGridTicks(chart, opts, el); }
+        catch (e3) { console.warn('[Plot] grid adjustment failed: ' + describeError(e3)); }
+        try { prunePlotCache(chart); }
+        catch (e4) { console.warn('[Plot] cache prune failed: ' + describeError(e4)); }
+        try { installPlotWheelGate(el, parsed); }
+        catch (e5) { console.warn('[Plot] wheel gate failed: ' + describeError(e5)); }
+
+        // Remembered so the reflow pass can redraw at a new width. The chart is
+        // laid out once, from whatever the container measured at this moment —
+        // which is not necessarily its final width.
+        el._plotOpts = parsed;
+        el._plotWidth = plotWidthFor(el);
+        try { ensurePlotResizeObserver(); }
+        catch (e6) { console.warn('[Plot] resize observer failed: ' + describeError(e6)); }
     }
 
     // ===== Hydration, budgeted across frames =====
@@ -954,11 +1132,13 @@
                 try {
                     var opts = buildPlotOptions(el._plotOpts, el);
                     var chart = window.functionPlot(opts);
-                    applySquareGridTicks(chart, opts, el);
-                    prunePlotCache(chart);
+                    try { applySquareGridTicks(chart, opts, el); }
+                    catch (e2) { console.warn('[Plot] reflow grid adjustment failed: ' + describeError(e2)); }
+                    try { prunePlotCache(chart); }
+                    catch (e3) { console.warn('[Plot] reflow cache prune failed: ' + describeError(e3)); }
                     el._plotWidth = w;
                 } catch (e) {
-                    console.warn('[Plot] reflow error: ' + e.message);
+                    console.warn('[Plot] reflow error: ' + describeError(e));
                 }
             },
             null,
@@ -999,8 +1179,15 @@
         // by every render, so per-container observers would need constant re-wiring.
         var preview = document.getElementById('preview');
         if (!preview) return;
-        plotResizeObserver = new window.ResizeObserver(schedulePlotReflow);
-        plotResizeObserver.observe(preview);
+        try {
+            plotResizeObserver = new window.ResizeObserver(schedulePlotReflow);
+            plotResizeObserver.observe(preview);
+        } catch (e) {
+            // A constructor that exists but refuses (privacy mode / restricted
+            // WebView) is not fatal: plots simply stop following pane resizes.
+            console.warn('[Plot] ResizeObserver unavailable: ' + describeError(e));
+            plotResizeObserver = null;
+        }
     }
 
     // ===== Export a diagram / plot / PlantUML image =====
@@ -1010,6 +1197,22 @@
     //
     // Everything here is ES5, like the rest of this file.
     var EXPORT_SCALE = 2;
+
+    // An export is the one path where the user is actively waiting. A network
+    // fetch or an image decode that never settles would leave the menu disabled
+    // forever, so every asynchronous step is bounded.
+    var EXPORT_TIMEOUT_MS = 15000;
+
+    // Wrap a callback so it can only fire once. Rasterise/retry paths have both a
+    // timeout and an event callback; without this the loser would report again.
+    function once(fn) {
+        var called = false;
+        return function() {
+            if (called) return;
+            called = true;
+            fn.apply(null, arguments);
+        };
+    }
 
     // iOS/WebKit refuse canvases above roughly 16M pixels, and the failure mode is
     // a SILENTLY BLANK image -- no exception, a perfectly valid PNG data URL.
@@ -1223,19 +1426,40 @@
     }
 
     function exportRasterise(svgText, pxW, pxH, bg, cb) {
+        var done = once(cb);
+
+        if (!(pxW > 0 && pxH > 0)) { done('the image has no usable size'); return; }
+        if (pxW * pxH > EXPORT_MAX_PX) {
+            done('the image is too large to rasterise — try SVG instead');
+            return;
+        }
+
         // A data: URL does NOT taint the canvas; a blob: URL has engine-specific
         // behaviour and an http(s): URL always taints. Stay on data:.
         // btoa throws on any code point above 0xFF, so CJK labels must be UTF-8
         // encoded first -- mermaid diagrams with Chinese labels are the norm here.
-        var url = 'data:image/svg+xml;base64,' +
-            window.btoa(unescape(encodeURIComponent(svgText)));
+        var url;
+        try {
+            url = 'data:image/svg+xml;base64,' +
+                window.btoa(unescape(encodeURIComponent(svgText)));
+        } catch (e0) {
+            done('the SVG could not be encoded (' + describeError(e0) + ')');
+            return;
+        }
+
+        var timer = setTimeout(function () {
+            done('the image could not be rasterised (timed out)');
+        }, EXPORT_TIMEOUT_MS);
+
         var img = new Image();
         img.onload = function () {
+            clearTimeout(timer);
             try {
                 var canvas = document.createElement('canvas');
                 canvas.width = pxW;
                 canvas.height = pxH;
                 var ctx = canvas.getContext('2d');
+                if (!ctx) { done('the canvas 2D context is unavailable'); return; }
                 ctx.fillStyle = bg;
                 ctx.fillRect(0, 0, pxW, pxH);
                 ctx.drawImage(img, 0, 0, pxW, pxH);
@@ -1243,13 +1467,13 @@
                 try {
                     out = canvas.toDataURL('image/png');
                 } catch (e) {
-                    cb('the image could not be rasterised (' + e.name + ')');
+                    done('the image could not be rasterised (' + (e && e.name) + ')');
                     return;
                 }
                 // A zero-sized canvas returns 'data:,' WITHOUT throwing, so the
                 // exception handler alone is not a sufficient guard.
                 if (!out || out.indexOf('data:image/png') !== 0) {
-                    cb('the raster came back empty (canvas too large?)');
+                    done('the raster came back empty (canvas too large?)');
                     return;
                 }
                 // Opt-in only: this reads back every pixel, which the render-check
@@ -1269,12 +1493,15 @@
                         ink = marked / (px.length / 4);
                     } catch (e3) { ink = -2; }
                 }
-                cb(null, out.substring(out.indexOf(',') + 1), ink);
+                done(null, out.substring(out.indexOf(',') + 1), ink);
             } catch (e2) {
-                cb(e2.message);
+                done(describeError(e2));
             }
         };
-        img.onerror = function () { cb('the serialised SVG could not be parsed'); };
+        img.onerror = function () {
+            clearTimeout(timer);
+            done('the serialised SVG could not be parsed');
+        };
         img.src = url;
     }
 
@@ -1298,8 +1525,9 @@
     //    keep its own white background. Applying the container's dark backdrop
     //    here would produce black ink on near-black: an invisible picture.
     function exportPuml(img, cb) {
+        var done = once(cb);
         var src = img.getAttribute('src') || '';
-        if (!src) { cb('the image has no source'); return; }
+        if (!src) { done('the image has no source'); return; }
 
         // plantuml.com is a third party and does drop requests. Retrying once turns
         // most transient failures into a working export -- and the export is the one
@@ -1308,7 +1536,18 @@
         var attempt = 0;
         function go() {
             attempt++;
-            fetch(src).then(function (r) {
+            var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timedOut = false;
+            var timer = setTimeout(function () {
+                timedOut = true;
+                if (controller) { try { controller.abort(); } catch (e2) { /* ignore */ } }
+                // No AbortController (or a fetch that ignores the signal) must not
+                // leave the export pending forever.
+                done('could not fetch the PlantUML SVG: timed out');
+            }, EXPORT_TIMEOUT_MS);
+
+            var options = controller ? { signal: controller.signal } : undefined;
+            fetch(src, options).then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.text();
             }).then(function (text) {
@@ -1323,11 +1562,15 @@
                 var size = exportNormaliseSize(svg);
                 if (!size) throw new Error('could not determine the image size');
                 var scaled = exportApplyScale(svg, size, EXPORT_SCALE);
-                cb(null, { xml: exportSerialize(svg, 'PlantUML diagram'), size: scaled });
+                clearTimeout(timer);
+                done(null, { xml: exportSerialize(svg, 'PlantUML diagram'), size: scaled });
             }).catch(function (e) {
-                if (attempt < 2) { setTimeout(go, 400); return; }
-                cb('could not fetch the PlantUML SVG: ' +
-                   (e && e.message ? e.message : e));
+                clearTimeout(timer);
+                if (attempt < 2 && !timedOut) {
+                    setTimeout(go, 400);
+                    return;
+                }
+                done('could not fetch the PlantUML SVG: ' + describeError(e));
             });
         }
         go();
@@ -1338,56 +1581,74 @@
      * cb(err, { name, source, encoding, data, pxW, pxH })  data is text or base64.
      */
     function exportMember(container, kind, format, cb) {
+        var done = once(cb);
         var title = kind + ' diagram';
-        if (kind === 'puml') {
-            var img = exportPumlImg(container);
-            if (!img) { cb('the PlantUML image never loaded'); return; }
-            exportPuml(img, function (err, built) {
-                if (err) { cb(err); return; }
-                finishExport(container, kind, format, built, title, '#ffffff', cb);
-            });
-            return;
-        }
-
-        var svg = exportSvgOf(container, kind);
-        if (!svg) { cb('this ' + kind + ' did not render'); return; }
-        var built = exportInlineSvg(svg, kind, title);
-        if (!built) { cb('could not determine the image size'); return; }
-        finishExport(container, kind, format, built, title, exportBackdrop(container), cb);
-    }
-
-    function finishExport(container, kind, format, built, title, bg, cb) {
-        if (format === 'svg') {
-            cb(null, {
-                name: exportName(container, kind, 'svg'),
-                source: kind,
-                encoding: 'utf8',
-                data: built.xml
-            });
-            return;
-        }
-
-        var pxW = Math.round(built.size.w * built.size.scale);
-        var pxH = Math.round(built.size.h * built.size.scale);
-        exportRasterise(built.xml, pxW, pxH, bg, function (err, b64, ink) {
-            if (err) { cb(err); return; }
-            if (b64.length > EXPORT_MAX_B64 && built.size.scale > 1) {
-                // Retry at 1x rather than failing: halving each dimension quarters
-                // the bytes, which clears the Binder ceiling in almost every case.
-                var w2 = Math.round(built.size.w);
-                var h2 = Math.round(built.size.h);
-                exportRasterise(built.xml, w2, h2, bg, function (err2, b64b, ink2) {
-                    if (err2) { cb(err2); return; }
-                    if (b64b.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
-                    cb(null, { name: exportName(container, kind, 'png'),
-                        source: kind, encoding: 'base64', data: b64b, ink: ink2 });
+        try {
+            if (kind === 'puml') {
+                var img = exportPumlImg(container);
+                if (!img) { done('the PlantUML image never loaded'); return; }
+                exportPuml(img, function (err, built) {
+                    if (err) { done(err); return; }
+                    finishExport(container, kind, format, built, title, '#ffffff', done);
                 });
                 return;
             }
-            if (b64.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
-            cb(null, { name: exportName(container, kind, 'png'),
-                source: kind, encoding: 'base64', data: b64, ink: ink });
-        });
+
+            var svg = exportSvgOf(container, kind);
+            if (!svg) { done('this ' + kind + ' did not render'); return; }
+            var built = exportInlineSvg(svg, kind, title);
+            if (!built) { done('could not determine the image size'); return; }
+            finishExport(container, kind, format, built, title, exportBackdrop(container), done);
+        } catch (e) {
+            done('the export could not be built: ' + describeError(e));
+        }
+    }
+
+    function finishExport(container, kind, format, built, title, bg, cb) {
+        try {
+            if (format === 'svg') {
+                // Android crosses Binder with a ~1 MB per-transaction ceiling and
+                // reports the failure by throwing inside the bridge (which post()
+                // cannot recover from). Fail loudly here instead of losing the file.
+                if (typeof window.invokeCSharpAction === 'function' &&
+                    built.xml.length > EXPORT_MAX_B64) {
+                    cb('this image is too large to save as SVG on this platform — ' +
+                        'try PNG, or export it on desktop');
+                    return;
+                }
+                cb(null, {
+                    name: exportName(container, kind, 'svg'),
+                    source: kind,
+                    encoding: 'utf8',
+                    data: built.xml
+                });
+                return;
+            }
+
+            var pxW = Math.round(built.size.w * built.size.scale);
+            var pxH = Math.round(built.size.h * built.size.scale);
+            exportRasterise(built.xml, pxW, pxH, bg, function (err, b64, ink) {
+                if (err) { cb(err); return; }
+                if (b64.length > EXPORT_MAX_B64 && built.size.scale > 1) {
+                    // Retry at 1x rather than failing: halving each dimension quarters
+                    // the bytes, which clears the Binder ceiling in almost every case.
+                    var w2 = Math.round(built.size.w);
+                    var h2 = Math.round(built.size.h);
+                    exportRasterise(built.xml, w2, h2, bg, function (err2, b64b, ink2) {
+                        if (err2) { cb(err2); return; }
+                        if (b64b.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
+                        cb(null, { name: exportName(container, kind, 'png'),
+                            source: kind, encoding: 'base64', data: b64b, ink: ink2 });
+                    });
+                    return;
+                }
+                if (b64.length > EXPORT_MAX_B64) { cb(TOO_LARGE); return; }
+                cb(null, { name: exportName(container, kind, 'png'),
+                    source: kind, encoding: 'base64', data: b64, ink: ink });
+            });
+        } catch (e) {
+            cb('the export could not be finished: ' + describeError(e));
+        }
     }
 
     var TOO_LARGE = 'this image is too large to save as PNG — try SVG instead';
@@ -1493,26 +1754,35 @@
             var items = menu.querySelectorAll('.md-ctx-item');
             for (var i = 0; i < items.length; i++) items[i].disabled = true;
         }
-        exportMember(container, kind, format, function (err, res) {
-            ctxBusy = false;
-            if (err) {
-                console.warn('[Export] ' + kind + '/' + format + ': ' + err);
-                // The user asked for something that did not work; say so in the
-                // preview rather than only in the console.
-                showExportToast(err);
+        try {
+            exportMember(container, kind, format, function (err, res) {
+                ctxBusy = false;
+                if (err) {
+                    console.warn('[Export] ' + kind + '/' + format + ': ' + err);
+                    // The user asked for something that did not work; say so in the
+                    // preview rather than only in the console.
+                    showExportToast(err);
+                    ctxHide();
+                    return;
+                }
+                post('EXPORT', JSON.stringify({
+                    v: 1,
+                    source: res.source,
+                    kind: format,
+                    encoding: res.encoding,
+                    name: res.name,
+                    data: res.data
+                }));
                 ctxHide();
-                return;
-            }
-            post('EXPORT', JSON.stringify({
-                v: 1,
-                source: res.source,
-                kind: format,
-                encoding: res.encoding,
-                name: res.name,
-                data: res.data
-            }));
+            });
+        } catch (e) {
+            // A synchronous throw must not leave ctxBusy latched, or the menu
+            // would stay disabled for the rest of the session.
+            ctxBusy = false;
+            console.warn('[Export] threw: ' + describeError(e));
+            showExportToast('the export failed: ' + describeError(e));
             ctxHide();
-        });
+        }
     }
 
     // A failed export has nowhere else to show: the console channel is not visible
@@ -1645,20 +1915,24 @@
     }
 
     function setTheme(theme) {
-        if (theme !== 'dark' && theme !== 'light') theme = 'dark';
+        theme = (theme === 'light') ? 'light' : 'dark';
         currentTheme = theme;
         document.documentElement.className = 'theme-' + theme;
         console.log('[Theme] Switched to: ' + theme);
 
-        if (typeof mermaid !== 'undefined') {
-            mermaid.initialize(getMermaidThemeVars(theme));
-            mermaidInitialized = true;
-            // Mermaid replaces <pre class="mermaid"> with SVG after rendering,
-            // so calling mermaid.run on already-rendered nodes has no effect.
-            // Here we re-render the entire Markdown
-            // to rebuild .mermaid elements with the new theme
-            reRenderMarkdown();
-            console.log('[Theme] Mermaid theme updated');
+        if (typeof mermaid !== 'undefined' && typeof mermaid.initialize === 'function') {
+            try {
+                mermaid.initialize(getMermaidThemeVars(theme));
+                mermaidInitialized = true;
+                // Mermaid replaces <pre class="mermaid"> with SVG after rendering,
+                // so calling mermaid.run on already-rendered nodes has no effect.
+                // Here we re-render the entire Markdown
+                // to rebuild .mermaid elements with the new theme
+                reRenderMarkdown();
+                console.log('[Theme] Mermaid theme updated');
+            } catch (e) {
+                console.warn('[Theme] Mermaid theme update failed: ' + describeError(e));
+            }
         }
     }
 
@@ -1667,16 +1941,11 @@
         if (!preview) return;
         var source = preview.getAttribute('data-source');
         if (!source) return;
-        try {
-            ctxHide();   // the container the menu points at is about to be destroyed
-            preview.innerHTML = md.render(source);
-            runMermaidAll(preview);
-            // followToBottom=false: a theme/config re-render is not a content update, so
-            // it must not yank the user's scroll position to the bottom.
-            runFunctionPlotAll(preview, false);
-        } catch(e) {
-            console.error('❌ ' + e.message);
-        }
+        // Go through the full render path: replacing innerHTML inline used to
+        // leave links and video facades unwired after a theme change.
+        // followToBottom=false: a theme/config re-render is not a content update,
+        // so it must not yank the user's scroll position to the bottom.
+        window.renderMarkdown(source, false);
     }
 
     /**
@@ -1686,14 +1955,19 @@
      * correctly overridden.
      */
     function setCustomCss(cssText) {
-        var style = document.getElementById('custom-theme-css');
-        if (!style) {
-            style = document.createElement('style');
-            style.id = 'custom-theme-css';
-            document.head.appendChild(style);
+        cssText = (cssText == null) ? '' : String(cssText);
+        try {
+            var style = document.getElementById('custom-theme-css');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'custom-theme-css';
+                document.head.appendChild(style);
+            }
+            style.textContent = cssText;
+            console.log('[Theme] Custom CSS applied (' + cssText.length + ' chars)');
+        } catch (e) {
+            console.error('[Theme] Custom CSS failed: ' + describeError(e));
         }
-        style.textContent = cssText;
-        console.log('[Theme] Custom CSS applied (' + (cssText ? cssText.length : 0) + ' chars)');
     }
 
     // C# call entry
@@ -1701,10 +1975,17 @@
     window.setCustomCss = setCustomCss;
 
     // ===== Initialize Mermaid (follows current theme) =====
-    if (typeof mermaid !== 'undefined') {
-        mermaid.initialize(getMermaidThemeVars(currentTheme));
-        mermaidInitialized = true;
-        console.log('[Mermaid] Theme initialized');
+    if (typeof mermaid !== 'undefined' && typeof mermaid.initialize === 'function') {
+        try {
+            mermaid.initialize(getMermaidThemeVars(currentTheme));
+            mermaidInitialized = true;
+            console.log('[Mermaid] Theme initialized');
+        } catch (e) {
+            console.warn('[Mermaid] Initialization failed: ' + describeError(e));
+        }
+    }
+    else if (typeof mermaid === 'undefined') {
+        console.warn('[Mermaid] Library unavailable; diagrams will show their source');
     }
 
     // === Markdown-it configuration (VS Code style) ===
@@ -1738,8 +2019,18 @@
                 '<pre class="hljs"><code>' + codeHtml + '</code></pre></div>';
         }
     });
-    md.use(window.markdownitFootnote);
-    md.use(window.markdownitTaskLists);
+    // Both plugins are optional CDN loads. Passing undefined to md.use throws,
+    // which used to abort the whole script and leave the preview blank.
+    if (typeof window.markdownitFootnote === 'function') {
+        md.use(window.markdownitFootnote);
+    } else {
+        console.warn('[Init] markdown-it-footnote unavailable; footnotes will render as text');
+    }
+    if (typeof window.markdownitTaskLists === 'function') {
+        md.use(window.markdownitTaskLists);
+    } else {
+        console.warn('[Init] markdown-it-task-lists unavailable; task lists will render as text');
+    }
     try { md.enable(['strikethrough']); } catch(e) {}
 
     // === Heading anchors (GitHub / VS Code style) ===
@@ -1751,9 +2042,19 @@
     // Wrap md.render so the per-document id-uniqueness state resets on every render
     // (the DOM is fully replaced each time, so stale suffixes must not leak across).
     var baseRender = md.render;
+    var renderDepth = 0;
     md.render = function(src, env) {
-        headingUsedIds = {};
-        return baseRender.call(md, src, env);
+        // Only the outermost render resets slug state. Chat fences render their
+        // body with md.render() while the outer document is still being built;
+        // resetting there would let the inner headings steal/duplicate the outer
+        // document's ids.
+        if (renderDepth === 0) headingUsedIds = {};
+        renderDepth++;
+        try {
+            return baseRender.call(md, src, env);
+        } finally {
+            renderDepth--;
+        }
     };
 
     // Lowercase, drop punctuation, spaces/underscores become '-' (keeps CJK and
@@ -1776,15 +2077,20 @@
     }
 
     md.renderer.rules.heading_open = function(tokens, idx, options, env, self) {
-        var token = tokens[idx];
-        var inline = tokens[idx + 1];
-        var text = headingPlainText(inline && inline.type === 'inline' ? inline : null);
-        if (text) {
-            var slug = headingSlugify(text) || 'section';
-            var n = headingUsedIds[slug] | 0;
-            var id = n > 0 ? slug + '-' + n : slug;
-            headingUsedIds[slug] = n + 1;
-            token.attrSet('id', id);
+        try {
+            var token = tokens[idx];
+            var inline = tokens[idx + 1];
+            var text = headingPlainText(inline && inline.type === 'inline' ? inline : null);
+            if (text) {
+                var slug = headingSlugify(text) || 'section';
+                var n = headingUsedIds[slug] | 0;
+                var id = n > 0 ? slug + '-' + n : slug;
+                headingUsedIds[slug] = n + 1;
+                token.attrSet('id', id);
+            }
+        } catch (e) {
+            // An anchor is a convenience; never let it abort the document.
+            console.warn('[Heading] id generation failed: ' + describeError(e));
         }
         return self.renderToken(tokens, idx, options);
     };
@@ -1871,24 +2177,40 @@
     }, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
 
     // === Renderer ===
+    function katexUnavailable() {
+        return typeof katex === 'undefined' || typeof katex.renderToString !== 'function';
+    }
     function renderKatexInline(latex) {
+        if (katexUnavailable()) {
+            // Same class as the renderer's own catch path, so the existing
+            // DOM audit classifies this as an environment failure, not a typo.
+            return '<span class="katex-error" title="KaTeX unavailable">' +
+                escapeHtml('KaTeX is unavailable (the library failed to load)') + '</span>';
+        }
         try {
             // Detect display math from \begin env
             var display = /\\begin\{(align|equation|gather|cd|alignat)\}/i.test(latex);
             return katex.renderToString(latex, { displayMode: display, throwOnError: false });
         } catch(e) {
-            return '<span class="katex-error" title="' + escapeHtml(latex) + '">' + escapeHtml(e.message) + '</span>';
+            return '<span class="katex-error" title="' + escapeHtml(latex) + '">' +
+                escapeHtml(describeError(e)) + '</span>';
         }
     }
     function renderKatexBlock(latex) {
+        if (katexUnavailable()) {
+            return '<p class="katex-block katex-error" title="KaTeX unavailable">' +
+                escapeHtml('KaTeX is unavailable (the library failed to load)') + '</p>';
+        }
         try {
             return '<p class="katex-block">' + katex.renderToString(latex, { displayMode: true, throwOnError: false }) + '</p>';
         } catch(e) {
-            return '<p class="katex-block katex-error" title="' + escapeHtml(latex) + '">' + escapeHtml(e.message) + '</p>';
+            return '<p class="katex-block katex-error" title="' + escapeHtml(latex) + '">' +
+                escapeHtml(describeError(e)) + '</p>';
         }
     }
     function escapeHtml(s) {
-        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     md.renderer.rules.math_inline = function(tokens, idx) {
@@ -2045,7 +2367,7 @@
                 body = md.render(content);
             } catch (e) {
                 return '<div class="chat-error">⚠ chat fence error: the body failed to render: ' +
-                    escapeHtml(e.message) + '<pre>' + escapeHtml(content) + '</pre></div>\n';
+                    escapeHtml(describeError(e)) + '<pre>' + escapeHtml(content) + '</pre></div>\n';
             }
         }
         return '<div class="chat-block-wrap">' +
@@ -2068,9 +2390,27 @@
     }
 
     // === Mermaid / PlantUML / plot / video / chat code blocks ===
+    function fenceError(label, message, source) {
+        return '<pre style="color:#f14c4c;border:1px solid #f14c4c;padding:8px;white-space:pre-wrap;">' +
+            '⚠ ' + label + ': ' + escapeHtml(message) + '\n\n' +
+            escapeHtml(source == null ? '' : source) + '</pre>\n';
+    }
+
+    // One bad fence must not abort the whole document. The original rule is
+    // wrapped so a throw in any special branch degrades to a visible error block
+    // and the rest of the Markdown still renders.
     var origFence = md.renderer.rules.fence;
     md.renderer.rules.fence = function(tokens, idx, options, env, self) {
         var token = tokens[idx];
+        try {
+            return renderSpecialFence.call(this, token, tokens, idx, options, env, self);
+        } catch (e) {
+            console.error('[Fence] render failed: ' + describeError(e));
+            return fenceError('Fence render error', describeError(e), token && token.content);
+        }
+    };
+
+    function renderSpecialFence(token, tokens, idx, options, env, self) {
         var rawInfo = token.info ? token.info.trim() : '';
         var info = rawInfo.toLowerCase();
         if (info === 'chat' || info.indexOf('chat[') === 0) {
@@ -2083,17 +2423,25 @@
                 '</pre></div>\n';
         }
         if (info === 'plantuml' || info === 'puml') {
+            if (!window.plantumlEncoder || typeof window.plantumlEncoder.encode !== 'function') {
+                // Keep the "PlantUML render error:" prefix: RenderCheck.js keys on
+                // it to classify this as an environment problem, not a document bug.
+                return fenceError('PlantUML render error',
+                    'plantuml-encoder is unavailable (failed to load from the CDN)',
+                    token.content);
+            }
             try {
                 var encoded = window.plantumlEncoder.encode(token.content);
+                if (!encoded || typeof encoded !== 'string') throw new Error('the encoder returned no data');
                 var themeClass = currentTheme === 'light' ? 'puml-light' : 'puml-dark';
                 return '<div class="puml-container ' + themeClass + '">' +
                     '<img src="https://www.plantuml.com/plantuml/svg/' + encoded + '" ' +
-                    'alt="PlantUML Diagram" />' +
+                    'alt="PlantUML Diagram" ' +
+                    'onerror="this.closest(\'.puml-container\').classList.add(\'puml-load-failed\');' +
+                    'this.alt=\'PlantUML image failed to load\';" />' +
                     '</div>\n';
             } catch(e) {
-                return '<pre style="color:#f14c4c;border:1px solid #f14c4c;padding:8px;">' +
-                    '⚠ PlantUML render error: ' + escapeHtml(e.message) + '\n\n' +
-                    escapeHtml(token.content) + '</pre>\n';
+                return fenceError('PlantUML render error', describeError(e), token.content);
             }
         }
         if (info === 'plot') {
@@ -2116,7 +2464,7 @@
                 '</video>\n';
         }
         return origFence ? origFence.call(this, tokens, idx, options, env, self) : '';
-    };
+    }
 
     // === Video / Platform embed support ===
     // Detects direct video files (.mp4, .webm, .ogg, etc.) and renders <video>.
@@ -2124,22 +2472,33 @@
     var origImageRender = md.renderer.rules.image;
     md.renderer.rules.image = function(tokens, idx, options, env, self) {
         var token = tokens[idx];
-        var src = token.attrs[token.attrIndex('src')][1];
-        var alt = token.content;
+        try {
+            // A malformed image token can have no src attribute. Indexing
+            // attrs[-1] used to throw and abort the entire document render.
+            var srcIndex = token.attrIndex ? token.attrIndex('src') : -1;
+            var src = (srcIndex >= 0 && token.attrs && token.attrs[srcIndex])
+                ? String(token.attrs[srcIndex][1] || '')
+                : '';
+            var alt = token.content || '';
+            if (!src) return escapeHtml(alt);
 
-        // Platform embed URL patterns
-        var embedHtml = getPlatformEmbed(src, alt);
-        if (embedHtml) return embedHtml;
+            // Platform embed URL patterns
+            var embedHtml = getPlatformEmbed(src, alt);
+            if (embedHtml) return embedHtml;
 
-        // Direct video file
-        var isVideo = /\.(mp4|webm|ogg|mov|avi|mkv)(\?|#|$)/i.test(src);
-        if (isVideo) {
-            return '<video controls playsinline preload="metadata" style="max-width:100%;height:auto;border-radius:4px;">' +
-                '<source src="' + escapeHtml(src) + '">' +
-                'Your browser does not support the video element.' +
-                '</video>\n';
+            // Direct video file
+            var isVideo = /\.(mp4|webm|ogg|mov|avi|mkv)(\?|#|$)/i.test(src);
+            if (isVideo) {
+                return '<video controls playsinline preload="metadata" style="max-width:100%;height:auto;border-radius:4px;">' +
+                    '<source src="' + escapeHtml(src) + '">' +
+                    'Your browser does not support the video element.' +
+                    '</video>\n';
+            }
+            return origImageRender ? origImageRender.call(this, tokens, idx, options, env, self) : escapeHtml(alt);
+        } catch (e) {
+            console.warn('[Image] render failed: ' + describeError(e));
+            return escapeHtml(token && token.content ? token.content : '');
         }
-        return origImageRender ? origImageRender(tokens, idx, options, env, self) : '';
     };
 
     // Facade (click-to-play) embed: a static tile that does NOT load the third-party
@@ -2147,7 +2506,10 @@
     // re-renders — the platform player (and its console noise / fingerprinting / DRM
     // errors) only loads on explicit interaction.
     function embedFacade(src, label, thumb) {
-        var style = thumb ? ' style="background-image:url(\'' + thumb.replace(/'/g, "%27") + '\')"' : '';
+        var thumbSafe = thumb
+            ? String(thumb).replace(/'/g, "%27").replace(/\\/g, "%5C")
+            : '';
+        var style = thumbSafe ? ' style="background-image:url(\'' + thumbSafe + '\')"' : '';
         return '<div class="embed-facade" tabindex="0" role="button" aria-label="Play ' + escapeHtml(label) + '" data-src="' + escapeHtml(src) + '" data-title="' + escapeHtml(label) + '"' + style + '>' +
             '<span class="embed-play" aria-hidden="true"></span>' +
             '<span class="embed-label">' + escapeHtml(label) + '</span>' +
@@ -2158,10 +2520,23 @@
     // (Vimeo / Bilibili public APIs). Keeps the dark tile on failure.
     function fetchFacadeThumb(facade, apiUrl, jsonField) {
         try {
-            fetch(apiUrl).then(function(r) { return r.json(); }).then(function(j) {
-                var u = jsonField.split('.').reduce(function(o, k) { return (o && o[k] !== undefined) ? o[k] : null; }, j);
-                if (u) facade.style.backgroundImage = "url('" + u + "')";
-            }).catch(function() {});
+            if (!facade || !apiUrl || !jsonField) return;
+            var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timer = setTimeout(function () {
+                if (controller) { try { controller.abort(); } catch (e2) { /* ignore */ } }
+            }, 8000);
+            var options = controller ? { signal: controller.signal } : undefined;
+
+            fetch(apiUrl, options).then(function(r) { return r.json(); }).then(function(j) {
+                var u = jsonField.split('.').reduce(function(o, k) {
+                    return (o && o[k] !== undefined) ? o[k] : null;
+                }, j);
+                if (u && facade.isConnected) facade.style.backgroundImage = "url('" + u + "')";
+            }).catch(function() {
+                // Keep the dark tile: a missing thumbnail is cosmetic.
+            }).then(function() {
+                clearTimeout(timer);
+            });
         } catch (e) { /* keep dark bg */ }
     }
 
@@ -2169,32 +2544,40 @@
     function preconnectVideo(src) {
         var origin;
         try { origin = new URL(src, location.href).origin; } catch (e) { return; }
-        var links = document.querySelectorAll('link[rel="preconnect"]');
-        for (var i = 0; i < links.length; i++) if (links[i].href === origin + '/') return;
-        var link = document.createElement('link');
-        link.rel = 'preconnect';
-        link.href = origin;
-        document.head.appendChild(link);
+        try {
+            var links = document.querySelectorAll('link[rel="preconnect"]');
+            for (var i = 0; i < links.length; i++) if (links[i].href === origin + '/') return;
+            var link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = origin;
+            document.head.appendChild(link);
+        } catch (e2) { /* a hint is optional */ }
     }
 
     // Load the real platform iframe when a facade is clicked. The click is a user
     // gesture, so autoplay is allowed; preconnect speeds up the iframe load.
     window.loadVideoEmbed = function(facade) {
+        if (!facade || !facade.parentNode) return;
         var src = facade.getAttribute('data-src');
         if (!src) return;
-        preconnectVideo(src);
-        src = src.replace('autoplay=0', 'autoplay=1');
-        if (src.indexOf('autoplay=') === -1) src += (src.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1';
-        var iframe = document.createElement('iframe');
-        iframe.setAttribute('src', src);
-        iframe.setAttribute('frameborder', '0');
-        iframe.setAttribute('allow', 'accelerometer;autoplay;clipboard-write;encrypted-media;fullscreen;gyroscope;picture-in-picture');
-        iframe.setAttribute('title', facade.getAttribute('data-title') || 'Video');
-        facade.parentNode.replaceChild(iframe, facade);
+        try {
+            preconnectVideo(src);
+            src = src.replace('autoplay=0', 'autoplay=1');
+            if (src.indexOf('autoplay=') === -1) src += (src.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1';
+            var iframe = document.createElement('iframe');
+            iframe.setAttribute('src', src);
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allow', 'accelerometer;autoplay;clipboard-write;encrypted-media;fullscreen;gyroscope;picture-in-picture');
+            iframe.setAttribute('title', facade.getAttribute('data-title') || 'Video');
+            if (facade.parentNode) facade.parentNode.replaceChild(iframe, facade);
+        } catch (e) {
+            console.warn('[Video] could not load embed: ' + describeError(e));
+        }
     };
 
     /** Try to convert a URL into a platform embed facade, or null if not supported. */
     function getPlatformEmbed(url, label) {
+        if (typeof url !== 'string' || !url) return null;
         // YouTube: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
         var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
         if (ytMatch) {
@@ -2227,10 +2610,8 @@
 
     // === Mermaid render (after page load) ===
     function renderMermaid() {
-        if (typeof mermaid !== 'undefined') {
-            var pv = document.getElementById('preview');
-            if (pv) runMermaidAll(pv);
-        }
+        var pv = document.getElementById('preview');
+        if (pv) runMermaidAll(pv);
     }
 
     // ===== Auto-scroll (follow-to-bottom) behavior =====
@@ -2356,21 +2737,35 @@
 
     // === Main render function ===
     window.renderMarkdown = function(text, followToBottom) {
-        console.log('renderMarkdown called, length=' + (text ? text.length : 0));
+        // InvokeScript is public API: coerce anything callable into a string
+        // instead of calling .length on an object / null.
+        text = (text == null) ? '' : String(text);
+
+        console.log('renderMarkdown called, length=' + text.length);
         var preview = document.getElementById('preview');
         if (!preview) { console.error('preview element not found'); return; }
+
         if (!text) {
             // Empty state: show a configurable placeholder, or a blank pane by default.
-            preview.innerHTML = previewConfig.placeholder
-                ? '<p class="empty-placeholder">' + escapeHtml(previewConfig.placeholder) + '</p>'
-                : '';
-            preview.removeAttribute('data-source');
+            try {
+                preview.innerHTML = previewConfig.placeholder
+                    ? '<p class="empty-placeholder">' + escapeHtml(previewConfig.placeholder) + '</p>'
+                    : '';
+                preview.removeAttribute('data-source');
+                preview.removeAttribute('data-render-error');
+            } catch (e0) {
+                console.error('[Render] empty-state failed: ' + describeError(e0));
+            }
             return;
         }
+
         preview.setAttribute('data-source', text);
-        ctxHide();   // the container the menu points at is about to be destroyed
+        try { ctxHide(); } catch (eCtx) { /* menu cleanup is best effort */ }
+
         try {
             preview.innerHTML = md.render(text);
+            preview.removeAttribute('data-render-error');
+
             // Intercept external links:
             // Replace href with javascript:void(0) to prevent ANY native navigation
             // on ALL platforms (WebView2 / Android WebView / iOS WKWebView / WASM).
@@ -2378,28 +2773,33 @@
             // system browser / new tab. No platform-specific C# bridge needed.
             var links = preview.querySelectorAll('a[href]');
             for (var i = 0; i < links.length; i++) {
-                var a = links[i];
-                var href = a.getAttribute('href');
-                if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
-                a.setAttribute('data-href', href);
-                a.href = 'javascript:void(0)';
-                a.setAttribute('rel', 'noopener noreferrer');
-                a.addEventListener('click', (function(url) {
-                    return function(e) {
-                        e.preventDefault();
-                        // Send [LINK] to C# via the cross-platform bridge.
-                        // The post() function handles WebView2, Android (AvaloniaWebViewBridge),
-                        // and iframe (window.parent.postMessage) — same chain used for console logs.
-                        post('LINK', url);
-                        // Fall back to window.open only when NO C# bridge is reachable
-                        // (e.g. the raw page opened directly in a browser). With any bridge,
-                        // navigation is routed through C# — window.open on Android WebView
-                        // would navigate the current page and overwrite the preview.
-                        if (!hasBridge() && /^(https?|mailto|tel):/i.test(url)) {
-                            window.open(url, '_blank');
-                        }
-                    };
-                })(href));
+                try {
+                    var a = links[i];
+                    var href = a.getAttribute('href');
+                    if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+                    a.setAttribute('data-href', href);
+                    a.href = 'javascript:void(0)';
+                    a.setAttribute('rel', 'noopener noreferrer');
+                    a.addEventListener('click', (function(url) {
+                        return function(e) {
+                            try { e.preventDefault(); } catch (e0) { /* ignore */ }
+                            // Send [LINK] to C# via the cross-platform bridge.
+                            // The post() function handles WebView2, Android (AvaloniaWebViewBridge),
+                            // and iframe (window.parent.postMessage) — same chain used for console logs.
+                            post('LINK', url);
+                            // Fall back to window.open only when NO C# bridge is reachable
+                            // (e.g. the raw page opened directly in a browser). With any bridge,
+                            // navigation is routed through C# — window.open on Android WebView
+                            // would navigate the current page and overwrite the preview.
+                            if (!hasBridge() && /^(https?|mailto|tel):/i.test(url)) {
+                                try { window.open(url, '_blank'); } catch (e1) { /* popup blocked */ }
+                            }
+                        };
+                    })(href));
+                } catch (eLink) {
+                    // One malformed link must not break the rest of the document.
+                    console.warn('[Link] could not wire a link: ' + describeError(eLink));
+                }
             }
 
             // Facade video embeds: wire the click-to-play delegation once, and fetch
@@ -2419,12 +2819,17 @@
             }
             var thumbFacades = preview.querySelectorAll('.embed-container[data-thumb-api] .embed-facade');
             for (var ti = 0; ti < thumbFacades.length; ti++) {
-                (function(f) {
-                    var c = f.parentNode;
-                    var api = c.getAttribute('data-thumb-api');
-                    var field = c.getAttribute('data-thumb-field');
-                    if (api && field) fetchFacadeThumb(f, api, field);
-                })(thumbFacades[ti]);
+                try {
+                    (function(f) {
+                        var c = f.parentNode;
+                        if (!c) return;
+                        var api = c.getAttribute('data-thumb-api');
+                        var field = c.getAttribute('data-thumb-field');
+                        if (api && field) fetchFacadeThumb(f, api, field);
+                    })(thumbFacades[ti]);
+                } catch (eThumb) {
+                    console.warn('[Video] thumbnail wiring failed: ' + describeError(eThumb));
+                }
             }
 
             runMermaidAll(preview);
@@ -2440,8 +2845,24 @@
             }
             console.log('✅ Render complete');
         } catch(e) {
-            console.error('❌ ' + e.message);
-            preview.innerHTML = '<pre>' + escapeHtml(text) + '</pre>';
+            // Whole-document parse failure: show the source rather than a blank
+            // pane, and leave an explicit marker for the DOM audit.
+            console.error('❌ ' + describeError(e));
+            try {
+                preview.setAttribute('data-render-error', describeError(e));
+                preview.innerHTML = '';
+                var note = document.createElement('div');
+                note.className = 'render-unavailable';
+                note.textContent = '⚠ The Markdown could not be rendered: ' + describeError(e) +
+                    ' — showing the source below.';
+                var pre = document.createElement('pre');
+                pre.className = 'render-fallback';
+                pre.textContent = text;
+                preview.appendChild(note);
+                preview.appendChild(pre);
+            } catch (e1) {
+                console.error('[Render] fallback failed: ' + describeError(e1));
+            }
         }
     };
 
@@ -2455,6 +2876,7 @@
     // Blocking <script> tags guarantee execution order, but a defensive poll
     // verifies every library's global is truly available before signalling ready.
     // A timeout ensures tracking-prevented CDN scripts don't stall the preview.
+    var readyAttempts = 0;
     (function checkReady() {
         // Check critical libraries — ones essential for basic markdown rendering
         var criticalReady = typeof window.markdownit === 'function';
@@ -2472,6 +2894,12 @@
             if (!plantumlReady) console.warn('[Ready] plantuml-encoder blocked or unavailable');
             if (!plotReady) console.warn('[Ready] function-plot blocked or unavailable');
             console.log('✅ Markdown Preview ready');
+        } else if (++readyAttempts > 300) {
+            // ~30 s. The early guard handles a missing markdown-it; this only
+            // prevents an endless timer if the script loaded in an unusual order.
+            console.warn('[Ready] markdown-it did not become available; signalling anyway');
+            post('ERR', '[Init] markdown-it did not become available after 30s');
+            post('READY', '');
         } else {
             setTimeout(checkReady, 100);
         }

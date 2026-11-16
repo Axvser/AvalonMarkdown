@@ -298,6 +298,42 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 ---
 
+## 测试与容灾
+
+验证由一套离线 C# 单元测试和四个环境变量驱动的端到端驱动组成。每个驱动都会在结束时
+退出进程 —— **一次只能启用一个**（启用多个时会快速失败并给出提示）：
+
+| 命令 | 检查内容 |
+| --- | --- |
+| `dotnet run --project AvalonMarkdown.Test.Unit` | 纯 C#：Myers diff、JS 字符串字面量编码、导出文件名净化、恶意区域设置/越界值下的主题 CSS，以及本地 HTTP 服务器面对畸形、超大、并发和挂起客户端时的行为。离线运行，无需窗口。 |
+| `AVALON_THEME_AUDIT=1 dotnet run --project AvalonMarkdown.Test.Desktop` | `MarkdownThemeViewModel` 的每个属性都进入生成的 CSS，且每条生成的规则都有真实消费者 |
+| `AVALON_CAPTURE_ERRORS=1 dotnet run --project AvalonMarkdown.Test.Desktop` | 驱动应用走完各阶段；断言 fence 分派与 showcase 资源加载 |
+| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<绝对路径> dotnet run --project AvalonMarkdown.Test.Desktop` | 通过真实管线渲染一个文件并审计 DOM；通常由 `render_check.py` 驱动 |
+| `AVALON_FAULT_CHECK=1 dotnet run --project AvalonMarkdown.Test.Desktop` | 故障注入：垃圾配置、畸形 fence、病态 Markdown、逐个移除可选 CDN 库、会挂起的导出路径、抛异常的事件订阅者。输出 `fault-check.log` / `fault-check.json`。 |
+
+不启用任何驱动时，就是普通的可视化检查。
+
+### 容灾行为
+
+预览的原则是**显式降级，绝不静默失败**：
+
+- **markdown-it 缺失** —— 安装纯文本渲染器并立即发送 `READY`，控件不会白等 15 秒超时。
+- **可选库缺失**（mermaid、KaTeX、function-plot、plantuml-encoder、脚注/任务列表插件）——
+  受影响的 fence 显示本地说明，文档其余部分照常渲染。
+- **单个坏 fence / 图片 token** —— fence 与 image 渲染规则相互隔离；其余 Markdown 照常
+  渲染，失败成员显示源码与错误原因。
+- **坏配置 / 脚本 / CSS** —— 数值会被钳制与转型；无效脚本或样式表不会让预览变空。
+- **导出** —— 光栅化与网络请求都有超时和一次性回调；失败通过 toast 报告，菜单不会永久禁用。
+- **事件边界** —— async void 处理函数以及所有公开事件订阅者（`OnReady`、
+  `ErrorOccurred`、`ConsoleMessage`、`LinkClicked`）都有异常隔离，订阅者抛异常不会终止宿主。
+- **渲染** —— 请求串行化并丢弃过期请求；失败渲染不会把文本记为已渲染，下一次仍可重试。
+- **本地 HTTP 服务器** —— 请求头上限、连接数上限、单客户端超时、仅接受 GET/HEAD，
+  幂等释放并在重启前释放端口。
+- **重启 / 重新挂载** —— 重启会重新渲染当前文本而不是留下空白；控件从可视树移除后再挂回
+  会自行重新初始化。
+
+---
+
 ## 书写规范与校验器
 
 [`skills/avalonmarkdown-syntax/`](skills/avalonmarkdown-syntax/) 记录了这个控件渲染的

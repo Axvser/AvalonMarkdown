@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Platform;
 using Avalonia.Styling;
@@ -13,6 +15,21 @@ namespace AvalonMarkdown.Services;
 /// </summary>
 public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
 {
+    // Matches the class attribute on <html> whatever it currently contains, so a
+    // later index.html edit cannot silently break the loading-theme injection the
+    // way a literal Replace("class=\"theme-dark\"") would.
+    private static readonly Regex HtmlTagClass = new(
+        @"<html\b(?<attrs>[^>]*)>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ClassAttribute = new(
+        @"\bclass\s*=\s*""(?<classes>[^""]*)""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ThemeToken = new(
+        @"\btheme-(?:dark|light)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly Lazy<string> _html;
 
     public EmbeddedHtmlSourceProvider()
@@ -23,10 +40,38 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
     public string GetHtmlContent()
     {
         var html = _html.Value;
-        // Inject current system theme to match loading text and background color before WebView navigates
         var themeClass = GetCurrentTheme() == "light" ? "theme-light" : "theme-dark";
-        html = html.Replace("class=\"theme-dark\"", $"class=\"{themeClass}\"");
-        return html;
+        return ApplyThemeClass(html, themeClass);
+    }
+
+    /// <summary>
+    /// Rewrite the <c>&lt;html&gt;</c> class so the loading placeholder is painted
+    /// in the right theme before the WebView navigates. Idempotent, and tolerant of
+    /// a custom index.html without a class attribute.
+    /// </summary>
+    internal static string ApplyThemeClass(string html, string themeClass)
+    {
+        if (string.IsNullOrEmpty(html))
+            return html;
+
+        return HtmlTagClass.Replace(html, match =>
+        {
+            var attrs = match.Groups["attrs"].Value;
+            var classMatch = ClassAttribute.Match(attrs);
+            if (classMatch.Success)
+            {
+                var classes = ThemeToken.Replace(classMatch.Groups["classes"].Value, themeClass)
+                    .Trim();
+                if (classes.IndexOf(themeClass, StringComparison.OrdinalIgnoreCase) < 0)
+                    classes = string.IsNullOrEmpty(classes) ? themeClass : classes + " " + themeClass;
+
+                var replacedAttrs = attrs.Remove(classMatch.Index, classMatch.Length)
+                    .Insert(classMatch.Index, $"class=\"{classes}\"");
+                return "<html" + replacedAttrs + ">";
+            }
+
+            return "<html class=\"" + themeClass + "\"" + attrs + ">";
+        }, 1);
     }
 
     private static string GetCurrentTheme()
@@ -44,6 +89,8 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
             if (html == null)
                 return FallbackHtml("Cannot find index.html");
 
+            var missing = new List<string>();
+
             // Inline renderer.css
             var css = ReadAsset("avares://AvalonMarkdown/Assets/AvalonMarkdown/WebView/renderer.css");
             if (css != null)
@@ -51,6 +98,10 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
                 html = html.Replace(
                     """<link rel="stylesheet" href="renderer.css">""",
                     $"<style>{css}</style>");
+            }
+            else
+            {
+                missing.Add("renderer.css");
             }
 
             // Inline renderer.js
@@ -60,6 +111,26 @@ public class EmbeddedHtmlSourceProvider : IWebViewSourceProvider
                 html = html.Replace(
                     """<script src="renderer.js"></script>""",
                     $"<script>{js}</script>");
+            }
+            else
+            {
+                missing.Add("renderer.js");
+            }
+
+            if (missing.Count > 0)
+            {
+                // Without renderer.js nothing will render, and without CSS the page
+                // is an unstyled wall of text. Say so in the page rather than leaving
+                // the user staring at a blank preview.
+                var warning =
+                    "<div style=\"position:fixed;top:0;left:0;right:0;z-index:10000;" +
+                    "background:#5c2a2a;color:#ffd7d7;padding:8px 12px;font:12px sans-serif;\">" +
+                    "⚠ AvalonMarkdown is missing its embedded assets: " +
+                    System.Net.WebUtility.HtmlEncode(string.Join(", ", missing)) +
+                    "</div>";
+                var withWarning = Regex.Replace(
+                    html, "<body\\b[^>]*>", m => m.Value + warning, RegexOptions.IgnoreCase);
+                html = withWarning != html ? withWarning : warning + html;
             }
 
             return html;

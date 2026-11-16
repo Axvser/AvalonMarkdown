@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -30,6 +32,19 @@ public partial class MarkdownView : UserControl
     private string? _lastRenderedText;
     private string _htmlContent = "";
     private LocalHtmlServer? _localServer;
+
+    // Renders are asynchronous on Android/iOS, so a burst of Text changes can
+    // overlap. Requests are serialised here and stale ones are dropped by id —
+    // otherwise an older render can land after a newer one and show old content.
+    private readonly SemaphoreSlim _renderGate = new(1, 1);
+    private long _renderRequestId;
+
+    // Incremented whenever the native view is torn down; work started under an
+    // older generation must not resurrect a preview that has been detached.
+    private int _lifecycleGeneration;
+    private bool _initInProgress;
+    private volatile bool _initFailed;
+    private volatile bool _detached;
     // ====================================================================
     // Static theme management
     // ====================================================================
@@ -60,6 +75,13 @@ public partial class MarkdownView : UserControl
         get => GetValue(TextProperty);
         set => SetValue(TextProperty, value);
     }
+
+    /// <summary>
+    /// Whether the preview page has loaded and is accepting render calls. An
+    /// editor that attaches after the preview became ready can check this instead
+    /// of waiting for another <see cref="OnReady"/> event that will never fire.
+    /// </summary>
+    public bool IsReady => _ready;
 
     /// <summary>
     /// Text shown when the preview has no content (like a TextBox placeholder).
@@ -117,20 +139,19 @@ public partial class MarkdownView : UserControl
 
     private async Task PushPlaceholderAsync()
     {
-        var escaped = EscapeJsString(Placeholder ?? "");
-        await InvokeScriptSafeAsync($"setPreviewConfig({{ placeholder: '{escaped}' }})");
+        await InvokeScriptSafeAsync($"setPreviewConfig({{ placeholder: {MarkdownJs.StringLiteral(Placeholder)} }})");
     }
 
     private static void OnTextChanged(MarkdownView sender, AvaloniaPropertyChangedEventArgs e)
     {
         var newText = e.NewValue as string;
 
-        // Myers diff: skip if the new value is semantically identical to the last rendered text.
-        // This avoids redundant InvokeScript calls when the binding pushes the same value.
+        // Skip if the new value is semantically identical to the last text that
+        // ACTUALLY rendered. _lastRenderedText is only advanced on success, so a
+        // failed render is retried rather than being remembered as rendered.
         if (MyersDiff.AreEqual(sender._lastRenderedText, newText))
             return;
 
-        sender._lastRenderedText = newText;
         _ = sender.RenderMarkdownAsync(newText);
     }
 
@@ -268,6 +289,12 @@ public partial class MarkdownView : UserControl
 
     private async Task InitializeWebViewAsync()
     {
+        if (_initInProgress || _ready)
+            return;
+
+        _initInProgress = true;
+        _initFailed = false;
+
         try
         {
             _htmlContent = _sourceProvider.GetHtmlContent();
@@ -281,14 +308,28 @@ public partial class MarkdownView : UserControl
             {
                 // Use a local HTTP server (http://127.0.0.1) instead of file:// or data: URIs.
                 // YouTube's iframe embed rejects non-http origins with error 153.
-                _localServer = new LocalHtmlServer(_htmlContent);
-                await _localServer.StartAsync();
-                _webView.Source = new Uri(_localServer.BaseUrl);
+                var oldServer = Interlocked.Exchange(ref _localServer, null);
+                if (oldServer is not null)
+                {
+                    try { await oldServer.DisposeAsync(); } catch { /* teardown is best effort */ }
+                }
+
+                var server = new LocalHtmlServer(_htmlContent);
+                await server.StartAsync();
+                _localServer = server;
+                _webView.Source = new Uri(server.BaseUrl);
             }
         }
         catch (Exception ex)
         {
+            _initFailed = true;
+            _initialized = false;   // a later Text change / retry may try again
+            _pendingMarkdown ??= Text;
             ShowError("Init failed", ex.Message);
+        }
+        finally
+        {
+            _initInProgress = false;
         }
     }
 
@@ -304,14 +345,10 @@ public partial class MarkdownView : UserControl
 
         try
         {
-            var escaped = _htmlContent
-                .Replace("\\", "\\\\")
-                .Replace("'", "\\'")
-                .Replace("\r\n", "\\n")
-                .Replace("\n", "\\n")
-                .Replace("\r", "\\n");
-
-            var script = $"document.open();document.write('{escaped}');document.close();";
+            // JSON-encode the page as a real JavaScript string literal. The old
+            // hand-rolled escaper missed U+2028/U+2029 and any control character,
+            // which could either break the expression or inject code.
+            var script = $"document.open();document.write({MarkdownJs.StringLiteral(_htmlContent)});document.close();";
             var result = _webView.InvokeScript(script);
             if (result is Task t)
                 await t.WaitAsync(TimeSpan.FromSeconds(5));
@@ -322,6 +359,7 @@ public partial class MarkdownView : UserControl
         {
             ShowError("Inject failed", ex.Message);
             _htmlInjected = false;
+            _initFailed = true;   // a later render may retry the whole injection
             return;
         }
     }
@@ -330,6 +368,7 @@ public partial class MarkdownView : UserControl
     {
         if (_ready) return;
         _ready = true;
+        _initFailed = false;
 
         // Reveal the WebView now that initialization has completed successfully
         // and the iframe has its final dimensions.
@@ -351,18 +390,22 @@ public partial class MarkdownView : UserControl
             _ = RenderMarkdownAsync(md);
 
             // Android WebView may silently drop the first evaluateJavascript call,
-            // so it gets a safety retry at the next dispatcher frame. Other platforms
-            // render once — a redundant re-render of identical content is wasted work
-            // and triggers the mermaid render race on WASM.
+            // so it gets a safety retry at the next dispatcher frame. Only retry if
+            // the bound Text is still this document — otherwise the retry would
+            // clobber content an OnReady subscriber has already supplied.
             if (OperatingSystem.IsAndroid())
-                _ = Dispatcher.UIThread.InvokeAsync(() => _ = RenderMarkdownAsync(md));
+                _ = Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!_detached && _ready && MyersDiff.AreEqual(Text, md))
+                        _ = RenderMarkdownAsync(md);
+                });
         }
 
-        OnReady?.Invoke(this, EventArgs.Empty);
+        RaiseOnReady();
 
         // Browser-side iframe needs multiple layout passes to stabilize initial size
         if (OperatingSystem.IsBrowser())
-            _ = StabilizeBrowserLayoutAsync();
+            _ = StabilizeBrowserLayoutAsync(Volatile.Read(ref _lifecycleGeneration));
     }
 
     /// <summary>
@@ -370,13 +413,15 @@ public partial class MarkdownView : UserControl
     /// to complete initial layout; iframe may get a transient size at creation.
     /// Use incremental delays to repeatedly trigger layout updates for stabilization.
     /// </summary>
-    private async Task StabilizeBrowserLayoutAsync()
+    private async Task StabilizeBrowserLayoutAsync(int generation)
     {
         try
         {
             for (int i = 0; i < 4; i++)
             {
                 await Task.Delay(100 * (i + 1));
+                if (_detached || generation != Volatile.Read(ref _lifecycleGeneration))
+                    return;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     ForceLayout();
@@ -395,32 +440,43 @@ public partial class MarkdownView : UserControl
 
     private async void OnNavigationCompleted(object? sender, EventArgs e)
     {
-        if (_htmlInjected || _ready)
-            return;
+        var generation = Volatile.Read(ref _lifecycleGeneration);
 
-        if (IsDesktop || !OperatingSystem.IsBrowser())
+        try
         {
-            _htmlInjected = true;
-            ForceLayout();
+            if (_detached || _htmlInjected || _ready)
+                return;
 
-            if (IsDesktop)
+            if (IsDesktop || !OperatingSystem.IsBrowser())
             {
-                // Desktop (WebView2): NavigationCompleted fires after the page frame
-                // and all blocking CDN scripts have loaded — safe to SetReady immediately.
-                SetReady();
+                _htmlInjected = true;
+                ForceLayout();
+
+                if (IsDesktop)
+                {
+                    // Desktop (WebView2): NavigationCompleted fires after the page frame
+                    // and all blocking CDN scripts have loaded — safe to SetReady immediately.
+                    SetReady();
+                }
+                else
+                {
+                    // Android/iOS: NavigationCompleted may fire before JS CDN scripts
+                    // (markdown-it, highlight.js, mermaid, etc.) have finished loading.
+                    // Wait for JS readiness before signaling that the preview is ready.
+                    await WaitForJsReadyAsync(generation);
+                    if (!_detached && generation == Volatile.Read(ref _lifecycleGeneration))
+                        SetReady();
+                }
             }
             else
             {
-                // Android/iOS: NavigationCompleted may fire before JS CDN scripts
-                // (markdown-it, highlight.js, mermaid, etc.) have finished loading.
-                // Wait for JS readiness before signaling that the preview is ready.
-                await WaitForJsReadyAsync();
-                SetReady();
+                await InjectViaDocumentWriteAsync();
             }
         }
-        else
+        catch (Exception ex)
         {
-            _ = InjectViaDocumentWriteAsync();
+            // async void: an exception here would terminate the process.
+            ShowError("Navigation", $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -431,57 +487,68 @@ public partial class MarkdownView : UserControl
     /// </summary>
     public void OnWebViewMessage(object? sender, WebMessageReceivedEventArgs e)
     {
-        var message = e.Body;
-        if (string.IsNullOrEmpty(message))
-            return;
-
-        if (message.StartsWith("[READY]", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            if (!_ready && _htmlInjected)
+            var message = e.Body;
+            if (string.IsNullOrEmpty(message))
+                return;
+
+            if (message.StartsWith("[READY]", StringComparison.OrdinalIgnoreCase))
             {
-                try
+                if (!_ready && _htmlInjected && !_detached)
                 {
-                    _ = Dispatcher.UIThread.InvokeAsync(SetReady);
+                    try
+                    {
+                        _ = Dispatcher.UIThread.InvokeAsync(SetReady);
+                    }
+                    catch
+                    {
+                        // Ignore — SetReady() happens via NavigationCompleted path
+                    }
                 }
-                catch
-                {
-                    // Ignore — SetReady() happens via NavigationCompleted path
-                }
+                return;
             }
-            return;
+
+            if (message.StartsWith("[LOG]", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("[WARN]", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase))
+            {
+                // Surface every JS console message for diagnostics, capped so one
+                // runaway stack trace cannot bloat the control or the event args.
+                var close = message.IndexOf(']');
+                var level = close > 0 ? message[1..close].ToUpperInvariant() : "LOG";
+                var text = close > 0 ? message[(close + 1)..].Trim() : message;
+                text = Truncate(text, 16 * 1024);
+
+                RaiseConsoleMessage(level, text);
+
+                // Fatal JS errors also surface through ErrorOccurred (no error panel).
+                if (level is "ERR" or "ERROR")
+                    RaiseErrorOccurred("Render error", text);
+                return;
+            }
+
+            if (message.StartsWith("[LINK]", StringComparison.OrdinalIgnoreCase))
+            {
+                var url = message[6..].Trim();
+                if (!string.IsNullOrEmpty(url))
+                    _ = HandleLinkClickedAsync(url);
+                return;
+            }
+
+            if (message.StartsWith("[EXPORT]", StringComparison.OrdinalIgnoreCase))
+            {
+                var json = message[8..].Trim();
+                if (!string.IsNullOrEmpty(json))
+                    _ = HandleExportAsync(json);
+                return;
+            }
         }
-
-        if (message.StartsWith("[LOG]", StringComparison.OrdinalIgnoreCase) ||
-            message.StartsWith("[WARN]", StringComparison.OrdinalIgnoreCase) ||
-            message.StartsWith("[ERR]", StringComparison.OrdinalIgnoreCase) ||
-            message.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase))
+        catch (Exception ex)
         {
-            // Surface every JS console message for diagnostics.
-            var close = message.IndexOf(']');
-            var level = close > 0 ? message[1..close].ToUpperInvariant() : "LOG";
-            var text = close > 0 ? message[(close + 1)..].Trim() : message;
-            ConsoleMessage?.Invoke(this, new MarkdownConsoleMessageEventArgs(level, text));
-
-            // Fatal JS errors also surface through ErrorOccurred (no error panel).
-            if (level is "ERR" or "ERROR")
-                ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs("Render error", text));
-            return;
-        }
-
-        if (message.StartsWith("[LINK]", StringComparison.OrdinalIgnoreCase))
-        {
-            var url = message[6..].Trim();
-            if (!string.IsNullOrEmpty(url))
-                _ = HandleLinkClickedAsync(url);
-            return;
-        }
-
-        if (message.StartsWith("[EXPORT]", StringComparison.OrdinalIgnoreCase))
-        {
-            var json = message[8..].Trim();
-            if (!string.IsNullOrEmpty(json))
-                _ = HandleExportAsync(json);
-            return;
+            // A platform callback must never throw back into the WebView host.
+            Debug.WriteLine($"[AvalonMarkdown] OnWebViewMessage failed: {ex}");
         }
     }
 
@@ -506,12 +573,21 @@ public partial class MarkdownView : UserControl
     /// </summary>
     private async Task HandleExportAsync(string json)
     {
+        // The renderer caps PNG at ~700 KB, but an SVG is text and a hostile or
+        // buggy document could make it enormous. Bound it before parsing.
+        const int MaxPayloadChars = 32 * 1024 * 1024;
+        if (json.Length > MaxPayloadChars)
+        {
+            ShowError("Save Image", "The export payload was too large.");
+            return;
+        }
+
         ExportPayload? payload;
         try
         {
             payload = JsonSerializer.Deserialize<ExportPayload>(json);
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
             ShowError("Save Image", $"Malformed export payload: {ex.Message}");
             return;
@@ -536,7 +612,7 @@ public partial class MarkdownView : UserControl
             var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Save image",
-                SuggestedFileName = SanitizeFileName(payload.Name),
+                SuggestedFileName = MarkdownExport.SanitizeFileName(payload.Name),
                 DefaultExtension = isPng ? "png" : "svg",
                 FileTypeChoices = new[]
                 {
@@ -547,37 +623,32 @@ public partial class MarkdownView : UserControl
             });
             if (file is null) return;   // the user cancelled
 
-            await using var stream = await file.OpenWriteAsync();
+            byte[] bytes;
             if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase))
             {
-                await stream.WriteAsync(Convert.FromBase64String(payload.Data));
+                try
+                {
+                    bytes = Convert.FromBase64String(payload.Data);
+                }
+                catch (FormatException)
+                {
+                    ShowError("Save Image", "The image data was not valid base64.");
+                    return;
+                }
             }
             else
             {
                 // BOM-less UTF-8, to agree with the XML prolog the SVG carries.
-                await stream.WriteAsync(new UTF8Encoding(false).GetBytes(payload.Data));
+                bytes = new UTF8Encoding(false).GetBytes(payload.Data);
             }
+
+            await using var stream = await file.OpenWriteAsync();
+            await stream.WriteAsync(bytes);
         }
         catch (Exception ex)
         {
             ShowError("Save Image", ex.Message);
         }
-    }
-
-    /// <summary>
-    /// The name comes from the document, so it is untrusted: strip anything that
-    /// could escape the chosen folder or is illegal in a file name.
-    /// </summary>
-    private static string SanitizeFileName(string name)
-    {
-        var sb = new StringBuilder(name.Length);
-        foreach (var c in name)
-        {
-            sb.Append(char.IsLetterOrDigit(c) || c is '.' or '-' or '_' ? c : '_');
-        }
-        var clean = sb.ToString().Trim('.', '_');
-        if (clean.Length == 0) clean = "image";
-        return clean.Length > 100 ? clean[..100] : clean;
     }
 
     // ====================================================================
@@ -589,15 +660,20 @@ public partial class MarkdownView : UserControl
     /// or a 15-second timeout is reached. Used on Android/iOS where NavigationCompleted
     /// may fire before CDN scripts (markdown-it, highlight.js, etc.) finish loading.
     /// </summary>
-    private async Task WaitForJsReadyAsync()
+    private async Task WaitForJsReadyAsync(int generation)
     {
         const int maxRetries = 75; // ~15 seconds at 200ms intervals
         for (var i = 0; i < maxRetries; i++)
         {
+            if (_detached || generation != Volatile.Read(ref _lifecycleGeneration))
+                return;
             if (await CheckJsReadyAsync())
                 return;
             await Task.Delay(200);
         }
+
+        if (_detached || generation != Volatile.Read(ref _lifecycleGeneration))
+            return;
 
         // Timeout: JS didn't become ready — show error but still allow SetReady
         // so the preview doesn't hang forever.
@@ -656,6 +732,12 @@ public partial class MarkdownView : UserControl
     /// <summary>Renders Markdown content to the WebView</summary>
     public async Task RenderMarkdownAsync(string? markdown)
     {
+        if (_detached)
+        {
+            _pendingMarkdown = markdown;
+            return;
+        }
+
         // Defer WebView initialization until the first markdown text arrives.
         // By this point the control has completed layout with its final size,
         // so the Browser iframe is never created at (0,0).
@@ -663,33 +745,79 @@ public partial class MarkdownView : UserControl
         {
             _initialized = true;
             _pendingMarkdown = markdown;
-            _ = InitializeWebViewAsync();
+            await InitializeWebViewAsync();
             return;
         }
 
         if (!_ready)
         {
             _pendingMarkdown = markdown;
+
+            // A previous initialization failed. A later Text change is the natural
+            // retry signal — without this the control would wait for a readiness
+            // event that can never arrive.
+            if (_initFailed && !_initInProgress)
+            {
+                _initialized = true;
+                await InitializeWebViewAsync();
+            }
             return;
         }
 
+        var id = Interlocked.Increment(ref _renderRequestId);
+
+        await _renderGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            // A newer request arrived while this one was queued: it owns the DOM.
+            if (id != Volatile.Read(ref _renderRequestId))
+                return;
+
+            var ok = await RenderCoreAsync(markdown).ConfigureAwait(true);
+
+            if (id == Volatile.Read(ref _renderRequestId))
+            {
+                // Only a render that actually reached the page counts. On failure,
+                // leaving this null lets the same Text be retried instead of being
+                // short-circuited by MyersDiff.AreEqual forever.
+                _lastRenderedText = ok ? (markdown ?? string.Empty) : null;
+            }
+        }
+        finally
+        {
+            _renderGate.Release();
+        }
+    }
+
+    private async Task<bool> RenderCoreAsync(string? markdown)
+    {
         if (string.IsNullOrEmpty(markdown))
         {
-            _ = InvokeScriptSafeAsync("renderMarkdown('')");
-            return;
+            // Empty is a real state: it clears data-source and shows the placeholder.
+            var (emptyOk, _) = await InvokeScriptCoreAsync("renderMarkdown('')").ConfigureAwait(true);
+            return emptyOk;
         }
 
-        var escaped = EscapeJsString(markdown);
-        await InvokeScriptSafeAsync($"renderMarkdown('{escaped}')");
+        var script = $"renderMarkdown({MarkdownJs.StringLiteral(markdown)})";
+        var (ok, _) = await InvokeScriptCoreAsync(script).ConfigureAwait(true);
+        return ok;
     }
 
     /// <summary>Restarts preview (re-navigate / re-inject HTML)</summary>
     public async Task RestartPreviewAsync()
     {
+        HideError();
         _ready = false;
         _htmlInjected = false;
-        _pendingMarkdown = null;
-        HideError();
+        _initFailed = false;
+        _initialized = true;   // restart is itself an initialization
+
+        // Invalidate in-flight renders: their results must not be applied to the
+        // fresh page, and the current document should be re-rendered once it is up.
+        Interlocked.Increment(ref _renderRequestId);
+        var current = Text;
+        _pendingMarkdown = current;
+        _lastRenderedText = null;
 
         try
         {
@@ -701,19 +829,23 @@ public partial class MarkdownView : UserControl
             }
             else
             {
-                // Dispose previous server if any, start a new one
-                if (_localServer is not null)
+                // Dispose the previous server BEFORE binding a new one; otherwise
+                // a restart that runs twice would leak listeners.
+                var oldServer = Interlocked.Exchange(ref _localServer, null);
+                if (oldServer is not null)
                 {
-                    await _localServer.DisposeAsync();
-                    _localServer = null;
+                    try { await oldServer.DisposeAsync(); } catch { /* teardown is best effort */ }
                 }
-                _localServer = new LocalHtmlServer(_htmlContent);
-                await _localServer.StartAsync();
-                _webView.Source = new Uri(_localServer.BaseUrl);
+
+                var server = new LocalHtmlServer(_htmlContent);
+                await server.StartAsync();
+                _localServer = server;
+                _webView.Source = new Uri(server.BaseUrl);
             }
         }
         catch (Exception ex)
         {
+            _initFailed = true;
             ShowError("Restart failed", ex.Message);
         }
     }
@@ -744,9 +876,9 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>Apply preview configuration (JS call)</summary>
-    public async Task ApplyConfigAsync(string jsCallExpression)
+    public async Task ApplyConfigAsync(string? jsCallExpression)
     {
-        if (!_ready) return;
+        if (!_ready || string.IsNullOrWhiteSpace(jsCallExpression)) return;
         await InvokeScriptSafeAsync(jsCallExpression);
     }
 
@@ -758,6 +890,8 @@ public partial class MarkdownView : UserControl
     public async Task ScrollToProgressAsync(double percent)
     {
         if (!_ready) return;
+        // Math.Clamp propagates NaN, and "NaN" is not a useful script argument.
+        if (!double.IsFinite(percent)) percent = 0;
         var p = Math.Clamp(percent, 0, 100);
         await InvokeScriptSafeAsync($"setScrollProgress({p.ToString("0.##", CultureInfo.InvariantCulture)})");
     }
@@ -771,7 +905,8 @@ public partial class MarkdownView : UserControl
         if (!_ready) return null;
         var result = await InvokeScriptAsync("getScrollProgress()");
         if (result is null) return null;
-        if (double.TryParse(result, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+        if (double.TryParse(result, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) &&
+            double.IsFinite(v))
             return Math.Clamp(v, 0, 100);
         return null;
     }
@@ -782,11 +917,10 @@ public partial class MarkdownView : UserControl
     /// Returns <c>true</c> if a heading was found and scrolled to. Combine with
     /// <see cref="GetHeadingsAsync"/> to build a table of contents.
     /// </summary>
-    public async Task<bool> NavigateToHeadingAsync(string headingText)
+    public async Task<bool> NavigateToHeadingAsync(string? headingText)
     {
         if (!_ready || string.IsNullOrWhiteSpace(headingText)) return false;
-        var escaped = EscapeJsString(headingText.Trim());
-        var result = await InvokeScriptAsync($"navigateToHeading('{escaped}')");
+        var result = await InvokeScriptAsync($"navigateToHeading({MarkdownJs.StringLiteral(headingText.Trim())})");
         return string.Equals(result?.Trim(), "1", StringComparison.Ordinal);
     }
 
@@ -810,9 +944,9 @@ public partial class MarkdownView : UserControl
     }
 
     /// <summary>Execute custom JavaScript</summary>
-    public async Task<string?> InvokeScriptAsync(string script)
+    public async Task<string?> InvokeScriptAsync(string? script)
     {
-        if (!_ready) return null;
+        if (!_ready || string.IsNullOrWhiteSpace(script)) return null;
         return await InvokeScriptSafeAsync(script);
     }
 
@@ -826,11 +960,10 @@ public partial class MarkdownView : UserControl
     /// Complete CSS text using the exact same selector/variable naming as the
     /// built-in renderer.css.
     /// </param>
-    public async Task ApplyCustomCssAsync(string css)
+    public async Task ApplyCustomCssAsync(string? css)
     {
         if (!_ready) return;
-        var escaped = EscapeJsString(css);
-        await InvokeScriptSafeAsync($"setCustomCss('{escaped}')");
+        await InvokeScriptSafeAsync($"setCustomCss({MarkdownJs.StringLiteral(css ?? string.Empty)})");
     }
 
     // ====================================================================
@@ -839,6 +972,20 @@ public partial class MarkdownView : UserControl
 
     private async Task<string?> InvokeScriptSafeAsync(string script)
     {
+        var (_, value) = await InvokeScriptCoreAsync(script).ConfigureAwait(true);
+        return value;
+    }
+
+    /// <summary>
+    /// One script invocation with a uniform failure report. Returns <c>Ok=false</c>
+    /// for a timeout or a thrown platform exception, which callers use to decide
+    /// whether a render actually reached the page.
+    /// </summary>
+    private async Task<(bool Ok, string? Value)> InvokeScriptCoreAsync(string? script)
+    {
+        if (string.IsNullOrWhiteSpace(script))
+            return (false, null);
+
         try
         {
             var result = _webView.InvokeScript(script);
@@ -846,24 +993,30 @@ public partial class MarkdownView : UserControl
             {
                 // Android: evaluateJavascript returns Task<string?>. Extract the value
                 // so callers like GetScrollProgressAsync work cross-platform.
-                return await taskString.WaitAsync(TimeSpan.FromSeconds(5));
+                return (true, await taskString.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true));
             }
             if (result is Task t)
             {
-                await t.WaitAsync(TimeSpan.FromSeconds(5));
-                return null;
+                await t.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                return (true, null);
             }
-            return result?.ToString();
+            return (true, result?.ToString());
+        }
+        catch (TimeoutException)
+        {
+            ShowError("Timeout", $"Script >5s: {Truncate(script, 80)}");
+            return (false, null);
         }
         catch (OperationCanceledException)
         {
-            ShowError("Timeout", $"Script >5s: {script[..Math.Min(script.Length, 80)]}");
-            return null;
+            // The task was cancelled by the platform rather than by our deadline.
+            ShowError("Timeout", $"Script >5s: {Truncate(script, 80)}");
+            return (false, null);
         }
         catch (Exception ex)
         {
             ShowError("Script error", $"{ex.GetType().Name}: {ex.Message}");
-            return null;
+            return (false, null);
         }
     }
 
@@ -875,7 +1028,22 @@ public partial class MarkdownView : UserControl
     private async Task HandleLinkClickedAsync(string url)
     {
         var args = new MarkdownLinkClickedEventArgs(url);
-        LinkClicked?.Invoke(this, args);
+        if (LinkClicked is { } handlers)
+        {
+            foreach (EventHandler<MarkdownLinkClickedEventArgs> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, args);
+                }
+                catch (Exception ex)
+                {
+                    // A buggy subscriber must not swallow the navigation pipeline
+                    // (or crash the platform's click callback).
+                    Debug.WriteLine($"[AvalonMarkdown] LinkClicked subscriber threw: {ex}");
+                }
+            }
+        }
         if (args.Handled) return;
 
         await OpenUrlInBrowserAsync(url);
@@ -903,17 +1071,77 @@ public partial class MarkdownView : UserControl
 
     private void ShowError(string title, string message)
     {
+        title = Truncate(title, 200);
+        message = Truncate(message, 4 * 1024);
+
+        // Errors can surface from a continuation or a platform callback. Marshal
+        // once so touching the visual tree is always safe.
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ShowError(title, message));
+            return;
+        }
+
         ErrorTitle.Text = title;
         ErrorMessage.Text = message;
         ErrorPanel.IsVisible = true;
-        ErrorOccurred?.Invoke(this, new MarkdownViewErrorEventArgs(title, message));
+        RaiseErrorOccurred(title, message);
     }
 
     private void HideError()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(HideError);
+            return;
+        }
+
         ErrorPanel.IsVisible = false;
         ErrorTitle.Text = "";
         ErrorMessage.Text = "";
+    }
+
+    private static string Truncate(string? text, int max)
+    {
+        text ??= string.Empty;
+        return text.Length <= max ? text : text[..max] + "…";
+    }
+
+    // ── Guarded event raising ──────────────────────────────────────────────
+    // These events are raised from platform callbacks (async void paths). One
+    // throwing subscriber would otherwise propagate into the host and can take
+    // down the process, so every handler is isolated.
+
+    private void RaiseOnReady()
+    {
+        if (OnReady is not { } handlers) return;
+        foreach (EventHandler handler in handlers.GetInvocationList())
+        {
+            try { handler(this, EventArgs.Empty); }
+            catch (Exception ex) { Debug.WriteLine($"[AvalonMarkdown] OnReady subscriber threw: {ex}"); }
+        }
+    }
+
+    private void RaiseErrorOccurred(string title, string message)
+    {
+        if (ErrorOccurred is not { } handlers) return;
+        var args = new MarkdownViewErrorEventArgs(title, message);
+        foreach (EventHandler<MarkdownViewErrorEventArgs> handler in handlers.GetInvocationList())
+        {
+            try { handler(this, args); }
+            catch (Exception ex) { Debug.WriteLine($"[AvalonMarkdown] ErrorOccurred subscriber threw: {ex}"); }
+        }
+    }
+
+    private void RaiseConsoleMessage(string level, string text)
+    {
+        if (ConsoleMessage is not { } handlers) return;
+        var args = new MarkdownConsoleMessageEventArgs(level, text);
+        foreach (EventHandler<MarkdownConsoleMessageEventArgs> handler in handlers.GetInvocationList())
+        {
+            try { handler(this, args); }
+            catch (Exception ex) { Debug.WriteLine($"[AvalonMarkdown] ConsoleMessage subscriber threw: {ex}"); }
+        }
     }
 
     // ====================================================================
@@ -945,39 +1173,60 @@ public partial class MarkdownView : UserControl
     /// <summary>Global theme change callback — push to all alive MarkdownView instances</summary>
     private static void OnGlobalThemeChanged(object? sender, EventArgs e)
     {
-        var theme = GetCurrentTheme();
-
-        lock (_lock)
+        try
         {
-            for (int i = _instances.Count - 1; i >= 0; i--)
+            var theme = GetCurrentTheme();
+
+            lock (_lock)
             {
-                if (_instances[i].TryGetTarget(out var view))
+                for (int i = _instances.Count - 1; i >= 0; i--)
                 {
-                    // Dispatch asynchronously to UI thread, do not block theme event
-                    _ = Dispatcher.UIThread.InvokeAsync(() => view.ApplyThemePush(theme));
-                }
-                else
-                {
-                    // Instance GC'd, remove
-                    _instances.RemoveAt(i);
+                    if (_instances[i].TryGetTarget(out var view))
+                    {
+                        // Dispatch asynchronously to UI thread, do not block theme event
+                        _ = Dispatcher.UIThread.InvokeAsync(() => view.ApplyThemePush(theme));
+                    }
+                    else
+                    {
+                        // Instance GC'd, remove
+                        _instances.RemoveAt(i);
+                    }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AvalonMarkdown] Theme push failed: {ex}");
         }
     }
 
     /// <summary>Receive theme push: refresh background + send message to WebView JS</summary>
     private async void ApplyThemePush(string theme)
     {
-        ApplyThemeColors(theme);
-        if (_ready)
-            await InvokeScriptSafeAsync($"setTheme('{theme}')");
+        try
+        {
+            ApplyThemeColors(theme);
+            if (_ready)
+                await InvokeScriptSafeAsync($"setTheme({MarkdownJs.StringLiteral(theme)})");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AvalonMarkdown] ApplyThemePush failed: {ex}");
+        }
     }
 
     /// <summary>Sync current theme to the ready WebView JS</summary>
     private async void PushThemeToWebView(string theme)
     {
-        if (_ready)
-            await InvokeScriptSafeAsync($"setTheme('{theme}')");
+        try
+        {
+            if (_ready)
+                await InvokeScriptSafeAsync($"setTheme({MarkdownJs.StringLiteral(theme)})");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AvalonMarkdown] PushThemeToWebView failed: {ex}");
+        }
     }
 
     private void ApplyThemeColors(string theme)
@@ -1014,28 +1263,53 @@ public partial class MarkdownView : UserControl
 
     /// <summary>
     /// Clean up the local HTTP server when the control is removed from the visual tree.
+    /// The WebView itself is kept so a re-attached control can navigate again, but
+    /// the preview state is reset: any pending initialization/render belongs to the
+    /// old visual tree and must not resurrect a detached control.
     /// </summary>
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
 
-        if (_localServer is not null)
+        _detached = true;
+        Interlocked.Increment(ref _lifecycleGeneration);
+        Interlocked.Increment(ref _renderRequestId);
+
+        _ready = false;
+        _htmlInjected = false;
+        _initialized = false;
+        _pendingMarkdown = Text;
+        _lastRenderedText = null;
+
+        var server = Interlocked.Exchange(ref _localServer, null);
+        if (server is not null)
         {
-            _ = _localServer.DisposeAsync();
-            _localServer = null;
+            _ = Task.Run(async () =>
+            {
+                try { await server.DisposeAsync(); } catch { /* teardown is best effort */ }
+            });
         }
     }
 
-    private static string EscapeJsString(string s)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        return s.Replace("\\", "\\\\")
-                .Replace("'", "\\'")
-                .Replace("\n", "\\n")
-                .Replace("\r", "\\r")
-                .Replace("\t", "\\t");
+        base.OnAttachedToVisualTree(e);
+
+        if (!_detached)
+            return;
+
+        _detached = false;
+        Interlocked.Increment(ref _lifecycleGeneration);
+
+        // Recreate the preview if there is content to show. Without this a control
+        // that is detached and re-attached (tab switch, window re-parenting) stays
+        // blank forever.
+        if (!string.IsNullOrEmpty(Text))
+            _ = RenderMarkdownAsync(Text);
     }
 
 }
+
 
 // ====================================================================
 // Error event args
@@ -1110,16 +1384,24 @@ public class MarkdownHeading
 }
 
 // ====================================================================
-// Myers diff algorithm — O(ND) shortest edit script
+// Myers diff algorithm — shortest edit script (bounded trace)
 // ====================================================================
 
 /// <summary>
-/// Linear-space Myers diff (O(ND) time, O(N) space).
-/// Uses the classic "middle snake" divide-and-conquer to compute the
-/// shortest edit script between two strings — the same algorithm Git uses.
+/// Greedy Myers diff: O(ND) time with a trace table that is bounded for very
+/// large inputs, falling back to a correct (non-minimal) script rather than
+/// risking unbounded memory. The render pipeline itself only uses
+/// <see cref="AreEqual"/>.
 /// </summary>
 internal static class MyersDiff
 {
+    // The greedy implementation below stores one trace row per edit distance.
+    // That is O((N+M)^2) in the worst case, so larger inputs take the coarse but
+    // correct path instead of risking an OOM. Diff() is not used by the render
+    // pipeline (which only needs AreEqual), so minimality is not worth unbounded
+    // memory here.
+    private const int MaxTraceLength = 2048;
+
     /// <summary>Returns true if <paramref name="oldText"/> and <paramref name="newText"/> are semantically identical.</summary>
     public static bool AreEqual(string? oldText, string? newText)
     {
@@ -1129,145 +1411,177 @@ internal static class MyersDiff
         return oldText.AsSpan().SequenceEqual(newText.AsSpan());
     }
 
-    /// <summary>Computes the shortest edit script between two strings.</summary>
+    /// <summary>
+    /// Computes an edit script that transforms <paramref name="oldText"/> into
+    /// <paramref name="newText"/>. Common prefixes and suffixes are trimmed first,
+    /// which is also the common case for streaming Markdown updates.
+    /// </summary>
     public static List<EditOp> Diff(string? oldText, string? newText)
     {
+        var a = oldText ?? string.Empty;
+        var b = newText ?? string.Empty;
         var result = new List<EditOp>();
-        ComputeSes(oldText ?? "", newText ?? "", 0, (oldText ?? "").Length, 0, (newText ?? "").Length, result);
+
+        var maxPrefix = Math.Min(a.Length, b.Length);
+        var prefix = 0;
+        while (prefix < maxPrefix && a[prefix] == b[prefix])
+            prefix++;
+
+        for (var i = 0; i < prefix; i++)
+            result.Add(new EditOp(OpKind.Equal, a[i].ToString()));
+
+        var suffix = 0;
+        while (suffix < maxPrefix - prefix &&
+               a[a.Length - 1 - suffix] == b[b.Length - 1 - suffix])
+            suffix++;
+
+        ComputeMiddle(a, b, prefix, a.Length - suffix, prefix, b.Length - suffix, result);
+
+        for (var i = a.Length - suffix; i < a.Length; i++)
+            result.Add(new EditOp(OpKind.Equal, a[i].ToString()));
+
         return result;
     }
 
-    private static void ComputeSes(string a, string b, int loA, int hiA, int loB, int hiB, List<EditOp> result)
+    private static void ComputeMiddle(
+        string a, string b, int aStart, int aEnd, int bStart, int bEnd, List<EditOp> result)
     {
-        // Trim common prefix
-        while (loA < hiA && loB < hiB && a[loA] == b[loB])
-        {
-            result.Add(new EditOp(OpKind.Equal, b[loB].ToString()));
-            loA++; loB++;
-        }
-
-        // Trim common suffix
-        while (loA < hiA && loB < hiB && a[hiA - 1] == b[hiB - 1])
-        {
-            hiA--; hiB--;
-        }
-
-        var n = hiA - loA;
-        var m = hiB - loB;
-
-        if (n == 0 && m == 0) return;
+        var n = aEnd - aStart;
+        var m = bEnd - bStart;
 
         if (n == 0)
         {
-            for (var i = loB; i < hiB; i++)
+            for (var i = bStart; i < bEnd; i++)
                 result.Add(new EditOp(OpKind.Insert, b[i].ToString()));
             return;
         }
 
         if (m == 0)
         {
-            for (var i = loA; i < hiA; i++)
+            for (var i = aStart; i < aEnd; i++)
                 result.Add(new EditOp(OpKind.Delete, a[i].ToString()));
             return;
         }
 
-        // Find the middle snake using the Myers algorithm
-        var maxD = (n + m + 1) / 2;
-        var maxSize = 2 * maxD + 1;
-        var offset = maxD;
-
-        var vf = new int[maxSize];  // forward search
-        var vb = new int[maxSize];  // backward search
-
-        Array.Fill(vf, -1);
-        Array.Fill(vb, -1);
-
-        vf[1 + offset] = loA;
-        vb[1 + offset] = hiA;
-
-        var x = loA;
-        var y = loB;
-        var found = false;
-
-        for (var d = 0; d <= maxD; d++)
+        if (n + m > MaxTraceLength)
         {
-            // Forward search
-            for (var k = -d; k <= d; k += 2)
-            {
-                var idx = k + offset;
-                x = (k == -d || (k != d && vf[idx - 1] < vf[idx + 1]))
-                    ? vf[idx + 1]
-                    : vf[idx - 1] + 1;
-                y = x - k;
-
-                while (x < hiA && y < hiB && a[x] == b[y])
-                {
-                    x++; y++;
-                }
-
-                vf[idx] = x;
-
-                // Check for overlap with backward search
-                var bk = hiA - hiB - k;
-                var bidx = bk + offset;
-                if (bk >= -(d - 1) && bk <= (d - 1) && bidx >= 0 && bidx < maxSize)
-                {
-                    if (vb[bidx] != -1 && vf[idx] >= vb[bidx])
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-
-            if (found) break;
-
-            // Backward search
-            for (var k = -d; k <= d; k += 2)
-            {
-                var idx = k + offset;
-                x = (k == -d || (k != d && vb[idx - 1] > vb[idx + 1]))
-                    ? vb[idx + 1]
-                    : vb[idx - 1] - 1;
-                y = x - (hiA - hiB - k);
-
-                while (x > loA && y > loB && a[x - 1] == b[y - 1])
-                {
-                    x--; y--;
-                }
-
-                vb[idx] = x;
-
-                // Check for overlap with forward search
-                var fk = k + (hiA - hiB);
-                var fidx = fk + offset;
-                if (fk >= -(d) && fk <= d && fidx >= 0 && fidx < maxSize)
-                {
-                    if (vf[fidx] != -1 && vf[fidx] >= vb[idx])
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-
-            if (found) break;
+            // Correct, just not minimal.
+            for (var i = aStart; i < aEnd; i++)
+                result.Add(new EditOp(OpKind.Delete, a[i].ToString()));
+            for (var j = bStart; j < bEnd; j++)
+                result.Add(new EditOp(OpKind.Insert, b[j].ToString()));
+            return;
         }
 
-        // Recurse on left and right of the middle snake
-        var midA = x;
-        var midB = y;
+        // Greedy Myers forward pass: v[k] is the furthest x reached on diagonal
+        // k = x - y. A trace row is snapshotted before each distance so the path
+        // can be reconstructed backwards.
+        var max = n + m;
+        var offset = max;
+        var v = new int[2 * max + 1];
+        v[offset + 1] = 0;
 
-        ComputeSes(a, b, loA, midA, loB, midB, result);
+        var trace = new List<int[]>(max + 1);
+        var foundD = -1;
 
-        // Add the middle snake itself (matching characters)
-        while (midA < hiA && midB < hiB && a[midA] == b[midB])
+        for (var d = 0; d <= max && foundD < 0; d++)
         {
-            result.Add(new EditOp(OpKind.Equal, a[midA].ToString()));
-            midA++; midB++;
+            trace.Add((int[])v.Clone());
+
+            for (var k = -d; k <= d; k += 2)
+            {
+                int x;
+                if (k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]))
+                    x = v[offset + k + 1];
+                else
+                    x = v[offset + k - 1] + 1;
+
+                var y = x - k;
+                while (x < n && y < m && a[aStart + x] == b[bStart + y])
+                {
+                    x++;
+                    y++;
+                }
+
+                v[offset + k] = x;
+
+                if (x >= n && y >= m)
+                {
+                    foundD = d;
+                    break;
+                }
+            }
         }
 
-        ComputeSes(a, b, midA, hiA, midB, hiB, result);
+        if (foundD < 0)
+        {
+            // Unreachable for a finite grid, but never spin or under-report.
+            for (var i = aStart; i < aEnd; i++)
+                result.Add(new EditOp(OpKind.Delete, a[i].ToString()));
+            for (var j = bStart; j < bEnd; j++)
+                result.Add(new EditOp(OpKind.Insert, b[j].ToString()));
+            return;
+        }
+
+        var reverse = new List<EditOp>(n + m);
+        var cx = n;
+        var cy = m;
+
+        for (var d = foundD; d > 0; d--)
+        {
+            var traceRow = trace[d];
+            var k = cx - cy;
+
+            int prevK;
+            if (k == -d || (k != d && traceRow[offset + k - 1] < traceRow[offset + k + 1]))
+                prevK = k + 1;
+            else
+                prevK = k - 1;
+
+            var prevX = traceRow[offset + prevK];
+            var prevY = prevX - prevK;
+
+            while (cx > prevX && cy > prevY)
+            {
+                reverse.Add(new EditOp(OpKind.Equal, a[aStart + cx - 1].ToString()));
+                cx--;
+                cy--;
+            }
+
+            if (cx == prevX)
+            {
+                // The step advanced y: an insertion of b[cy - 1].
+                reverse.Add(new EditOp(OpKind.Insert, b[bStart + cy - 1].ToString()));
+                cy--;
+            }
+            else
+            {
+                // The step advanced x: a deletion of a[cx - 1].
+                reverse.Add(new EditOp(OpKind.Delete, a[aStart + cx - 1].ToString()));
+                cx--;
+            }
+        }
+
+        // d == 0 is a pure diagonal of equal bytes.
+        while (cx > 0 && cy > 0)
+        {
+            reverse.Add(new EditOp(OpKind.Equal, a[aStart + cx - 1].ToString()));
+            cx--;
+            cy--;
+        }
+        while (cx > 0)
+        {
+            reverse.Add(new EditOp(OpKind.Delete, a[aStart + cx - 1].ToString()));
+            cx--;
+        }
+        while (cy > 0)
+        {
+            reverse.Add(new EditOp(OpKind.Insert, b[bStart + cy - 1].ToString()));
+            cy--;
+        }
+
+        reverse.Reverse();
+        result.AddRange(reverse);
     }
 }
 

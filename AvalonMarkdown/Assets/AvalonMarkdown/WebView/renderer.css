@@ -647,3 +647,41 @@ html.theme-light {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Fault-tolerance fallbacks
+   Every degraded path must still show the user something: the source,
+   a reason, and a readable surface. A blank pane is never acceptable.
+   ════════════════════════════════════════════════════════════════ */
+.render-unavailable {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid #f14c4c;
+    border-left-width: 4px;
+    border-radius: 4px;
+    background: rgba(241, 76, 76, 0.08);
+    color: #f14c4c;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.render-fallback {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--pre-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 12px;
+}
+.puml-load-failed {
+    position: relative;
+}
+.puml-load-failed::after {
+    content: '⚠ PlantUML image failed to load';
+    display: block;
+    padding: 8px;
+    color: #f14c4c;
+    font-size: 12px;
+}

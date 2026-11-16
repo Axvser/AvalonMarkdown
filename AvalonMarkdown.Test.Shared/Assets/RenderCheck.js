@@ -133,6 +133,7 @@
             innerHtmlLength: html.length,
             loadingPlaceholder: count('.loading-placeholder') > 0,
             abortPre: !!abortPre,
+            renderErrorMarker: root.getAttribute('data-render-error') || '',
             errorOverlayVisible: (function () {
                 var ov = document.getElementById('error-overlay');
                 return !!ov && ov.style.display !== 'none' && ov.style.display !== '';
@@ -150,6 +151,12 @@
                 'the whole render aborted: renderMarkdown threw and replaced the preview ' +
                 'with the escaped source. See the console for the ❌ line.',
                 text(abortPre), 1));
+        }
+        if (out.vacuity.renderErrorMarker) {
+            out.findings.push(finding('render-fallback', 'fail',
+                'renderMarkdown installed both its error marker and its plain-text ' +
+                'fallback; the document did not render.',
+                out.vacuity.renderErrorMarker, 1));
         }
         if (out.vacuity.dataSourceLength === 0 && html.length === 0) {
             out.findings.push(finding('nothing-rendered', 'fail',

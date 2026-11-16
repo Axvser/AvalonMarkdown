@@ -4,6 +4,7 @@
     <File Path="README.md" />
   </Folder>
   <Project Path="AvalonMarkdown/AvalonMarkdown.csproj" />
+  <Project Path="AvalonMarkdown.Test.Unit/AvalonMarkdown.Test.Unit.csproj" />
   <Project Path="AvalonMarkdown.Test.Shared/AvalonMarkdown.Test.Shared.csproj" />
   <Project Path="AvalonMarkdown.Test.Desktop/AvalonMarkdown.Test.Desktop.csproj" />
   <Project Path="AvalonMarkdown.Test.Browser/AvalonMarkdown.Test.Browser.csproj" />

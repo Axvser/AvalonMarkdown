@@ -34,4 +34,9 @@
     <None Include="..\README.md" Pack="True" PackagePath="\" />
     <None Include="Assets\logo.png" Pack="True" PackagePath="Assets\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pure-C# fault/regression tests (no test framework packages needed). -->
+    <InternalsVisibleTo Include="AvalonMarkdown.Test.Unit" />
+  </ItemGroup>
 </Project>
