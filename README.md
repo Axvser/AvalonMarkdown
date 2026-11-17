@@ -303,6 +303,12 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 ---
 
+## Repository layout
+
+- `src/AvalonMarkdown/` — the library and its embedded renderer assets
+- `test/` — the offline unit suite plus the desktop, browser, Android and iOS demo/driver apps
+- `skills/avalonmarkdown-syntax/` — the authoring skill and its validator
+
 ## Working on the renderer
 
 Verification is an offline C# unit suite plus four environment-gated drivers in
@@ -311,11 +317,11 @@ fails fast if more than one is set):
 
 | Command | Checks |
 | --- | --- |
-| `dotnet run --project AvalonMarkdown.Test.Unit` | pure C#: Myers diff, JavaScript-literal encoding, export-name sanitising, theme CSS under hostile culture / out-of-range values, and the local HTTP server under malformed, oversized, concurrent and abandoned clients. Offline, no window. |
-| `AVALON_THEME_AUDIT=1 dotnet run --project AvalonMarkdown.Test.Desktop` | every `MarkdownThemeViewModel` property reaches the generated CSS, and every generated rule has a live consumer |
-| `AVALON_CAPTURE_ERRORS=1 dotnet run --project AvalonMarkdown.Test.Desktop` | drives the app through its phases; asserts fence dispatch and that the showcase assets load |
-| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<abs path> dotnet run --project AvalonMarkdown.Test.Desktop` | renders one file through the real pipeline and DOM-audits it; normally driven by `render_check.py` |
-| `AVALON_FAULT_CHECK=1 dotnet run --project AvalonMarkdown.Test.Desktop` | fault injection: junk configs, malformed fences, pathological Markdown, each optional CDN library removed in turn, hanging export paths, and subscribers that throw. Writes `fault-check.log` / `fault-check.json`. |
+| `dotnet run --project test/AvalonMarkdown.Test.Unit` | pure C#: Myers diff, JavaScript-literal encoding, export-name sanitising, theme CSS under hostile culture / out-of-range values, and the local HTTP server under malformed, oversized, concurrent and abandoned clients. Offline, no window. |
+| `AVALON_THEME_AUDIT=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | every `MarkdownThemeViewModel` property reaches the generated CSS, and every generated rule has a live consumer |
+| `AVALON_CAPTURE_ERRORS=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | drives the app through its phases; asserts fence dispatch and that the showcase assets load |
+| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<abs path> dotnet run --project test/AvalonMarkdown.Test.Desktop` | renders one file through the real pipeline and DOM-audits it; normally driven by `render_check.py` |
+| `AVALON_FAULT_CHECK=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | fault injection: junk configs, malformed fences, pathological Markdown, each optional CDN library removed in turn, hanging export paths, and subscribers that throw. Writes `fault-check.log` / `fault-check.json`. |
 
 Run without any driver for an ordinary visual check.
 
@@ -400,7 +406,7 @@ cannot be trusted, so the fixtures and the assertions are part of the deliverabl
 
 ## Demo
 
-The repository contains runnable sample apps (`AvalonMarkdown.Test.Desktop` and Android/iOS/Browser variants) that exercise both levels.
+The repository contains runnable sample apps under `test/` (`AvalonMarkdown.Test.Desktop` and Android/iOS/Browser variants) that exercise both levels.
 
 Its toolbar carries three **special-member showcases** alongside the general tour —
 `Tables`, `Diagrams` and `Plots`. Each isolates one kind of element and runs a large
@@ -415,7 +421,7 @@ set of cases at it, so a regression in that member is obvious rather than buried
 - **Plots** — the full Penner/easings.net set (sine through bounce, `in`/`out`/`inOut`)
   plus non-`y = f(x)` graph types: parametric, polar, implicit, scatter, vectors.
 
-They live as real `.md` files under `AvalonMarkdown.Test.Shared/Assets/Showcase/`
+They live as real `.md` files under `test/AvalonMarkdown.Test.Shared/Assets/Showcase/`
 rather than C# string literals, so the validator checks the exact file the demo
 renders. The capture driver asserts all three load, since a wrong asset key fails
 silently into a fallback error block.

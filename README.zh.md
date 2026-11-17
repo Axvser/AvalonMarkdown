@@ -298,6 +298,12 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 ---
 
+## 仓库结构
+
+- `src/AvalonMarkdown/` —— 库本体与内嵌渲染资源
+- `test/` —— 离线单元测试，以及 Desktop / Browser / Android / iOS 演示与驱动应用
+- `skills/avalonmarkdown-syntax/` —— 文档写作 skill 与校验器
+
 ## 测试与容灾
 
 验证由一套离线 C# 单元测试和四个环境变量驱动的端到端驱动组成。每个驱动都会在结束时
@@ -305,11 +311,11 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 | 命令 | 检查内容 |
 | --- | --- |
-| `dotnet run --project AvalonMarkdown.Test.Unit` | 纯 C#：Myers diff、JS 字符串字面量编码、导出文件名净化、恶意区域设置/越界值下的主题 CSS，以及本地 HTTP 服务器面对畸形、超大、并发和挂起客户端时的行为。离线运行，无需窗口。 |
-| `AVALON_THEME_AUDIT=1 dotnet run --project AvalonMarkdown.Test.Desktop` | `MarkdownThemeViewModel` 的每个属性都进入生成的 CSS，且每条生成的规则都有真实消费者 |
-| `AVALON_CAPTURE_ERRORS=1 dotnet run --project AvalonMarkdown.Test.Desktop` | 驱动应用走完各阶段；断言 fence 分派与 showcase 资源加载 |
-| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<绝对路径> dotnet run --project AvalonMarkdown.Test.Desktop` | 通过真实管线渲染一个文件并审计 DOM；通常由 `render_check.py` 驱动 |
-| `AVALON_FAULT_CHECK=1 dotnet run --project AvalonMarkdown.Test.Desktop` | 故障注入：垃圾配置、畸形 fence、病态 Markdown、逐个移除可选 CDN 库、会挂起的导出路径、抛异常的事件订阅者。输出 `fault-check.log` / `fault-check.json`。 |
+| `dotnet run --project test/AvalonMarkdown.Test.Unit` | 纯 C#：Myers diff、JS 字符串字面量编码、导出文件名净化、恶意区域设置/越界值下的主题 CSS，以及本地 HTTP 服务器面对畸形、超大、并发和挂起客户端时的行为。离线运行，无需窗口。 |
+| `AVALON_THEME_AUDIT=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | `MarkdownThemeViewModel` 的每个属性都进入生成的 CSS，且每条生成的规则都有真实消费者 |
+| `AVALON_CAPTURE_ERRORS=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | 驱动应用走完各阶段；断言 fence 分派与 showcase 资源加载 |
+| `AVALON_RENDER_CHECK=1 AVALON_RENDER_CHECK_FILE=<绝对路径> dotnet run --project test/AvalonMarkdown.Test.Desktop` | 通过真实管线渲染一个文件并审计 DOM；通常由 `render_check.py` 驱动 |
+| `AVALON_FAULT_CHECK=1 dotnet run --project test/AvalonMarkdown.Test.Desktop` | 故障注入：垃圾配置、畸形 fence、病态 Markdown、逐个移除可选 CDN 库、会挂起的导出路径、抛异常的事件订阅者。输出 `fault-check.log` / `fault-check.json`。 |
 
 不启用任何驱动时，就是普通的可视化检查。
 
@@ -378,7 +384,7 @@ python skills/avalonmarkdown-syntax/scripts/render_check.py --self-test
 
 ## 演示
 
-仓库包含可运行的示例应用（`AvalonMarkdown.Test.Desktop` 及 Android/iOS/Browser 版本），覆盖以上两个层面。
+仓库在 `test/` 下包含可运行的示例应用（`AvalonMarkdown.Test.Desktop` 及 Android/iOS/Browser 版本），覆盖以上两个层面。
 
 工具条上除总览之外还有三个**专项展示**入口 —— `Tables`、`Diagrams`、`Plots`。
 每个只针对一类元素、跑一大批用例，这样该类元素的回归会一眼看到，而不是埋在大杂烩里：
@@ -390,7 +396,7 @@ python skills/avalonmarkdown-syntax/scripts/render_check.py --self-test
 - **函数图像** —— 完整的 Penner / easings.net 缓动集（sine 到 bounce，`in`/`out`/`inOut`），
   外加非 `y = f(x)` 的图类型：参数方程、极坐标、隐函数、散点、向量。
 
-它们以真实的 `.md` 文件存在 `AvalonMarkdown.Test.Shared/Assets/Showcase/` 下，而不是
+它们以真实的 `.md` 文件存在 `test/AvalonMarkdown.Test.Shared/Assets/Showcase/` 下，而不是
 C# 字符串字面量 —— 这样校验器检查的就是演示实际渲染的那份文件。捕获驱动会断言三者都能
 加载，因为资源键写错只会静默退化成一个回退错误块。
 

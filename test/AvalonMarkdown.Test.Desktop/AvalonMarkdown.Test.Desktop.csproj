@@ -13,7 +13,7 @@
     <PackageReference Include="Avalonia.Controls.WebView" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AvalonMarkdown\AvalonMarkdown.csproj" />
-    <ProjectReference Include="..\AvalonMarkdown.Test.Shared\AvalonMarkdown.Test.Shared.csproj" />
+    <ProjectReference Include="..\..\src\AvalonMarkdown\AvalonMarkdown.csproj" />
+    <ProjectReference Include="..\..\test\AvalonMarkdown.Test.Shared\AvalonMarkdown.Test.Shared.csproj" />
   </ItemGroup>
 </Project>

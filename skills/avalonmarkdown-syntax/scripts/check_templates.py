@@ -89,6 +89,10 @@ def main(argv: list[str]) -> int:
         res = rc.analyse(path, args)
 
         app = args.app or rc.find_app(args.repo, args.configuration)
+        if args.render is True and app is None:
+            print(f"error: --render requested but no build found under {args.repo}",
+                  file=sys.stderr)
+            return 3
         run_render = (args.render is True) or (args.render is None and app is not None
                                                and rc.app_supports_render_check(app))
 

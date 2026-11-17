@@ -15,9 +15,9 @@ validator checks on every run:
 
 | Corpus | Covers |
 | --- | --- |
-| `AvalonMarkdown.Test.Shared/Assets/Showcase/tables.md` | 23 table variants — alignment, escaped pipes, math and footnotes in cells, CJK, wide, and shapes that must *not* become tables |
-| `AvalonMarkdown.Test.Shared/Assets/Showcase/diagrams.md` | 15 Mermaid types and 11 PlantUML types, CJK and HTML labels, each failure mode beside its successes |
-| `AvalonMarkdown.Test.Shared/Assets/Showcase/plots.md` | the full Penner easing set plus parametric, polar, implicit, scatter and vector graph types |
+| `test/AvalonMarkdown.Test.Shared/Assets/Showcase/tables.md` | 23 table variants — alignment, escaped pipes, math and footnotes in cells, CJK, wide, and shapes that must *not* become tables |
+| `test/AvalonMarkdown.Test.Shared/Assets/Showcase/diagrams.md` | 15 Mermaid types and 11 PlantUML types, CJK and HTML labels, each failure mode beside its successes |
+| `test/AvalonMarkdown.Test.Shared/Assets/Showcase/plots.md` | the full Penner easing set plus parametric, polar, implicit, scatter and vector graph types |
 
 # AvalonMarkdown document authoring
 

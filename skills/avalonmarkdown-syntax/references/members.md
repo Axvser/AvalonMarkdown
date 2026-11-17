@@ -6,7 +6,7 @@ writing; this one is the lookup table.
 
 Two companions: [templates.md](templates.md) has copy-paste-ready source for each
 member, verified by rendering; and the demo's showcase pages under
-`AvalonMarkdown.Test.Shared/Assets/Showcase/` are a much larger corpus of the same
+`test/AvalonMarkdown.Test.Shared/Assets/Showcase/` are a much larger corpus of the same
 syntax, validated on every run.
 
 The renderer is markdown-it 14 with `html: true`, `linkify: true`,

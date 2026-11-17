@@ -3,15 +3,15 @@
     <File Path="LICENSE.txt" />
     <File Path="README.md" />
   </Folder>
-  <Project Path="AvalonMarkdown/AvalonMarkdown.csproj" />
-  <Project Path="AvalonMarkdown.Test.Unit/AvalonMarkdown.Test.Unit.csproj" />
-  <Project Path="AvalonMarkdown.Test.Shared/AvalonMarkdown.Test.Shared.csproj" />
-  <Project Path="AvalonMarkdown.Test.Desktop/AvalonMarkdown.Test.Desktop.csproj" />
-  <Project Path="AvalonMarkdown.Test.Browser/AvalonMarkdown.Test.Browser.csproj" />
-  <Project Path="AvalonMarkdown.Test.Android/AvalonMarkdown.Test.Android.csproj">
+  <Project Path="src/AvalonMarkdown/AvalonMarkdown.csproj" />
+  <Project Path="test/AvalonMarkdown.Test.Unit/AvalonMarkdown.Test.Unit.csproj" />
+  <Project Path="test/AvalonMarkdown.Test.Shared/AvalonMarkdown.Test.Shared.csproj" />
+  <Project Path="test/AvalonMarkdown.Test.Desktop/AvalonMarkdown.Test.Desktop.csproj" />
+  <Project Path="test/AvalonMarkdown.Test.Browser/AvalonMarkdown.Test.Browser.csproj" />
+  <Project Path="test/AvalonMarkdown.Test.Android/AvalonMarkdown.Test.Android.csproj">
     <Deploy />
   </Project>
-  <Project Path="AvalonMarkdown.Test.iOS/AvalonMarkdown.Test.iOS.csproj">
+  <Project Path="test/AvalonMarkdown.Test.iOS/AvalonMarkdown.Test.iOS.csproj">
     <Deploy />
   </Project>
 </Solution>

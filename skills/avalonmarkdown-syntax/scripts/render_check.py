@@ -687,7 +687,7 @@ def check_plantuml(body: str, args, cache: dict) -> tuple[list[Finding], str]:
 def find_app(repo: Path, configuration: str) -> Path | None:
     for cfg in ([configuration] if configuration != "auto" else ["Debug", "Release"]):
         for tfm in ("net10.0", "net8.0"):
-            p = repo / "AvalonMarkdown.Test.Desktop" / "bin" / cfg / tfm / "AvalonMarkdown.Test.Desktop.exe"
+            p = repo / "test" / "AvalonMarkdown.Test.Desktop" / "bin" / cfg / tfm / "AvalonMarkdown.Test.Desktop.exe"
             if p.exists():
                 return p
     return None
