@@ -283,6 +283,44 @@
         assert(ids.length === 3, 'expected three headings, got ' + ids.join(','));
     });
 
+    test('chat-status-icon-classes', function () {
+        render([
+            '# Chat icons',
+            '',
+            '```chat[思考中]',
+            'thinking body',
+            '```',
+            '',
+            '```chat[工具调用]',
+            'tool body',
+            '```',
+            '',
+            '```chat[完成]',
+            'done body',
+            '```',
+            '',
+            '```chat[自定义][svg="M12,2 L22,12 L12,22 L2,12 Z"]',
+            'custom body',
+            '```'
+        ].join('\n'));
+
+        var statuses = pv().querySelectorAll('.chat-status');
+        assert(statuses.length === 4,
+            'expected four chat status badges, got ' + statuses.length);
+
+        var expected = ['chat-icon-thinking', 'chat-icon-tool', 'chat-icon-done', 'chat-icon-custom'];
+        for (var i = 0; i < statuses.length; i++) {
+            var svg = statuses[i].querySelector('.chat-status-logo svg');
+            assert(svg, 'status ' + i + ' has no icon svg');
+            assert(svg.classList.contains(expected[i]),
+                'status ' + i + ' should use ' + expected[i] + ', got "' + svg.className + '"');
+        }
+        // Custom artwork is never nudged; only the built-in drawings are optically
+        // centred by the chat-icon-* CSS rules.
+        assert(!statuses[3].querySelector('svg').classList.contains('chat-icon-chat'),
+            'a custom svg must not receive the built-in chat nudge class');
+    });
+
     test('csharp-fence-highlighting', function (rec) {
         render([
             '# C# aliases',

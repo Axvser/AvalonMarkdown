@@ -361,8 +361,10 @@ html.theme-light {
     position: absolute;
     top: 6px;
     right: 8px;
-    width: 26px;
-    height: 26px;
+    /* 27px - 15px logo = 6px on each side. The old 26px box produced a 5.5px
+       inset, which rasterised the SVG half a pixel off-centre at 1x DPI. */
+    width: 27px;
+    height: 27px;
     z-index: 2;
     display: flex;
     align-items: center;
@@ -417,6 +419,17 @@ html.theme-light {
     stroke-linejoin: round;
     filter: drop-shadow(0 0 var(--chat-glass-blur) var(--chat-status-glow));
 }
+/* The flex box centres the 24x24 viewBox exactly, but some drawings are not
+   optically centred inside it: the wedge of the wrench sits left/down, the
+   lightbulb's mass sits high, and the speech bubble sits left. Nudge the ink,
+   not the box, so the glyph reads as centred. Custom SVG artwork keeps its own
+   geometry and is deliberately not nudged. */
+.chat-icon-thinking { transform: translateY(0.27px); }
+/* The wrench's ink centroid is centred at 0.68px, but its bounding box stays
+   ~0.4 viewBox units left; 0.91px balances both and removes the residual
+   leftward read. */
+.chat-icon-tool { transform: translate(0.91px, -0.72px); }
+.chat-icon-chat { transform: translate(0.48px, -0.18px); }
 @keyframes chat-spin {
     to { transform: rotate(360deg); }
 }

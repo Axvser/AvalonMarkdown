@@ -2252,12 +2252,14 @@
 
     function chatStatusIcon(state, customSvg) {
         if (customSvg) {
+            // Author-supplied artwork keeps its own geometry; no optical nudge.
             if (/^\s*<svg[\s>]/i.test(customSvg)) return customSvg;
-            return '<svg viewBox="0 0 24 24" focusable="false"><path d="' +
+            return '<svg class="chat-icon chat-icon-custom" viewBox="0 0 24 24" focusable="false"><path d="' +
                 escapeHtml(customSvg) + '"/></svg>';
         }
         var d = CHAT_STATUS_ICONS[state] || CHAT_STATUS_ICONS.chat;
-        return '<svg viewBox="0 0 24 24" focusable="false"><path d="' + d + '"/></svg>';
+        return '<svg class="chat-icon chat-icon-' + state +
+            '" viewBox="0 0 24 24" focusable="false"><path d="' + d + '"/></svg>';
     }
 
     // Split an option group on commas, but keep commas inside "..." / '...'.
