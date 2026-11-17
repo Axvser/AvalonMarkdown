@@ -283,6 +283,60 @@
         assert(ids.length === 3, 'expected three headings, got ' + ids.join(','));
     });
 
+    test('csharp-fence-highlighting', function (rec) {
+        render([
+            '# C# aliases',
+            '',
+            '```csharp',
+            'public sealed class A { public int N => 1; }',
+            '```',
+            '',
+            '```cs',
+            'public record B(int X);',
+            '```',
+            '',
+            '```c#',
+            'public enum E { A, B }',
+            '```',
+            '',
+            '```c-sharp',
+            'public interface I { void M(); }',
+            '```',
+            '',
+            '```dotnet',
+            'public class D { public static void Main() { Console.WriteLine("Hello World!"); } }',
+            '```'
+        ].join('\n'));
+
+        assert(window.hljs && window.hljs.getLanguage('csharp'),
+            'highlight.js must know the csharp language');
+        var blocks = pv().querySelectorAll('.code-block-wrapper');
+        assert(blocks.length === 5,
+            'expected five C# alias blocks, got ' + blocks.length);
+
+        var details = [];
+        for (var i = 0; i < blocks.length; i++) {
+            var langEl = blocks[i].querySelector('.code-lang');
+            var lang = langEl ? text(langEl) : '';
+            var spans = blocks[i].querySelectorAll(
+                'code span[class^="hljs-"], code span[class*=" hljs-"]').length;
+            details.push(lang + ':' + spans);
+            assert(spans > 0,
+                'C# alias "' + lang + '" produced no highlight spans');
+        }
+
+        // The display enrichment must also color the cases highlight.js leaves
+        // plain: Console (type) and WriteLine (method call).
+        var last = blocks[blocks.length - 1];
+        var typeEl = last.querySelector('code .hljs-type');
+        var fnEl = last.querySelector('code .hljs-title.function_');
+        assert(typeEl && text(typeEl).indexOf('Console') >= 0,
+            'the C# type Console must be wrapped as .hljs-type');
+        assert(fnEl && text(fnEl).indexOf('WriteLine') >= 0,
+            'the C# call WriteLine must be wrapped as .hljs-title.function_');
+        rec.detail = details.join(', ') + ', type=' + text(typeEl) + ', call=' + text(fnEl);
+    });
+
     // ── optional CDN libraries removed one at a time ────────────────────────
     function withGlobal(name, value, fn) {
         var old = window[name];

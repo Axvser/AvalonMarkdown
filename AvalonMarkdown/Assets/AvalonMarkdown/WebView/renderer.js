@@ -1989,15 +1989,32 @@
     }
 
     // === Markdown-it configuration (VS Code style) ===
+    // Authors spell the C# info string in several ways. highlight.js knows
+    // `csharp`, `cs` and `c#`, but not `dotnet` / `c-sharp`; map the common
+    // spellings so a C# fence is highlighted however it was written. The
+    // original label is still what the code header displays.
+    function normalizeCodeLanguage(lang) {
+        if (!lang) return '';
+        var l = String(lang).toLowerCase().trim();
+        if (l === 'cs' || l === 'c#' || l === 'csharp' || l === 'c-sharp' || l === 'dotnet') {
+            return 'csharp';
+        }
+        return l;
+    }
+
     var md = window.markdownit({
         html: true,
         linkify: true,
         typographer: true,
         highlight: function(str, lang) {
             var codeHtml;
-            if (lang && typeof hljs !== 'undefined' && hljs.getLanguage(lang)) {
+            var highlightLang = normalizeCodeLanguage(lang);
+            if (highlightLang && typeof hljs !== 'undefined' && hljs.getLanguage(highlightLang)) {
                 try {
-                    codeHtml = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
+                    codeHtml = hljs.highlight(str, {
+                        language: highlightLang,
+                        ignoreIllegals: true
+                    }).value;
                 } catch(e) {}
             }
             if (!codeHtml) codeHtml = md.utils.escapeHtml(str);
@@ -2015,7 +2032,8 @@
             actions.push('<button class="resize-btn" onclick="increaseCodeHeight(this)" title="Enlarge">+</button>');
             parts.push('<span class="code-actions">' + actions.join('') + '</span>');
             var header = parts.length ? '<div class="code-header">' + parts.join('') + '</div>' : '';
-            return '<div class="code-block-wrapper">' + header +
+            return '<div class="code-block-wrapper" data-code-lang="' +
+                escapeHtml(highlightLang) + '">' + header +
                 '<pre class="hljs"><code>' + codeHtml + '</code></pre></div>';
         }
     });
@@ -2735,6 +2753,84 @@
         return out;
     };
 
+    // === C# display enrichment ===
+    // highlight.js tags C# declarations (keywords, title, params, strings) but
+    // leaves type names and method calls as plain text. Wrap only the high-signal
+    // untagged identifiers, so C# reads like an editor without touching any token
+    // highlight.js already classified.
+    function enhanceCsharpBlocks(root) {
+        var wrappers = root.querySelectorAll(
+            '.code-block-wrapper[data-code-lang="csharp"]');
+        for (var i = 0; i < wrappers.length; i++) {
+            var code = wrappers[i].querySelector('code');
+            if (code) enrichCsharpCode(code);
+        }
+    }
+
+    function enrichCsharpCode(codeEl) {
+        if (!codeEl || typeof document.createTreeWalker !== 'function') return;
+        var SHOW_TEXT = 4, FILTER_ACCEPT = 1, FILTER_REJECT = 2;
+        var walker = document.createTreeWalker(codeEl, SHOW_TEXT, {
+            acceptNode: function (node) {
+                // Never touch text inside an existing token span.
+                var p = node.parentNode;
+                while (p && p !== codeEl) {
+                    if (p.nodeName === 'SPAN' && p.className &&
+                        String(p.className).indexOf('hljs-') >= 0) {
+                        return FILTER_REJECT;
+                    }
+                    p = p.parentNode;
+                }
+                return FILTER_ACCEPT;
+            }
+        }, false);
+
+        var nodes = [], node;
+        while ((node = walker.nextNode())) nodes.push(node);
+        for (var i = 0; i < nodes.length; i++) enrichCsharpTextNode(nodes[i]);
+    }
+
+    function enrichCsharpTextNode(node) {
+        var text = node.nodeValue || '';
+        if (!/[A-Z]/.test(text)) return;
+
+        var re = /[A-Za-z_][A-Za-z0-9_]*/g;
+        var frag = null, last = 0, match;
+        while ((match = re.exec(text)) !== null) {
+            var word = match[0];
+            if (!/^[A-Z]/.test(word)) continue;
+
+            var before = text.slice(0, match.index);
+            var after = text.slice(re.lastIndex);
+            var ownerMatch = /([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*$/.exec(before);
+            var owner = ownerMatch ? ownerMatch[1] : '';
+
+            // Leave instance members (obj.Name) plain: highlight.js has no
+            // reliable type/property distinction here, and a wrong colour is
+            // worse than no colour.
+            if (owner && !/^[A-Z]/.test(owner) && !/^\s*\(/.test(after)) continue;
+
+            var span = document.createElement('span');
+            if (/^\s*\(/.test(after)) {
+                // Console.WriteLine(...) / new Greeter(...)
+                span.className = 'hljs-title function_';
+            } else {
+                // Console, System, IGreeter, DateTime.Now, ...
+                span.className = 'hljs-type';
+            }
+            span.textContent = word;
+
+            if (!frag) frag = document.createDocumentFragment();
+            frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+            frag.appendChild(span);
+            last = re.lastIndex;
+        }
+
+        if (!frag) return;
+        frag.appendChild(document.createTextNode(text.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+    }
+
     // === Main render function ===
     window.renderMarkdown = function(text, followToBottom) {
         // InvokeScript is public API: coerce anything callable into a string
@@ -2765,6 +2861,7 @@
         try {
             preview.innerHTML = md.render(text);
             preview.removeAttribute('data-render-error');
+            enhanceCsharpBlocks(preview);
 
             // Intercept external links:
             // Replace href with javascript:void(0) to prevent ANY native navigation
@@ -2884,6 +2981,7 @@
         var mermaidReady = typeof window.mermaid === 'object';
         var plantumlReady = typeof window.plantumlEncoder === 'object';
         var plotReady = typeof window.functionPlot === 'function';
+        var hljsReady = typeof window.hljs === 'object';
 
         if (criticalReady) {
             // Always signal once markdown-it is available.
@@ -2893,6 +2991,7 @@
             if (!mermaidReady) console.warn('[Ready] mermaid blocked or unavailable');
             if (!plantumlReady) console.warn('[Ready] plantuml-encoder blocked or unavailable');
             if (!plotReady) console.warn('[Ready] function-plot blocked or unavailable');
+            if (!hljsReady) console.warn('[Ready] highlight.js blocked or unavailable');
             console.log('✅ Markdown Preview ready');
         } else if (++readyAttempts > 300) {
             // ~30 s. The early guard handles a missing markdown-it; this only

@@ -750,6 +750,8 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         AppendHljsSingle(sb, "comment", HljsComment);
         AppendHljsSingle(sb, "quote", HljsQuote);
         AppendHljsSingle(sb, "variable", HljsVariable);
+        // C# string interpolation placeholders, e.g. {name} inside $"Hello {name}".
+        AppendHljsSingle(sb, "subst", HljsVariable);
         AppendHljsSingle(sb, "template-variable", HljsTemplateVariable);
         AppendHljsSingle(sb, "attr", HljsAttr);
         AppendHljsSingle(sb, "attribute", HljsAttribute);

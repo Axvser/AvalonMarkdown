@@ -39,6 +39,8 @@ html.theme-dark .hljs-params { color: #9CDCFE; }
 html.theme-dark .hljs-comment,
 html.theme-dark .hljs-quote { color: #6a9955; font-style: italic; }
 html.theme-dark .hljs-variable { color: #9CDCFE; }
+/* C# string interpolation: {expr} inside $"..." */
+html.theme-dark .hljs-subst { color: #9CDCFE; }
 html.theme-dark .hljs-template-variable { color: #bd63c5; }
 html.theme-dark .hljs-attr,
 html.theme-dark .hljs-attribute { color: #9cdcfe; }
@@ -103,6 +105,8 @@ html.theme-light .hljs-params { color: #001080; }
 html.theme-light .hljs-comment,
 html.theme-light .hljs-quote,
 html.theme-light .hljs-variable { color: #008000; }
+/* C# string interpolation: {expr} inside $"..." */
+html.theme-light .hljs-subst { color: #001080; }
 html.theme-light .hljs-attr { color: #f00; }
 html.theme-light .hljs-attribute { color: #001080; }
 html.theme-light .hljs-meta,

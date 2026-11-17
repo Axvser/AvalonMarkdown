@@ -183,6 +183,61 @@
             plots: count('.plot-container')
         };
 
+        // ── code highlighting ──────────────────────────────────────────────
+        // Record the language label and the number of highlight.js token spans
+        // per code block. This is what distinguishes "the fence rendered" from
+        // "the language was actually highlighted".
+        out.code = [];
+        each('.code-block-wrapper', function (wrapper) {
+            var codeEl = wrapper.querySelector('code');
+            var langEl = wrapper.querySelector('.code-lang');
+            out.code.push({
+                lang: langEl ? squish(text(langEl)) : '',
+                spans: codeEl
+                    ? codeEl.querySelectorAll('span[class^="hljs-"], span[class*=" hljs-"]').length
+                    : 0,
+                chars: codeEl ? text(codeEl).length : 0,
+                sample: codeEl ? clip(squish(text(codeEl)), 80) : ''
+            });
+        });
+
+        // A language highlight.js knows must produce token spans. This is what
+        // separates "the fence rendered" from "the language was highlighted" --
+        // the C# alias set is part of the contract, not an implementation detail.
+        var normalizeCodeLang = function (lang) {
+            var l = String(lang || '').toLowerCase().trim();
+            if (l === 'cs' || l === 'c#' || l === 'csharp' ||
+                l === 'c-sharp' || l === 'dotnet') return 'csharp';
+            return l;
+        };
+        var hljsReady = typeof window.hljs === 'object' &&
+            typeof window.hljs.getLanguage === 'function';
+        var unhighlighted = 0, unhighlightedSample = '';
+        if (hljsReady) {
+            for (var ci = 0; ci < out.code.length; ci++) {
+                var c = out.code[ci];
+                if (!c.lang || c.chars < 10) continue;
+                if (!window.hljs.getLanguage(normalizeCodeLang(c.lang))) continue;
+                if (c.spans === 0) {
+                    unhighlighted++;
+                    if (!unhighlightedSample) {
+                        unhighlightedSample = c.lang + ': ' + c.sample;
+                    }
+                }
+            }
+        }
+        if (unhighlighted) {
+            out.findings.push(finding('code-not-highlighted', 'fail',
+                unhighlighted + ' code block(s) name a language highlight.js knows, ' +
+                'but produced no token spans. C# aliases: csharp, cs, c#, c-sharp, dotnet.',
+                unhighlightedSample, unhighlighted));
+        }
+        if (!hljsReady && out.counts.codeBlocks > 0) {
+            out.findings.push(finding('hljs-unavailable', 'environment',
+                'highlight.js did not load, so every code fence is rendered as plain text. ' +
+                'Check network access to cdn.jsdelivr.net.'));
+        }
+
         // ── chat ────────────────────────────────────────────────────────────
         // A ```chat fence with a malformed info string renders `.chat-error`
         // instead of a panel; that is the one chat failure the static tier can

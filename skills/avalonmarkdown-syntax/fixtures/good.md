@@ -63,6 +63,18 @@ def fibonacci(n):
 { "note": "a plain json fence stays a highlighted code block, never a chart" }
 ```
 
+```csharp
+public sealed record Greeter(string Name)
+{
+    public required int Count { get; init; }
+    public string Message => $"Hello, {Name} × {Count}";
+}
+```
+
+```dotnet
+public interface IGreeter { string Greet(); }
+```
+
 ## Diagrams
 
 ```mermaid

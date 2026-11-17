@@ -129,7 +129,7 @@ public class Hello { }
 
 Produces, in this order of nesting:
 
-```
+```html
 <pre><code class="language-csharp">
   <div class="code-block-wrapper">
     <div class="code-header">
@@ -151,6 +151,12 @@ has no language, but the header (and the height buttons) are always present.
 
 Highlighting happens only when highlight.js knows the language; otherwise the body
 is escaped as plain text. An unrecognised language is not an error.
+
+C# is recognised under all of these info strings: `csharp`, `cs`, `c#`, `c-sharp`
+and `dotnet`. The header keeps the spelling you wrote; only the highlighter
+normalises it. On top of highlight.js's tokenization, the renderer marks
+PascalCase type names and method calls inside C# blocks (e.g.
+`Console.WriteLine`), so they are coloured like an editor rather than left plain.
 
 The `+` / `−` buttons change that block's `max-height` in 80px steps and record it
 in a `data-height` attribute. The initial cap is a preview configuration value.
