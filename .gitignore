@@ -469,3 +469,8 @@ __pycache__/
 ## fault-check driver output (*.log is already covered above)
 ##
 /fault-check.json
+
+##
+## publish workflow staging
+##
+/artifacts/

@@ -325,6 +325,22 @@ fails fast if more than one is set):
 
 Run without any driver for an ordinary visual check.
 
+### Releasing to NuGet
+
+Publishing is [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+It uses NuGet Trusted Publishing (GitHub OIDC), so no `NUGET_API_KEY` secret is
+stored in the repository or in GitHub secrets.
+
+1. Bump `<Version>` in `src/AvalonMarkdown/AvalonMarkdown.csproj`.
+2. Make the nuget.org Trusted Publishing policy match: package owner `Axvser`,
+   provider GitHub Actions, repo owner `Axvser`, repository `AvalonMarkdown`,
+   workflow `publish.yml`, empty environment, glob `AvalonMarkdown`.
+3. Either set the repository variable `AUTO_PUBLISH=true` to publish on a push to
+   `master`, or run the `publish` workflow manually. A version NuGet already has
+   is skipped; the manual `force` input repacks it. The workflow also unlists
+   older patches on the same `X.Y` line, which needs the
+   "Unlist or relist package versions" policy scope.
+
 ### Fault tolerance
 
 The preview is built to degrade visibly, never silently:

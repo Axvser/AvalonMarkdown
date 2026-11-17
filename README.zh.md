@@ -319,6 +319,21 @@ await myPreview.ApplyCustomCssAsync(theme.GenerateCss());
 
 不启用任何驱动时，就是普通的可视化检查。
 
+### 发布到 NuGet
+
+发布工作流是 [`.github/workflows/publish.yml`](.github/workflows/publish.yml)。
+它使用 NuGet Trusted Publishing（GitHub OIDC），仓库和 GitHub Secrets 中都不需要
+保存长期 `NUGET_API_KEY`。
+
+1. 修改 `src/AvalonMarkdown/AvalonMarkdown.csproj` 中的 `<Version>`。
+2. 让 nuget.org 的 Trusted Publishing 策略与之匹配：包所有者 `Axvser`、提供方
+   GitHub Actions、仓库所有者 `Axvser`、仓库 `AvalonMarkdown`、工作流
+   `publish.yml`、环境留空、glob `AvalonMarkdown`。
+3. 设置仓库变量 `AUTO_PUBLISH=true` 后推送 `master` 即自动发布，或手动运行
+   `publish` 工作流。NuGet 上已存在的版本会被跳过；手动 `force` 会重新打包。
+   工作流还会取消同一 `X.Y` 线上旧补丁版本的列表，这需要策略包含
+   "Unlist or relist package versions" 权限。
+
 ### 容灾行为
 
 预览的原则是**显式降级，绝不静默失败**：

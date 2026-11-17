@@ -1,0 +1,258 @@
+name: publish
+
+# Publishes AvalonMarkdown through NuGet Trusted Publishing (GitHub OIDC).
+# No long-lived NUGET_API_KEY is stored in this repository or in GitHub secrets.
+#
+# NuGet.org Trusted Publishing policy must match:
+#   Package Owner   Axvser
+#   CI/CD Provider  GitHub Actions
+#   Repo Owner      Axvser
+#   Repository      AvalonMarkdown
+#   Workflow File   publish.yml
+#   Environment     (blank)
+#   Glob Patterns   AvalonMarkdown
+#
+# Versioning:
+#   The package version is the <Version> in src/AvalonMarkdown/AvalonMarkdown.csproj.
+#   The workflow checks whether that exact version is already on NuGet. If it is, the
+#   release job is skipped; bump <Version> to publish. workflow_dispatch force=true
+#   repacks and pushes even when the version exists (--skip-duplicate makes that safe).
+#
+# Trigger:
+#   - push to master when package sources or package metadata change. Each run reads the
+#     version and only publishes when NuGet is missing it.
+#   - manual workflow_dispatch; the default run publishes only a missing version, so a
+#     run that failed halfway can be retried without repacking what already landed.
+#     `force` treats the version as missing and re-runs the whole pipeline.
+#
+# Auto vs manual:
+#   The push trigger is only acted on when the repository variable AUTO_PUBLISH is set to
+#   "true" (Settings -> Secrets and variables -> Actions -> Variables). Unset or "false"
+#   makes the workflow manual-only: a push starts a run that skips every job; use
+#   workflow_dispatch or `gh workflow run` to release.
+#
+# Patch cleanup:
+#   After a successful push, if the version is X1.X2.X3 with X3 > 0, the workflow unlists
+#   older X1.X2.<i> (i < X3) versions of this package, so only the highest patch of its
+#   own line stays listed. A major/minor change does not touch older lines. The NuGet
+#   policy must include the "Unlist or relist package versions" scope.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/AvalonMarkdown/**'
+      - 'Directory.Packages.props'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run even when this version already exists on NuGet'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: avalonmarkdown-publish
+  cancel-in-progress: false
+
+jobs:
+  version:
+    # Manual runs always proceed. Push runs only proceed when the repository variable
+    # AUTO_PUBLISH is "true"; otherwise the run is a no-op.
+    if: github.event_name == 'workflow_dispatch' || vars.AUTO_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.read.outputs.publish }}
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the package version and check NuGet
+        id: read
+        shell: pwsh
+        run: |
+          $project = "src/AvalonMarkdown/AvalonMarkdown.csproj"
+          if (-not (Test-Path $project)) { throw "missing $project" }
+
+          $match = [regex]::Match((Get-Content $project -Raw), '<Version>([^<]+)</Version>')
+          if (-not $match.Success) { throw "no <Version> in $project" }
+          $version = $match.Groups[1].Value
+
+          $force = "${{ inputs.force }}" -eq "true"
+          $exists = $false
+          if (-not $force) {
+            $id = "avalonmarkdown"
+            $url = "https://api.nuget.org/v3-flatcontainer/$id/$version/$id.$version.nupkg"
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              $exists = $true
+            } catch {
+              # A missing version is the normal release path.
+            }
+          }
+
+          if ($exists) {
+            Write-Host "AvalonMarkdown $version is already on NuGet"
+            $publish = "false"
+          } else {
+            Write-Host "AvalonMarkdown $version is missing"
+            $publish = "true"
+          }
+
+          "publish=$publish" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+  publish:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the offline unit suite
+        shell: pwsh
+        run: |
+          # The library has GeneratePackageOnBuild=true; disable it here so a test run
+          # cannot leave a stale nupkg behind and the packaging step below is explicit.
+          dotnet run --project test/AvalonMarkdown.Test.Unit/AvalonMarkdown.Test.Unit.csproj `
+            -c Release -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "unit tests failed" }
+
+      - name: Build and pack
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          # Build first with pack-on-build disabled, then pack the built output. This is
+          # the same two-step pattern the multi-package VeloxDev workflow uses; a direct
+          # `dotnet pack` with GeneratePackageOnBuild=true can package before the DLL exists.
+          dotnet build "src/AvalonMarkdown/AvalonMarkdown.csproj" `
+            -c Release -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+          dotnet pack "src/AvalonMarkdown/AvalonMarkdown.csproj" `
+            -c Release -o artifacts --no-build
+          if ($LASTEXITCODE -ne 0) { throw "pack failed" }
+
+          $file = Join-Path "artifacts" "AvalonMarkdown.$env:VERSION.nupkg"
+          if (-not (Test-Path $file)) { throw "missing $file" }
+
+      - name: Verify the package contents
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $file = Join-Path "artifacts" "AvalonMarkdown.$env:VERSION.nupkg"
+          $zip = [IO.Compression.ZipFile]::OpenRead($file)
+          $names = @($zip.Entries | ForEach-Object { $_.FullName })
+
+          # A package that restores but lacks a target framework, README or icon is not
+          # publishable even though `dotnet pack` succeeded.
+          $required = @(
+            "lib/net8.0/AvalonMarkdown.dll",
+            "lib/net10.0/AvalonMarkdown.dll",
+            "README.md",
+            "Assets/logo.png"
+          )
+          foreach ($entry in $required) {
+            if ($names -notcontains $entry) { throw "package is missing $entry" }
+          }
+
+          # The filename is not enough: the nuspec must carry the same id and the version
+          # read from the csproj, or NuGet would publish under an unexpected identity.
+          $nuspecEntry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" } | Select-Object -First 1
+          if ($null -eq $nuspecEntry) { throw "package has no .nuspec" }
+          $reader = New-Object IO.StreamReader($nuspecEntry.Open())
+          $nuspec = $reader.ReadToEnd()
+          $reader.Dispose()
+          $zip.Dispose()
+
+          if ($nuspec -notmatch "<id>AvalonMarkdown</id>") {
+            throw "nuspec does not declare the AvalonMarkdown package id"
+          }
+          if ($nuspec -notmatch "<version>$([regex]::Escape($env:VERSION))</version>") {
+            throw "nuspec version does not match the csproj version $env:VERSION"
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AvalonMarkdown-${{ github.run_number }}
+          path: artifacts/*.nupkg
+
+      - name: NuGet login (OIDC -> temporary key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: Axvser
+
+      - name: Push and wait until NuGet can serve it
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          $file = Join-Path "artifacts" "AvalonMarkdown.$env:VERSION.nupkg"
+          dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+            --source https://api.nuget.org/v3/index.json --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { throw "push failed: AvalonMarkdown" }
+
+          # flatcontainer can serve the nupkg a few minutes after a successful push.
+          # Waiting here makes the release observable and the unlist step below safe.
+          $url = "https://api.nuget.org/v3-flatcontainer/avalonmarkdown/$env:VERSION/avalonmarkdown.$env:VERSION.nupkg"
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              break
+            } catch {
+              if ((Get-Date) -gt $deadline) {
+                throw "AvalonMarkdown $env:VERSION did not appear within 15 minutes"
+              }
+              Start-Sleep -Seconds 10
+            }
+          }
+
+      - name: NuGet login (fresh key for unlisting)
+        id: login2
+        uses: NuGet/login@v1
+        with:
+          user: Axvser
+
+      - name: Unlist older patches of this line
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
+        run: |
+          # Only the line that was just published is cleaned up. A major/minor bump
+          # leaves older lines listed, and a version that failed to push never gets here.
+          if ($env:VERSION -match '^(\d+)\.(\d+)\.(\d+)$') {
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+            $patch = [int]$Matches[3]
+            if ($patch -gt 0) {
+              for ($i = 0; $i -lt $patch; $i++) {
+                $old = "$major.$minor.$i"
+                Write-Host "Unlisting AvalonMarkdown $old"
+                dotnet nuget delete AvalonMarkdown $old --api-key $env:NUGET_API_KEY `
+                  --source https://api.nuget.org/v3/index.json --non-interactive
+                if ($LASTEXITCODE -ne 0) {
+                  # Not found or already unlisted is not a release failure.
+                  Write-Host "  (not found or already unlisted; continuing)"
+                }
+              }
+            }
+          }
