@@ -43,7 +43,8 @@ html.theme-dark .hljs-variable { color: #9CDCFE; }
 html.theme-dark .hljs-subst { color: #9CDCFE; }
 html.theme-dark .hljs-template-variable { color: #bd63c5; }
 html.theme-dark .hljs-attr,
-html.theme-dark .hljs-attribute { color: #9cdcfe; }
+html.theme-dark .hljs-attribute,
+html.theme-dark .hljs-property { color: #9cdcfe; }
 html.theme-dark .hljs-meta { color: #9b9b9b; }
 html.theme-dark .hljs-tag { color: #569cd6; }
 html.theme-dark .hljs-bullet,
@@ -108,7 +109,8 @@ html.theme-light .hljs-variable { color: #008000; }
 /* C# string interpolation: {expr} inside $"..." */
 html.theme-light .hljs-subst { color: #001080; }
 html.theme-light .hljs-attr { color: #f00; }
-html.theme-light .hljs-attribute { color: #001080; }
+html.theme-light .hljs-attribute,
+html.theme-light .hljs-property { color: #001080; }
 html.theme-light .hljs-meta,
 html.theme-light .hljs-selector-attr,
 html.theme-light .hljs-selector-pseudo { color: #2b91af; }

@@ -2789,10 +2789,114 @@
 
         var nodes = [], node;
         while ((node = walker.nextNode())) nodes.push(node);
-        for (var i = 0; i < nodes.length; i++) enrichCsharpTextNode(nodes[i]);
+        for (var i = 0; i < nodes.length; i++) enrichCsharpTextNode(nodes[i], codeEl);
     }
 
-    function enrichCsharpTextNode(node) {
+    // Text after a token can continue in the next sibling span: Get<int>() has
+    // `int` in a built_in span, so the local text node only contains "Get<".
+    // Gather the following nodes (bounded) so a generic call is still detected.
+    function followingText(node, offset, max, root) {
+        var out = (node.nodeValue || '').slice(offset);
+        var cur = node;
+        while (out.length < max) {
+            var next = cur.nextSibling;
+            while (!next) {
+                cur = cur.parentNode;
+                if (!cur || cur === root) return out;
+                next = cur.nextSibling;
+            }
+            out += next.textContent || '';
+            cur = next;
+        }
+        return out;
+    }
+
+    function firstNonSpace(s) {
+        var i = 0;
+        while (i < s.length && /\s/.test(s.charAt(i))) i++;
+        return i < s.length ? s.charAt(i) : '';
+    }
+
+    function lastNonSpace(s) {
+        var i = s.length - 1;
+        while (i >= 0 && /\s/.test(s.charAt(i))) i--;
+        return i >= 0 ? s.charAt(i) : '';
+    }
+
+    // A call is either Name(...) or the generic form Name<T, U>(...). The type
+    // argument list may contain nested generics, nullable annotations and tuple
+    // types; scan a balanced pair of angle brackets first.
+    function hasCallParens(after) {
+        var i = 0;
+        while (i < after.length && /\s/.test(after.charAt(i))) i++;
+        if (after.charAt(i) === '(') return true;
+        if (after.charAt(i) !== '<') return false;
+
+        var depth = 0;
+        for (var j = i; j < after.length && j < i + 240; j++) {
+            var ch = after.charAt(j);
+            if (ch === '<') {
+                depth++;
+            } else if (ch === '>') {
+                depth--;
+                if (depth === 0) {
+                    var k = j + 1;
+                    while (k < after.length && /\s/.test(after.charAt(k))) k++;
+                    return after.charAt(k) === '(';
+                }
+            }
+        }
+        return false;
+    }
+
+    // Attribute lists normally start a line: [Obsolete(...)], [Fact, Theory].
+    // Names inside that unclosed bracket are attribute names, not method calls.
+    function isCsharpAttribute(text, index) {
+        var lineStart = text.lastIndexOf('\n', index - 1) + 1;
+        var line = text.slice(lineStart, index);
+        if (!/^\s*\[/.test(line)) return false;
+        return line.lastIndexOf('[') > line.lastIndexOf(']');
+    }
+
+    // Modifiers immediately before the token, stopping at a statement boundary.
+    function previousCsharpKeywords(node, maxNodes) {
+        var out = [], cur = node.previousSibling, seen = 0;
+        while (cur && seen < maxNodes) {
+            seen++;
+            if (cur.nodeType === 3) {
+                if (/\n/.test(cur.nodeValue) || /\S/.test(cur.nodeValue)) break;
+            } else if (cur.nodeType === 1) {
+                var cls = String(cur.className || '');
+                if (cls.indexOf('hljs-keyword') >= 0) out.push(cur.textContent || '');
+                else if (/\S/.test(cur.textContent || '')) break;
+            }
+            cur = cur.previousSibling;
+        }
+        return out;
+    }
+
+    function hasCsharpKeyword(words, names) {
+        for (var i = 0; i < words.length; i++) {
+            for (var j = 0; j < names.length; j++) {
+                if (words[i] === names[j]) return true;
+            }
+        }
+        return false;
+    }
+
+    // `public string Name { get; }`, `public int Count => 1;`, a field ending in
+    // `;`, or a property whose brace is on the next line. Exclude positions that
+    // are clearly type arguments, base types, member access or argument lists.
+    function looksLikeCsharpFieldOrProperty(after, before) {
+        var next = firstNonSpace(after);
+        if (next !== '=' && next !== ';' && next !== '{' && next !== '}') return false;
+        var prev = lastNonSpace(before);
+        if (prev === ':' || prev === ',' || prev === '<' || prev === '.' ||
+            prev === '(' || prev === '[' || prev === '=') return false;
+        return true;
+    }
+
+    function enrichCsharpTextNode(node, root) {
         var text = node.nodeValue || '';
         if (!/[A-Z]/.test(text)) return;
 
@@ -2806,20 +2910,43 @@
             var after = text.slice(re.lastIndex);
             var ownerMatch = /([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*$/.exec(before);
             var owner = ownerMatch ? ownerMatch[1] : '';
+            var isCall = hasCallParens(after);
+            if (!isCall && firstNonSpace(after) === '<') {
+                isCall = hasCallParens(
+                    followingText(node, re.lastIndex, 300, root));
+            }
+            var attribute = isCsharpAttribute(text, match.index);
+            var keywords = previousCsharpKeywords(node, 8);
+            var typeDeclaration = hasCsharpKeyword(keywords,
+                ['class', 'record', 'struct', 'interface', 'enum', 'delegate']);
+            var importOrNamespace = hasCsharpKeyword(keywords, ['using', 'namespace']);
 
-            // Leave instance members (obj.Name) plain: highlight.js has no
-            // reliable type/property distinction here, and a wrong colour is
-            // worse than no colour.
-            if (owner && !/^[A-Z]/.test(owner) && !/^\s*\(/.test(after)) continue;
+            var className;
+            if (attribute) {
+                // [Description(...)] / [Obsolete]: not a function call.
+                className = 'hljs-type';
+            } else if (owner) {
+                if (isCall) {
+                    className = 'hljs-title function_';         // Console.WriteLine(...)
+                } else if (!/^[A-Z]/.test(owner)) {
+                    continue;                                    // obj.Name: leave plain
+                } else {
+                    className = 'hljs-type';                     // DateTime.Now, System.Console
+                }
+            } else if (isCall) {
+                // A generic method declaration such as Create<T>() is a call;
+                // a record/delegate declaration is a type name.
+                className = typeDeclaration ? 'hljs-type' : 'hljs-title function_';
+            } else if (importOrNamespace) {
+                className = 'hljs-type';                         // using System; namespace Modern;
+            } else if (looksLikeCsharpFieldOrProperty(after, before)) {
+                className = 'hljs-property';                     // Name { get; } / Count => / Field;
+            } else {
+                className = 'hljs-type';                         // Console, IGreeter, List
+            }
 
             var span = document.createElement('span');
-            if (/^\s*\(/.test(after)) {
-                // Console.WriteLine(...) / new Greeter(...)
-                span.className = 'hljs-title function_';
-            } else {
-                // Console, System, IGreeter, DateTime.Now, ...
-                span.className = 'hljs-type';
-            }
+            span.className = className;
             span.textContent = word;
 
             if (!frag) frag = document.createDocumentFragment();

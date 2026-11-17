@@ -755,6 +755,8 @@ public class MarkdownThemeViewModel : INotifyPropertyChanged
         AppendHljsSingle(sb, "template-variable", HljsTemplateVariable);
         AppendHljsSingle(sb, "attr", HljsAttr);
         AppendHljsSingle(sb, "attribute", HljsAttribute);
+        // C# properties/fields enriched by renderer.js.
+        AppendHljsSingle(sb, "property", HljsAttr);
         AppendHljsSingle(sb, "meta", HljsMeta);
         AppendHljsSingle(sb, "tag", HljsTag);
         AppendHljsSingle(sb, "bullet", HljsBullet);

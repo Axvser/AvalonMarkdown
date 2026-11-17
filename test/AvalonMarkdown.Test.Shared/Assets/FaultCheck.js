@@ -375,6 +375,73 @@
         rec.detail = details.join(', ') + ', type=' + text(typeEl) + ', call=' + text(fnEl);
     });
 
+    test('csharp-declaration-classification', function (rec) {
+        render([
+            '# C# classification',
+            '',
+            '```csharp',
+            'public sealed class Sample',
+            '{',
+            '    public string Name { get; init; } = "x";',
+            '    public int Count => 1;',
+            '    public static Sample Create<T>() => new();',
+            '    public T Factory<T>(T value) => value;',
+            '    public static void Use() {',
+            '        var made = Service.Compose<Sample>();',
+            '        var n = Service.Get<int>();',
+            '    }',
+            '',
+            '    [Obsolete("x")]',
+            '    public void Old() { Console.WriteLine(Name); }',
+            '}',
+            '```'
+        ].join('\n'));
+
+        var code = pv().querySelector('.code-block-wrapper[data-code-lang="csharp"] code');
+        assert(code, 'the C# code block must exist');
+        var spans = code.querySelectorAll('span');
+        function classFor(word) {
+            for (var i = 0; i < spans.length; i++) {
+                if ((spans[i].textContent || '') === word) return String(spans[i].className);
+            }
+            return '';
+        }
+
+        var expected = [
+            ['Name', 'hljs-property'],
+            ['Count', 'hljs-property'],
+            // Generic method DECLARATIONS are already tagged hljs-title by
+            // highlight.js; the enrichment only needs to handle generic CALLS.
+            ['Create', 'hljs-title'],
+            ['Factory', 'hljs-title'],
+            ['Compose', 'hljs-title function_'],
+            ['Get', 'hljs-title function_'],
+            ['Old', 'hljs-title'],
+            ['Console', 'hljs-type'],
+            ['WriteLine', 'hljs-title function_']
+        ];
+        var details = [];
+        for (var i = 0; i < expected.length; i++) {
+            var word = expected[i][0];
+            var cls = classFor(word);
+            details.push(word + '=' + cls);
+            assert(cls.indexOf(expected[i][1]) >= 0,
+                word + ' should be ' + expected[i][1] + ', got "' + cls + '"');
+        }
+
+        // highlight.js already tags the attribute as hljs-meta. It must not be
+        // stolen by the call heuristic just because it has argument parens.
+        var attributeMeta = '';
+        for (var m = 0; m < spans.length; m++) {
+            if (String(spans[m].className).indexOf('hljs-meta') >= 0) {
+                attributeMeta += spans[m].textContent || '';
+            }
+        }
+        assert(attributeMeta.indexOf('Obsolete') >= 0,
+            'the attribute must stay in an hljs-meta span, not become a function call');
+        rec.detail = details.join(', ') + ', attribute=' + attributeMeta;
+    });
+
     // ── optional CDN libraries removed one at a time ────────────────────────
     function withGlobal(name, value, fn) {
         var old = window[name];

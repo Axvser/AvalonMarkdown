@@ -72,7 +72,7 @@
             '<span class="hljs-title class_ inherited__">tci</span>' +
             '<span class="hljs-params">pa</span><span class="hljs-comment">co</span><span class="hljs-quote">qu</span>' +
             '<span class="hljs-variable">va</span><span class="hljs-subst">su</span><span class="hljs-template-variable">tv</span>' +
-            '<span class="hljs-attr">at</span><span class="hljs-attribute">atr</span><span class="hljs-meta">me</span>' +
+            '<span class="hljs-attr">at</span><span class="hljs-attribute">atr</span><span class="hljs-property">pr</span><span class="hljs-meta">me</span>' +
             '<span class="hljs-tag">ta</span><span class="hljs-bullet">bu</span>' +
             '<span class="hljs-selector-attr">sa</span><span class="hljs-selector-class">sc</span>' +
             '<span class="hljs-selector-id">si</span><span class="hljs-selector-pseudo">sp</span>' +
