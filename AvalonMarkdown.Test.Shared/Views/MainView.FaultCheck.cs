@@ -462,7 +462,11 @@ public partial class MainView
         if (raw is null) return null;
         try
         {
-            return JsonSerializer.Deserialize<string>(raw);
+            // JsonDocument is metadata-free and works with reflection disabled.
+            using var doc = JsonDocument.Parse(raw);
+            return doc.RootElement.ValueKind == JsonValueKind.String
+                ? doc.RootElement.GetString()
+                : raw;
         }
         catch (JsonException)
         {

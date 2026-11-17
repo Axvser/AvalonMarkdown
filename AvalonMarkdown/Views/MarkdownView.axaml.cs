@@ -556,16 +556,6 @@ public partial class MarkdownView : UserControl
     // Image export (right-click a diagram / plot / PlantUML image)
     // ====================================================================
 
-    /// <summary>Payload the preview posts for a save. See renderer.js's ctxRun().</summary>
-    private sealed class ExportPayload
-    {
-        [JsonPropertyName("kind")] public string Kind { get; set; } = "png";
-        [JsonPropertyName("encoding")] public string Encoding { get; set; } = "utf8";
-        [JsonPropertyName("name")] public string Name { get; set; } = "";
-        [JsonPropertyName("source")] public string? Source { get; set; }
-        [JsonPropertyName("data")] public string? Data { get; set; }
-    }
-
     /// <summary>
     /// Write an image the preview prepared. <c>encoding</c> drives ONE branch on
     /// purpose — "utf8" for SVG markup, "base64" for PNG bytes — because two
@@ -585,7 +575,8 @@ public partial class MarkdownView : UserControl
         ExportPayload? payload;
         try
         {
-            payload = JsonSerializer.Deserialize<ExportPayload>(json);
+            // Source-generated metadata: reflection is disabled on Browser/WASM.
+            payload = JsonSerializer.Deserialize(json, MarkdownJsonContext.Default.ExportPayload);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
@@ -935,7 +926,8 @@ public partial class MarkdownView : UserControl
         if (string.IsNullOrEmpty(result)) return Array.Empty<MarkdownHeading>();
         try
         {
-            return JsonSerializer.Deserialize<List<MarkdownHeading>>(result) ?? new List<MarkdownHeading>();
+            return JsonSerializer.Deserialize(result, MarkdownJsonContext.Default.ListMarkdownHeading)
+                   ?? new List<MarkdownHeading>();
         }
         catch (JsonException)
         {

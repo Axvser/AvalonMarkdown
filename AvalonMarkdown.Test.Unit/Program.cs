@@ -35,6 +35,12 @@ internal static class Program
 
     public static async Task<int> Main()
     {
+        // Simulate the Browser/WASM head, where reflection-based System.Text.Json
+        // metadata is disabled. Any library path that still depends on it will
+        // fail here instead of only in the browser.
+        AppContext.SetSwitch(
+            "System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault", false);
+
         RegisterDiffTests();
         RegisterJsAndNameTests();
         RegisterThemeTests();
@@ -181,6 +187,53 @@ internal static class Program
                 "U+2028/U+2029 must be escaped for older JavaScript parsers");
 
             Assert(MarkdownJs.StringLiteral(null) == "\"\"", "null must become an empty literal");
+            return Task.CompletedTask;
+        });
+
+        Add("json.reflection-disabled-switch-is-effective", () =>
+        {
+            // Without this guard the context test could pass vacuously: if the
+            // host ignored the switch, it would not prove AOT safety.
+            var rejected = false;
+            try
+            {
+                JsonSerializer.Serialize(new ReflectionProbe());
+            }
+            catch (NotSupportedException)
+            {
+                rejected = true;
+            }
+            catch (InvalidOperationException)
+            {
+                rejected = true;
+            }
+
+            Assert(rejected,
+                "the test host did not disable reflection-based JsonSerializer");
+            return Task.CompletedTask;
+        });
+
+        Add("json.source-generated-context-works-without-reflection", () =>
+        {
+            // The switch is set in Main; this is the same shape the preview posts.
+            const string payloadJson =
+                "{\"kind\":\"png\",\"encoding\":\"base64\",\"name\":\"图表 1.png\"," +
+                "\"source\":\"mermaid\",\"data\":\"aGVsbG8=\"}";
+
+            var payload = JsonSerializer.Deserialize(
+                payloadJson, MarkdownJsonContext.Default.ExportPayload);
+            Assert(payload is not null, "the export payload must deserialize");
+            Assert(payload!.Kind == "png", "kind must round-trip");
+            Assert(payload.Encoding == "base64", "encoding must round-trip");
+            Assert(payload.Name == "图表 1.png", "unicode file names must round-trip");
+            Assert(payload.Data == "aGVsbG8=", "data must round-trip");
+
+            var headings = JsonSerializer.Deserialize(
+                "[{\"text\":\"标题\",\"level\":2}]",
+                MarkdownJsonContext.Default.ListMarkdownHeading);
+            Assert(headings is { Count: 1 }, "one heading must deserialize");
+            Assert(headings![0].Text == "标题" && headings[0].Level == 2,
+                "heading text and level must round-trip");
             return Task.CompletedTask;
         });
 
@@ -530,6 +583,11 @@ internal static class Program
     // ====================================================================
     // Test plumbing
     // ====================================================================
+
+    private sealed class ReflectionProbe
+    {
+        public string Value { get; set; } = "probe";
+    }
 
     private static void Add(string name, Func<Task> run) => Tests.Add((name, run));
 

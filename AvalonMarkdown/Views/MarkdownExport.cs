@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
-using System.Text.Json;
 
 namespace AvalonMarkdown.Views;
 
@@ -14,21 +14,53 @@ namespace AvalonMarkdown.Views;
 internal static class MarkdownJs
 {
     /// <summary>
-    /// Encodes arbitrary text as a JavaScript string literal. JSON string escaping
-    /// is exactly the subset JavaScript accepts, and it covers the characters a
-    /// hand-rolled escaper tends to miss (control characters, U+2028/U+2029,
-    /// quotes, backslashes).
+    /// Encodes arbitrary text as a JavaScript string literal.
+    ///
+    /// Deliberately does NOT use <c>System.Text.Json</c>: the Browser/WASM head
+    /// runs with reflection-based serialization disabled
+    /// (<c>JsonSerializerIsReflectionDisabled</c>), so even
+    /// <c>JsonSerializer.Serialize(string)</c> throws there. This encoder covers
+    /// the characters a naive escaper misses: quotes, backslashes, control
+    /// characters, U+2028/U+2029, and lone/paired surrogates.
     /// </summary>
     public static string StringLiteral(string? value)
     {
-        var json = JsonSerializer.Serialize(value ?? string.Empty);
-        // Build the separators from code points: a literal U+2028/U+2029 in a C#
-        // source file is treated as a line break by the compiler.
-        var lineSeparator = ((char)0x2028).ToString();
-        var paragraphSeparator = ((char)0x2029).ToString();
-        return json
-            .Replace(lineSeparator, "\\u2028", StringComparison.Ordinal)
-            .Replace(paragraphSeparator, "\\u2029", StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(value))
+            return "\"\"";
+
+        var sb = new StringBuilder(value.Length + 2);
+        sb.Append('"');
+
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    // U+2028/U+2029 were line terminators in older JavaScript;
+                    // surrogates are escaped so a lone one cannot corrupt the
+                    // script, while a valid pair round-trips to the same emoji.
+                    if (c < ' ' || c == (char)0x2028 || c == (char)0x2029 || char.IsSurrogate(c))
+                    {
+                        sb.Append("\\u");
+                        sb.Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                    break;
+            }
+        }
+
+        sb.Append('"');
+        return sb.ToString();
     }
 }
 
